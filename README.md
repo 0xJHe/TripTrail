@@ -160,7 +160,7 @@ Planning happens once, across the top. Everything below it repeats every day of 
 **Mindmap - every idea we generated, and what happened to it**
 We took the four things the problem statement asks for and put every idea we had under them before committing to anything, then started cutting. 20 made it, 19 didn't, and the reason is written next to each one. The platform decision sits on its own because it isn't a feature. It's the choice between building an app or a website, and every location feature depends on getting it right.
 
-![View MindMap On Canva](https://canva.link/mla5bjssi95xxmt)
+![Mind Map](images/MindMap.png) [View my design on Canva](https://canva.link/mla5bjssi95xxmt))
 ![Mind Map](images/MindMap.png)
 
 

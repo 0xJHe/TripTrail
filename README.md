@@ -176,6 +176,7 @@ We took the four things the problem statement asks for and put every idea we had
 ## 3. Design & Prototype
 
 **UI Prototype:** [Prototype Link](https://screenprototypeapexcode.vercel.app/)
+The full prototype with all 15 screens is at the link above - the ones below are the key screens from the core flow.
 
 ### Key Screens
 ![1](images/1.jpeg)
@@ -187,6 +188,7 @@ We took the four things the problem statement asks for and put every idea we had
 * **Group picks the dates / I already know the dates** - leave it on the first and everyone taps their free days later.
 * **Invite your group** - avatars show who's joined. The link below can be copied, sent on WhatsApp, or shared.
 * **Create trip** - pinned to the bottom, opens the preferences screen.
+---
 
 ![2](images/2.jpeg)
 

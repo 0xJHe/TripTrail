@@ -429,9 +429,7 @@ A browser can read GPS, but only while the page is open on screen. Lock the phon
 
 | UI | Details |
 | --- | --- |
-| ![4](images/4.jpeg) | The complete system in one screen: Budget bar, coloured stop markers and card shapes.
-
-Why this design for the user. Young Malaysians who reside in Grab, Foodpanda and Instagram. Clean, bright, rounded, high contrast , easy to use without a tutorial. |
+| ![4](images/4.jpeg) | The complete system in one screen: Budget bar, coloured stop markers and card shapes. Why this design for the user. Young Malaysians who reside in Grab, Foodpanda and Instagram. Clean, bright, rounded, high contrast , easy to use without a tutorial. |
 | ![12](images/12.jpeg) | A story card that can be shared with route, stats and the TripTrail mark, designed to be posted, not just viewed. |
 
 ### Usability & Friction Reduction
@@ -477,6 +475,8 @@ Both screens reuse the exact same bottom nav, the same teal primary button, and 
 *   **Tap targets:** Primary buttons are full width, 44–50px. Text sizes are based on the phone's system scale.
 *   **Plain language:** Tips are written practically and conversationally ("Shoes off in the main prayer hall.").
 
+| UI | Details |
+| --- | --- |
 | ![8](images/8.jpeg) | The blue "Rain at the beach in 40 min" card has an umbrella icon and a complete headline , the warning is still there without colour. |
 
 ---

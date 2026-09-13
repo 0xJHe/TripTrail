@@ -1,6 +1,6 @@
 # TripTrail by Apex Code
 
-**Team:** SSivasubramaniam A/L Venkateswaran, Harein A/L Sathiamurthy, Esvan Rao A/L Perasath Raw, Liong Jiahe
+**Team:** Sivasubramaniam A/L Venkateswaran, Harein A/L Sathiamurthy, Esvan Rao A/L Perasath Raw, Liong Jiahe
 
 **Problem Statement:** Travel Planner
 

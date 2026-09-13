@@ -176,7 +176,7 @@ We took the four things the problem statement asks for and put every idea we had
 ## 3. Design & Prototype
 
 **UI Prototype:** [Prototype Link](https://screenprototypeapexcode.vercel.app/)
-The full prototype with all 15 screens is at the link above - the ones below are the key screens from the core flow.
+\The full prototype with all 15 screens is at the link above - the ones below are the key screens from the core flow.
 
 ### Key Screens
 ![1](images/1.jpeg)
@@ -187,8 +187,7 @@ The full prototype with all 15 screens is at the link above - the ones below are
 * **Roughly when?** - a month and a rough length, not fixed dates.
 * **Group picks the dates / I already know the dates** - leave it on the first and everyone taps their free days later.
 * **Invite your group** - avatars show who's joined. The link below can be copied, sent on WhatsApp, or shared.
-* **Create trip** - pinned to the bottom, opens the preferences screen.
----
+* **Create trip** - pinned to the bottom, opens the preferences screen.\
 
 ![2](images/2.jpeg)
 
@@ -199,7 +198,7 @@ The full prototype with all 15 screens is at the link above - the ones below are
 * **Pick up to 3 must-haves** - the things you'd be disappointed to miss.
 * **Pick 1 no-go** - the one thing you don't want.
 * **2 of 4 have answered** - a progress bar and avatars showing who's done.
-* **Save my answers** - pinned to the bottom.
+* **Save my answers** - pinned to the bottom.\
 
 ![3](images/3.jpeg)
 
@@ -212,7 +211,7 @@ The full prototype with all 15 screens is at the link above - the ones below are
 * **Dates line** - "12 – 14 Oct · all 4 of you are free", worked out from everyone's calendars.
 * **Tag chips** - Street food, Temples, Beach, Halal available.
 * **Details (middle)** - opens the full day-by-day plan for that trip before deciding.
-* **Swipe hints** - "Swipe left to pass" and "Swipe right to like".
+* **Swipe hints** - "Swipe left to pass" and "Swipe right to like".\
 
 ![4](images/4.jpeg)
 
@@ -222,7 +221,7 @@ The full prototype with all 15 screens is at the link above - the ones below are
 * **Budget bar** — three numbers in one line: spent on the left, planned and budget on the right.
 * **Timeline** — every stop in order down the day, each on its own card with a dot on the line.
 * **Edit on every row** — any stop can be changed, moved or removed.
-* **+ Add a stop** — a dashed row at the end of the day.
+* **+ Add a stop** — a dashed row at the end of the day.\
 
 ![5](images/5.jpeg)
 
@@ -234,7 +233,7 @@ The full prototype with all 15 screens is at the link above - the ones below are
 * **The three tiles** - Now 09:08, Travel 22 min, Starts 09:30.
 * **Suggested new day** - the rewritten plan underneath.
 * **Cost change RM 0** - in green. Every re-plan says what it does to the budget.
-* **Accept new day / Keep original** - accepting rewrites the itinerary for everyone.
+* **Accept new day / Keep original** - accepting rewrites the itinerary for everyone.\
 
 ![6](images/6.jpeg)
 
@@ -244,7 +243,7 @@ The full prototype with all 15 screens is at the link above - the ones below are
 * **The alert** - green stripe this time. "You're 40 minutes ahead".
 * **"Fill the gap?"** - the app doesn't just tell you you're early, it does something with it.
 * **The suggestion** - Coffee at Black Kettle. One option, not a list.
-* **Add this / Go to next stop** - accept the extra stop, or skip it.
+* **Add this / Go to next stop** - accept the extra stop, or skip it.\
 
 ![7](images/7.jpeg)
 
@@ -252,14 +251,14 @@ The full prototype with all 15 screens is at the link above - the ones below are
 * **Now block** - arrived 13:20, left 16:10. The "left" is what triggers the prompt.
 * **The prompt** - "About RM 16 spent?" Food prices are only estimates, so the app asks just after paying.
 * **✓ and Enter amount** - confirm the estimate in one tap, or enter the real number.
-* **Done** - the stops already finished, each with its final cost.
+* **Done** - the stops already finished, each with its final cost.\
 
 ![8](images/8.jpeg)
 
 **Rain backup screen**
 * **The alert** - blue stripe this time. "Rain at the beach in 40 min" — not a generic forecast, but rain where the group actually is.
 * **"Nearby, indoor, within budget"** - the three filters the app applied.
-* **Three options, each with Go** - walk time and cost on every one, nearest first.
+* **Three options, each with Go** - walk time and cost on every one, nearest first.\
 
 ![9](images/9.jpeg)
 
@@ -268,14 +267,14 @@ The full prototype with all 15 screens is at the link above - the ones below are
 * **The four members** - coloured circle with initial and battery percentage.
 * **The navy pin** - "Meet point" — where everyone is going.
 * **The alert** - amber stripe. "Daniel is 900 m from the group", and "Mei's battery is 12% — may go dark soon."
-* **Set meet point / Split & rejoin** - actions based on the map context.
+* **Set meet point / Split & rejoin** - actions based on the map context.\
 
 ![10](images/10.jpeg)
 **Pin spot screen**
 * **Header** - the street you're standing on.
 * **The map** - your position, and a red pin labelled "Pin drops here".
 * **"What is it?"** - 📍 Spot for a place, 🚗 Vehicle for where you parked.
-* **Pinned so far today** - what the group has already saved.
+* **Pinned so far today** - what the group has already saved.\
 
 ![11](images/11.jpeg)
 
@@ -284,7 +283,7 @@ The full prototype with all 15 screens is at the link above - the ones below are
 * **Tomorrow** - the next day's stops with an Edit button to change things while memory is fresh.
 * **"2 of 4 have closed their day"** - who's already done this.
 * **The teal note** - Tapping Done switches your location off for the night.
-* **Done for today** - pinned to the bottom.
+* **Done for today** - pinned to the bottom.\
 
 ![12](images/12.jpeg)
 
@@ -293,7 +292,7 @@ The full prototype with all 15 screens is at the link above - the ones below are
 * **The trail** — the route the group actually walked, drawn as a glowing line.
 * **The stop markers** — an emoji circle at each place.
 * **The four stats** — 38 km travelled, 6 stops, 13h out, mostly sunny.
-* **Share your day / Download** — post to stories or save to camera roll.
+* **Share your day / Download** — post to stories or save to camera roll.\
 
 ---
 

@@ -19,7 +19,7 @@
 - [3. Design & Prototype](#3-design--prototype)
 - [4. What Makes It Different](#4-what-makes-it-different)
 - [5. Technical Architecture & Feasibility](#5-technical-architecture--feasibility)
-- [Extra](#Extra)
+- [Extra](#extra)
 
 ---
 ## 1. Project Overview
@@ -160,7 +160,8 @@ Planning happens once, across the top. Everything below it repeats every day of 
 **Mindmap - every idea we generated, and what happened to it**
 We took the four things the problem statement asks for and put every idea we had under them before committing to anything, then started cutting. 20 made it, 19 didn't, and the reason is written next to each one. The platform decision sits on its own because it isn't a feature. It's the choice between building an app or a website, and every location feature depends on getting it right.
 
-![Mind Map](images/MindMap.png) [View my design on Canva](https://canva.link/mla5bjssi95xxmt))
+![View MindMap On Canva](https://canva.link/mla5bjssi95xxmt)
+![Mind Map](images/MindMap.png)
 
 
 ### 2.3 Mentor Consultation
@@ -426,22 +427,57 @@ A browser can read GPS, but only while the page is open on screen. Lock the phon
 *   **Typography:** One sans-serif (Inter) at four sizes, held identically across all screens.
 *   **Components reused:** Bottom nav, alert stripes, and buttons are consistently deployed across all screens.
 
+| UI | Details |
+| --- | --- |
+| ![4](images/4.jpeg) | The complete system in one screen: Budget bar, coloured stop markers and card shapes.
+
+Why this design for the user. Young Malaysians who reside in Grab, Foodpanda and Instagram. Clean, bright, rounded, high contrast , easy to use without a tutorial. |
+| ![12](images/12.jpeg) | A story card that can be shared with route, stats and the TripTrail mark, designed to be posted, not just viewed. |
+
 ### Usability & Friction Reduction
 *   **One thing at a time:** The Today card only displays Now, Next and Done.
+
+| UI | Details |
+| --- | --- |
+| ![6](images/6.jpeg) | Now (Kek Lok Si Temple, arrival + weather), Next (Chulia Street street food), Done , nothing else on screen. |
+
 *   **Alerts sit under Now, not over it:** The rewritten day sits directly below the Now card it explains.
+
+| UI | Details |
+| --- | --- |
+| ![5](images/5.jpeg) | "Might be late for Penang Hill funicular" shows Now 09:08 / Travel 22 min / Starts 09:30 side by side, then the rewritten day underneath, directly below the Now card it explains. |
+
 *   **The app suggests, the person chooses:** "Accept new day" and "Keep original" are always placed side-by-side. There is no change without a tap.
 *   **Thumb-first:** Primary action is always at the bottom of the screen.
 *   **Two-minute onboarding:** Fast and frictionless input flow.
+
+| UI | Details |
+| --- | --- |
+| ![l](images/l.png) | Trip name, a "let the group decide" toggle and invite link on one screen, budget, calendar tap and a few chips on the next. Progress without a status page is indicated by "2 of 4 have answered". |
+
 *   **Money is never a separate screen:** "About RM 16 spent?" pops up organically within the day's flow.
+
+| UI | Details |
+| --- | --- |
+| ![7](images/7.jpeg) | The app asks "About RM 16 spent?" with a one-tap confirm or manual override, and the amount spent is recorded on the plan. 
+
+Core flow, end-to-end. There are no dead ends on the 15 screens that cover all the branches off that spine: 0 → 1 → 2 → 3 → 4 → 11 (Create trip → Preferences → Swipe → Day plan → Today card → Done for today). |
 
 ### Live Location Surfaces: Map & Pin Spot
 Both screens reuse the exact same bottom nav, the same teal primary button, and the same card radius, so the map doesn't feel like a different app, it feels like a different view of the same one. Meet point, Split & rejoin, and Pin spot sit as one-tap actions below the map.
+
+| UI | Details |
+| --- | --- |
+| ![9](images/9.jpeg) | The same bottom nav, chips, buttons, and colour system carry into the map. Each member is a coloured avatar with an initial and a battery %, so you can read the group at a glance without relying on colour alone. Meet point, Split & rejoin, and Pin spot sit as one-tap actions below the map. |
+| ![10](images/10.jpeg) | Pin spot uses the same card, chip, field and button components as the rest of the app. One tap drops a pin; you choose Spot or Vehicle, name it, and it appears for the group instantly. Recent pins can be added to the plan later. This is the screen that proves the app remembers what Maps can't. |
 
 ### Accessibility Considerations
 *   **Colour is never the only signal:** E.g., The blue "Rain" card has an umbrella icon and a clear headline.
 *   **Contrast:** White on navy for all "Now" blocks, dark text on white for all other blocks.
 *   **Tap targets:** Primary buttons are full width, 44–50px. Text sizes are based on the phone's system scale.
 *   **Plain language:** Tips are written practically and conversationally ("Shoes off in the main prayer hall.").
+
+| ![8](images/8.jpeg) | The blue "Rain at the beach in 40 min" card has an umbrella icon and a complete headline , the warning is still there without colour. |
 
 ---
 

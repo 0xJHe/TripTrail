@@ -154,10 +154,12 @@ Table of every distinct idea generated, with why each was kept or dropped, order
 
 **User flow - from opening the app to the end of the trip**
 Planning happens once, across the top. Everything below it repeats every day of the trip: the app watches where the group is, shows the matching alert on the Today card when something changes, proposes a fix, and waits for the group to accept before rewriting the itinerary. The day ends when someone taps "Done for today" and they review what actually happened, adjust tomorrow, and location switches off until the next morning.
+
 ![User Flow](images/UserFlow.svg)
 
 **Mindmap - every idea we generated, and what happened to it**
 We took the four things the problem statement asks for and put every idea we had under them before committing to anything, then started cutting. 20 made it, 19 didn't, and the reason is written next to each one. The platform decision sits on its own because it isn't a feature. It's the choice between building an app or a website, and every location feature depends on getting it right.
+
 ![Mind Map](images/MindMap.png)
 
 
@@ -369,6 +371,7 @@ Most trip planners deal with one aspect of the problem: making a list, splitting
 *   **BaaS (Supabase):** Authentication, Database, Real time broadcast location data.
 *   **Compute Layer (Vercel):** Generate Trip Options, Generate Itinerary/Budget, ETA Check, Nearby Comfort Spots, Rain Fallback, Food Check.
 *   **External APIs:** Google Maps Platform, Google Gemini API, Google Weather API, JAKIM Halal Directory.
+
 ![Diagram](images/SystemArchitetureDiagram.png)
 
 ### Build Plan & Scope

@@ -19,6 +19,7 @@
 - [3. Design & Prototype](#3-design--prototype)
 - [4. What Makes It Different](#4-what-makes-it-different)
 - [5. Technical Architecture & Feasibility](#5-technical-architecture--feasibility)
+- [Extra](#Extra)
 
 ---
 ## 1. Project Overview
@@ -178,6 +179,7 @@ We took the four things the problem statement asks for and put every idea we had
 
 ### Key Screens
 ![1](images/1.jpeg)
+
 **Create trip & invite Screen**
 * **Trip name** - just a label so the group can tell one trip from another.
 * **Where to?** - *Let the group decide* leaves the destination to the swipe vote later. *I already know* is for groups who've settled it.
@@ -187,6 +189,7 @@ We took the four things the problem statement asks for and put every idea we had
 * **Create trip** - pinned to the bottom, opens the preferences screen.
 
 ![2](images/2.jpeg)
+
 **Preferences Screen**
 * **Daily budget** - a number in RM, entered privately by each person.
 * **When are you free?** - tap the days you can travel.
@@ -197,6 +200,7 @@ We took the four things the problem statement asks for and put every idea we had
 * **Save my answers** - pinned to the bottom.
 
 ![3](images/3.jpeg)
+
 **Trip options swipe screen**
 * **Header** - "Pick a trip · Swipe right to like, left to pass · 2 of 5"
 * **"Built from everyone's answers"** with the group's avatars.
@@ -209,6 +213,7 @@ We took the four things the problem statement asks for and put every idea we had
 * **Swipe hints** - "Swipe left to pass" and "Swipe right to like".
 
 ![4](images/4.jpeg)
+
 **Day plan screen**
 * **Header** — "Penang · 12 – 14 Oct · 4 members".
 * **Day tabs** — Day 1 / Day 2 / Day 3.
@@ -218,6 +223,7 @@ We took the four things the problem statement asks for and put every idea we had
 * **+ Add a stop** — a dashed row at the end of the day.
 
 ![5](images/5.jpeg)
+
 **Running late screen**
 * **Header** - The day and place. The time in the corner matters here: it's what the alert below is reacting to.
 * **Location pill** - "Location on · 4 of 4 sharing".
@@ -229,6 +235,7 @@ We took the four things the problem statement asks for and put every idea we had
 * **Accept new day / Keep original** - accepting rewrites the itinerary for everyone.
 
 ![6](images/6.jpeg)
+
 **Running early screen**
 * **Header** - The day and place.
 * **Now block** - arrived 11:36, left 12:50. That "left" is the trigger.
@@ -238,6 +245,7 @@ We took the four things the problem statement asks for and put every idea we had
 * **Add this / Go to next stop** - accept the extra stop, or skip it.
 
 ![7](images/7.jpeg)
+
 **Check the spend screen**
 * **Now block** - arrived 13:20, left 16:10. The "left" is what triggers the prompt.
 * **The prompt** - "About RM 16 spent?" Food prices are only estimates, so the app asks just after paying.
@@ -245,12 +253,14 @@ We took the four things the problem statement asks for and put every idea we had
 * **Done** - the stops already finished, each with its final cost.
 
 ![8](images/8.jpeg)
+
 **Rain backup screen**
 * **The alert** - blue stripe this time. "Rain at the beach in 40 min" — not a generic forecast, but rain where the group actually is.
 * **"Nearby, indoor, within budget"** - the three filters the app applied.
 * **Three options, each with Go** - walk time and cost on every one, nearest first.
 
 ![9](images/9.jpeg)
+
 **Group map screen**
 * **The map** - streets named.
 * **The four members** - coloured circle with initial and battery percentage.
@@ -266,6 +276,7 @@ We took the four things the problem statement asks for and put every idea we had
 * **Pinned so far today** - what the group has already saved.
 
 ![11](images/11.jpeg)
+
 **Done for today screen**
 * **How today went** - a checklist of every stop. Planned versus actual, side by side.
 * **Tomorrow** - the next day's stops with an Edit button to change things while memory is fresh.
@@ -274,6 +285,7 @@ We took the four things the problem statement asks for and put every idea we had
 * **Done for today** - pinned to the bottom.
 
 ![12](images/12.jpeg)
+
 **Day recap screen**
 * **The story card** — sized for Instagram or WhatsApp stories.
 * **The trail** — the route the group actually walked, drawn as a glowing line.

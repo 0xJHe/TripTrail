@@ -1,5 +1,5 @@
 import type { OptionFit } from '@/features/planning/optionFit';
-import { finishedSwiping, likesLabel, rankOptions } from '@/features/planning/tally';
+import { finishedSwiping, likesLabel, rankOptions, tieBreakReason, tiedWithTop } from '@/features/planning/tally';
 import type { TripOption, Vote } from '@/features/planning/types';
 
 function option(id: string, cost: number, position: number): TripOption {
@@ -49,6 +49,34 @@ describe('rankOptions', () => {
     const ranked = rankOptions(options, votes, fits);
     // Penang and Melaka: everyone free; Melaka is cheaper. Langkawi: only 3 free.
     expect(ranked.map((r) => r.option.id)).toEqual(['melaka', 'penang', 'langkawi']);
+  });
+});
+
+describe('ties', () => {
+  const options = [option('penang', 380, 0), option('melaka', 390, 1), option('ipoh', 220, 2)];
+  const noDates: OptionFit = { ...fit(0), window: null };
+  const fits = new Map([
+    ['penang', noDates],
+    ['melaka', noDates],
+    ['ipoh', noDates],
+  ]);
+
+  it('finds options with as many likes as the top one, and says why the top one is first', () => {
+    const votes = [vote('h', 'penang', true), vote('h', 'melaka', true), vote('h', 'ipoh', false)];
+    const ranked = rankOptions(options, votes, fits);
+    expect(ranked[0].option.id).toBe('penang');
+    expect(tiedWithTop(ranked).map((r) => r.option.id)).toEqual(['melaka']);
+    expect(tieBreakReason(ranked[0], ranked[1], true)).toBe("it's the cheapest");
+  });
+
+  it('has no tie when one option has the most likes', () => {
+    const ranked = rankOptions(options, [vote('h', 'ipoh', true)], fits);
+    expect(tiedWithTop(ranked)).toEqual([]);
+  });
+
+  it('prefers the option more people are free for', () => {
+    const ranked = rankOptions(options, [], new Map([...fits, ['ipoh', fit(2)]]));
+    expect(tieBreakReason(ranked[0], ranked[1], false)).toBe('more of you are free for it');
   });
 });
 

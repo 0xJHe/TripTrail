@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatars } from '@/components/ui/Avatars';
 import { Card } from '@/components/ui/Card';
@@ -9,6 +9,7 @@ import { colors, formatMoney } from '@/lib/theme';
 import { freeLabelShort } from '../dateFinder';
 import { formatRange } from '../dates';
 import { likesLabel, type OptionResult } from '../tally';
+import { YourPick } from './WinnerCard';
 
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five'];
 const word = (n: number) => WORDS[n] ?? String(n);
@@ -30,28 +31,50 @@ export function runnerUpLine(result: OptionResult, solo: boolean): { text: strin
   return { text: `${price} · ${days} day${days === 1 ? '' : 's'}`, color: colors.textMuted };
 }
 
-export function RunnerUpRow({ result, members, solo }: { result: OptionResult; members: Member[]; solo: boolean }) {
+interface RunnerUpRowProps {
+  result: OptionResult;
+  members: Member[];
+  solo: boolean;
+  selected: boolean;
+  onPress: () => void;
+}
+
+/** A runner-up trip. Tap it to pick it instead of the top one. */
+export function RunnerUpRow({ result, members, solo, selected, onPress }: RunnerUpRowProps) {
   const line = runnerUpLine(result, solo);
   const likers = memberAvatars(members).filter((a) => result.likerIds.includes(a.key));
   return (
-    <Card style={styles.row}>
-      <View style={{ flex: 1 }}>
-        <Txt variant="h14">{result.option.name}</Txt>
-        <Txt variant="s11" color={line.color} style={{ marginTop: 2 }}>
-          {line.text}
-        </Txt>
-      </View>
-      <View style={styles.right}>
-        <Txt variant="h14" color={result.likes ? colors.text : colors.textMuted}>
-          {likesLabel(result.likes)}
-        </Txt>
-        {likers.length > 1 ? <Avatars people={likers} /> : null}
-      </View>
-    </Card>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={`${result.option.name}, ${likesLabel(result.likes)}`}
+      style={({ pressed }) => [pressed && { opacity: 0.85 }]}>
+      <Card style={[styles.row, selected && styles.selected]}>
+        <View style={{ flex: 1 }}>
+          <Txt variant="h14">{result.option.name}</Txt>
+          <Txt variant="s11" color={line.color} style={{ marginTop: 2 }}>
+            {line.text}
+          </Txt>
+          {selected ? (
+            <View style={{ marginTop: 6 }}>
+              <YourPick />
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.right}>
+          <Txt variant="h14" color={result.likes ? colors.text : colors.textMuted}>
+            {likesLabel(result.likes)}
+          </Txt>
+          {likers.length > 1 ? <Avatars people={likers} /> : null}
+        </View>
+      </Card>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 2, borderColor: colors.card },
+  selected: { borderColor: colors.teal },
   right: { alignItems: 'flex-end', gap: 2 },
 });

@@ -16,11 +16,13 @@ interface HeroHeaderProps {
   /** Show the logo + "TripTrail" brand row (prototype screen 1). */
   brand?: boolean;
   onBack?: () => void;
+  /** Shown in the top-right corner, level with the brand row. */
+  right?: ReactNode;
   children?: ReactNode;
 }
 
 /** Gradient header with the dashed trail, from the prototype's create-trip screen. */
-export function HeroHeader({ title, subtitle, brand, onBack, children }: HeroHeaderProps) {
+export function HeroHeader({ title, subtitle, brand, onBack, right, children }: HeroHeaderProps) {
   const insets = useSafeAreaInsets();
   return (
     <TrailBackdrop style={[styles.wrap, { paddingTop: insets.top + 12 }]}>
@@ -37,6 +39,7 @@ export function HeroHeader({ title, subtitle, brand, onBack, children }: HeroHea
               The plan that follows you
             </Txt>
           </View>
+          {right ? <View style={styles.right}>{right}</View> : null}
         </View>
       ) : null}
       <Txt style={[styles.title, brand && { marginTop: 22 }]} color={colors.white}>
@@ -69,6 +72,7 @@ const styles = StyleSheet.create({
   backInline: { marginLeft: -6, marginRight: -4 },
   wrap: { paddingHorizontal: 18, paddingBottom: 22 },
   back: { alignSelf: 'flex-start', marginLeft: -6, marginBottom: 10 },
+  right: { marginLeft: 'auto' },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
   logo: { width: 40, height: 40 },
   brandName: { fontFamily: fontFamily.extrabold, fontSize: 24, letterSpacing: -0.5, lineHeight: 26 },

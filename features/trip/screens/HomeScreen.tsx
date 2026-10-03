@@ -9,6 +9,7 @@ import { useDisplayName } from '../authStore';
 import { ActionCard } from '../components/ActionCard';
 import { ErrorLine } from '../components/ErrorLine';
 import { HeroHeader } from '../components/HeroHeader';
+import { SignOutButton } from '../components/SignOutButton';
 import { TripRow } from '../components/TripRow';
 import { useMyTrips } from '../hooks/useTrip';
 import { tripEntryRoute } from '../routes';
@@ -27,7 +28,12 @@ export function HomeScreen() {
 
   return (
     <View style={styles.screen}>
-      <HeroHeader brand title={`Hi ${name || 'there'} 👋`} subtitle="Where is the group going next?" />
+      <HeroHeader
+        brand
+        title={`Hi ${name || 'there'} 👋`}
+        subtitle="Where is the group going next?"
+        right={<SignOutButton />}
+      />
       <ScrollView
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 24 }]}
         refreshControl={<RefreshControl refreshing={trips.isRefetching} onRefresh={refetch} tintColor={colors.teal} />}>

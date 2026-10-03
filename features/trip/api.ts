@@ -16,6 +16,11 @@ export async function signInWithName(name: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function signOut(): Promise<void> {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
 async function requireUserId(): Promise<string> {
   const { data } = await supabase.auth.getSession();
   const id = data.session?.user.id;

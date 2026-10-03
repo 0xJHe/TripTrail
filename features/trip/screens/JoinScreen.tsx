@@ -86,7 +86,7 @@ export function JoinScreen() {
           <View style={{ flex: 1, gap: 2 }}>
             <Txt variant="h14">No code?</Txt>
             <Txt variant="b12" color={colors.textMuted}>
-              Ask whoever made the trip to tap Copy or WhatsApp on their invite card.
+              Ask whoever made the trip to share the code.
             </Txt>
           </View>
         </Card>

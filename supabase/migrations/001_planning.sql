@@ -1,5 +1,6 @@
 -- 001 planning: create trip, join, preferences, trip options, swipe vote.
 -- Paste into Supabase > SQL Editor > Run (once). Safe to re-run.
+-- Only for databases made before this change: schema.sql already includes all of it.
 
 -- Trip length is a range ("2 – 3 days"): length_min .. length_days.
 alter table trips add column if not exists length_min int;

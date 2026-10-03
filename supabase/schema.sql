@@ -7,6 +7,7 @@ create table trips (
   name text not null,
   destination text,
   month text,
+  length_min int, -- trip length is a range ("2 – 3 days"): length_min .. length_days
   length_days int,
   dates_fixed boolean default false,
   start_date date,
@@ -14,6 +15,7 @@ create table trips (
   join_code text unique not null,
   created_by uuid references auth.users(id),
   winning_option_id uuid,
+  stage text not null default 'preferences', -- preferences | voting | decided
   created_at timestamptz default now()
 );
 
@@ -29,6 +31,7 @@ create table members (
 
 create table preferences (
   member_id uuid primary key references members(id) on delete cascade,
+  trip_id uuid references trips(id) on delete cascade, -- for Realtime filters
   daily_budget numeric,
   free_dates date[] default '{}',
   food_needs text[] default '{}',
@@ -48,15 +51,19 @@ create table trip_options (
   summary text,
   fits_everyone boolean default false,
   plan_json jsonb,
+  position int not null default 0, -- order the options were generated in
   created_at timestamptz default now()
 );
 
 create table votes (
   member_id uuid references members(id) on delete cascade,
   option_id uuid references trip_options(id) on delete cascade,
+  trip_id uuid references trips(id) on delete cascade, -- for Realtime filters
   liked boolean not null,
   primary key (member_id, option_id)
 );
+create index preferences_trip_idx on preferences (trip_id);
+create index votes_trip_idx on votes (trip_id);
 
 create table stops (
   id uuid primary key default gen_random_uuid(),
@@ -157,6 +164,8 @@ $$;
 -- through a security-definer function so the code never exposes other trips.
 create policy "trips insert" on trips for insert with check (auth.uid() = created_by);
 create policy "trips read" on trips for select using (is_member(id));
+-- The creator can read the trip they just inserted, before their members row exists.
+create policy "trips read own" on trips for select using (created_by = auth.uid());
 create policy "trips update" on trips for update using (is_member(id));
 
 create policy "members read" on members for select using (is_member(trip_id));
@@ -177,19 +186,19 @@ create policy "pins all" on pins for all using (is_member(trip_id));
 create policy "meet all" on meet_points for all using (is_member(trip_id));
 create policy "closures all" on day_closures for all using (is_member(trip_id));
 
--- Join a trip by code (bypasses RLS safely).
+-- Join a trip by code (bypasses RLS safely). Codes are typed by hand, so match case-insensitively.
 create or replace function join_trip(code text, name text, color text)
-returns uuid language plpgsql security definer as $$
-declare t uuid; m uuid;
+returns uuid language plpgsql security definer set search_path = public as $$
+declare t uuid;
 begin
-  select id into t from trips where join_code = code;
+  select id into t from trips where join_code = lower(trim(code));
   if t is null then raise exception 'Invalid join code'; end if;
   insert into members (trip_id, user_id, display_name, avatar_color)
-  values (t, auth.uid(), name, color)
-  on conflict (trip_id, user_id) do update set display_name = excluded.display_name
-  returning id into m;
+  values (t, auth.uid(), name, nullif(color, ''))
+  on conflict (trip_id, user_id) do update set display_name = excluded.display_name;
   return t;
 end $$;
 
 -- Realtime
-alter publication supabase_realtime add table locations, stops, pins, meet_points, spends, members, votes;
+alter publication supabase_realtime add table
+  locations, stops, pins, meet_points, spends, members, votes, trips, preferences, trip_options;

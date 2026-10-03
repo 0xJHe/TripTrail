@@ -22,7 +22,7 @@ export function useGenerateOptions(data: PlanningData) {
     setGenerating(true);
     setError(null);
     try {
-      const drafts = await generateTripOptions({
+      const { options: drafts } = await generateTripOptions(trip.id, {
         destination: trip.destination,
         lengthMin: trip.length_min ?? trip.length_days ?? 2,
         lengthMax: trip.length_days ?? 3,

@@ -56,17 +56,21 @@ During the trip:
 
 - Expo SDK (latest), React Native, TypeScript, Expo Router (file-based routes).
 - Supabase: anonymous auth with display name, Postgres, Realtime, Storage (pin photos).
-- Vercel serverless functions (folder `api/`, Node + TypeScript, deployed as a
-  separate small Vercel project) for ALL external APIs: Gemini, Google Maps
-  Places / Distance Matrix, Google Weather, JAKIM halal lookup. The Gemini and
-  Google keys live only in Vercel environment variables. App code never holds
-  them. App only holds EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY
-  and EXPO_PUBLIC_API_BASE_URL (the Vercel URL) from .env.
-  Each function checks the caller's Supabase JWT (Authorization: Bearer) before
-  doing work. lib/ai.ts and lib/distance.ts call these functions; in Demo mode
-  / offline demo they return seed/fake-ai.json instead.
-  Local dev: `npx vercel dev` serves api/ on localhost; set
-  EXPO_PUBLIC_API_BASE_URL to that URL (use your computer's LAN IP for the phone).
+- Supabase Edge Functions (folder `supabase/functions/`, Deno + TypeScript) for
+  ALL external APIs: Gemini, Google Maps Places / Distance Matrix, Google
+  Weather, JAKIM halal lookup. The Gemini and Google keys live only in Supabase
+  secrets (`npx supabase secrets set NAME=value`; GEMINI_API_KEY is set).
+  App code never holds them. App only holds EXPO_PUBLIC_SUPABASE_URL and
+  EXPO_PUBLIC_SUPABASE_ANON_KEY from .env (EXPO_PUBLIC_API_BASE_URL is no
+  longer needed).
+  The app calls them with `supabase.functions.invoke(name, { body })`, which
+  sends the user's JWT. Each function checks the caller's Supabase JWT
+  (Authorization: Bearer) and that they are a member of the trip before doing
+  work. lib/ai.ts and lib/distance.ts call these functions; in Demo mode /
+  offline demo they return seed/fake-ai.json instead.
+  Deploy: `npx supabase functions deploy <name> --project-ref <ref> --no-verify-jwt`
+  (the project uses the new sb_publishable keys, so the function checks the JWT
+  itself). Logs: Supabase dashboard > Edge Functions > <name> > Logs.
 - expo-location + expo-task-manager for background location.
 - react-native-maps for maps.
 - Zustand for client state. React Query (TanStack) for Supabase reads.
@@ -94,10 +98,13 @@ seed/
   demo-route.json     fake location timeline that triggers late, early, rain, split
 supabase/
   schema.sql          tables + RLS
-api/                  Vercel serverless functions (own package.json + vercel.json):
-  generate-trip-options.ts  generate-itinerary.ts  replan-day.ts
-  nearby-suggestion.ts      rain-check.ts          eta.ts   halal-check.ts
-  _lib/               shared: gemini client, google client, auth check, zod schemas
+supabase/functions/   Supabase Edge Functions (Deno), one folder each with index.ts:
+  generate-trip-options  generate-itinerary  replan-day
+  nearby-suggestion      rain-check          eta        halal-check
+  _shared/            shared: gemini client, google client, auth check, zod schemas,
+                      tripOptions.ts (types + sample options, also imported by lib/ai.ts;
+                      files here must stay plain TS with no imports so React Native
+                      and Deno can both use them)
 design/prototype.html  the 15 screens
 __tests__/            tests mirror feature folders
 
@@ -123,7 +130,7 @@ Settings has a Demo mode toggle. When on:
 - lib/location.ts replays seed/demo-route.json instead of GPS.
 - lib/clock.ts returns a settable fake time; a small debug bar lets you jump
   the clock and skip to the next event.
-- The Vercel API functions are still called, but if they fail, or demo mode is
+- The Edge Functions are still called, but if they fail, or demo mode is
   on and "offline demo" is checked, responses come from seed/fake-ai.json.
 Every feature must be testable in Demo mode from a room, not a real trip.
 

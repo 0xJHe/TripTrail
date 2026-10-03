@@ -46,3 +46,6 @@ example
 .env
 .env.*
 !.env.example
+
+# Supabase CLI cache
+supabase/.temp/

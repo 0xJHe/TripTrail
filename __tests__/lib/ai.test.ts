@@ -1,3 +1,6 @@
+const mockInvoke = jest.fn();
+jest.mock('@/lib/supabase', () => ({ supabase: { functions: { invoke: (...args: unknown[]) => mockInvoke(...args) } } }));
+
 import { generateTripOptions, OPTION_COUNT, sampleTripOptions, type MemberAnswers } from '@/lib/ai';
 
 const beachLover: MemberAnswers = {
@@ -8,8 +11,8 @@ const beachLover: MemberAnswers = {
 };
 
 describe('sample trip options', () => {
-  it('returns 5 options that fit the trip length', async () => {
-    const options = await generateTripOptions({ destination: null, lengthMin: 2, lengthMax: 3, members: [beachLover] });
+  it('returns 5 options that fit the trip length', () => {
+    const options = sampleTripOptions({ destination: null, lengthMin: 2, lengthMax: 3, members: [beachLover] });
     expect(options).toHaveLength(OPTION_COUNT);
     for (const o of options) {
       expect(o.days).toBeGreaterThanOrEqual(2);
@@ -38,5 +41,36 @@ describe('sample trip options', () => {
     expect(options.map((o) => o.name)).toEqual(['Bali highlights', 'Bali, easy pace', 'Bali on a budget']);
     expect(options[0].days).toBe(5);
     expect(options[2].costPerPerson).toBeLessThan(options[0].costPerPerson);
+  });
+});
+
+describe('generateTripOptions', () => {
+  const req = { destination: null, lengthMin: 2, lengthMax: 3, members: [beachLover] };
+  const aiOption = {
+    name: 'Ipoh', days: 2, costPerPerson: 260, tags: ['Cafés'], covers: ['Cafés'], avoids: [],
+    halal: true, scene: 'highlands', dayTitles: ['Old town', 'Caves'],
+  };
+  beforeEach(() => {
+    mockInvoke.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  it('calls the Edge Function with the trip id and returns its options', async () => {
+    mockInvoke.mockResolvedValue({ data: { options: [aiOption], source: 'ai' }, error: null });
+    const result = await generateTripOptions('trip-1', req);
+    expect(mockInvoke).toHaveBeenCalledWith('generate-trip-options', { body: { tripId: 'trip-1' } });
+    expect(result).toEqual({ options: [aiOption], source: 'ai' });
+  });
+
+  it('falls back to sample options when the function fails', async () => {
+    mockInvoke.mockResolvedValue({ data: null, error: new Error('offline') });
+    const result = await generateTripOptions('trip-1', req);
+    expect(result.source).toBe('sample');
+    expect(result.options).toEqual(sampleTripOptions(req));
+  });
+
+  it('falls back to sample options when the reply is broken', async () => {
+    mockInvoke.mockResolvedValue({ data: { options: 'nope' }, error: null });
+    expect((await generateTripOptions('trip-1', req)).source).toBe('sample');
   });
 });

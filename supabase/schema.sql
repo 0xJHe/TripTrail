@@ -77,7 +77,11 @@ create table stops (
   status text default 'planned', -- planned | arrived | done | dropped
   arrived_at timestamptz,
   left_at timestamptz,
-  actual_cost numeric
+  actual_cost numeric,
+  category text, -- flight | hotel | sight | food | beach | shopping
+  priority int default 2, -- 1 = drop first when re-planning, 3 = keep
+  note text,
+  halal_available boolean
 );
 
 create table locations (

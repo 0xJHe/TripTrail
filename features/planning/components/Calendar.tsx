@@ -118,9 +118,9 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   arrows: { flexDirection: 'row', gap: 18, paddingRight: 2 },
   week: { flexDirection: 'row' },
-  cell: { flex: 1, alignItems: 'center', justifyContent: 'center', height: 33 },
+  cell: { flex: 1, alignItems: 'center', justifyContent: 'center', height: 31 },
   cellText: { flex: 1, textAlign: 'center' },
-  day: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  day: { width: 29, height: 29, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   dayOn: { backgroundColor: colors.teal },
   dayText: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 16 },
 });

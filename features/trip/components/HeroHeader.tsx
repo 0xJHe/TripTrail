@@ -24,18 +24,10 @@ export function HeroHeader({ title, subtitle, brand, onBack, children }: HeroHea
   const insets = useSafeAreaInsets();
   return (
     <TrailBackdrop style={[styles.wrap, { paddingTop: insets.top + 12 }]}>
-      {onBack ? (
-        <Pressable
-          onPress={onBack}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          style={styles.back}>
-          <Ionicons name="chevron-back" size={22} color={colors.white} />
-        </Pressable>
-      ) : null}
+      {onBack && !brand ? <BackButton onPress={onBack} /> : null}
       {brand ? (
         <View style={styles.brand}>
+          {onBack ? <BackButton onPress={onBack} inline /> : null}
           <Image source={logo} style={styles.logo} contentFit="contain" accessibilityLabel="TripTrail logo" />
           <View>
             <Txt style={styles.brandName} color={colors.white}>
@@ -60,7 +52,21 @@ export function HeroHeader({ title, subtitle, brand, onBack, children }: HeroHea
   );
 }
 
+function BackButton({ onPress, inline }: { onPress: () => void; inline?: boolean }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={12}
+      accessibilityRole="button"
+      accessibilityLabel="Back"
+      style={inline ? styles.backInline : styles.back}>
+      <Ionicons name="chevron-back" size={22} color={colors.white} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  backInline: { marginLeft: -6, marginRight: -4 },
   wrap: { paddingHorizontal: 18, paddingBottom: 22 },
   back: { alignSelf: 'flex-start', marginLeft: -6, marginBottom: 10 },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },

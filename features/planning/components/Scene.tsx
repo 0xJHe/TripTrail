@@ -6,10 +6,11 @@ import type { SceneKind } from '@/lib/ai';
 /**
  * Simple illustrated picture for a trip option (prototype .photo). Fills any box:
  * the drawing keeps its shape at the bottom and the sky colour fills the space above.
+ * `banner` centres it instead, for short strips like the winner card.
  */
-export function Scene({ kind }: { kind: SceneKind }) {
+export function Scene({ kind, banner }: { kind: SceneKind; banner?: boolean }) {
   return (
-    <View style={[styles.box, { backgroundColor: SKIES[kind][0] }]}>
+    <View style={[styles.box, banner && { justifyContent: 'center' }, { backgroundColor: SKIES[kind][0] }]}>
       <View style={styles.drawing}>
         <Drawing kind={kind} />
       </View>

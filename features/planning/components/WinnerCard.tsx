@@ -9,7 +9,7 @@ import { colors, fontFamily, formatMoney, radius, shadow } from '@/lib/theme';
 import { freeLabelShort } from '../dateFinder';
 import { formatRange } from '../dates';
 import { likesLabel, type OptionResult } from '../tally';
-import { Scene } from './Scene';
+import { OptionPicture } from './OptionPicture';
 
 interface WinnerCardProps {
   result: OptionResult;
@@ -32,7 +32,7 @@ export function WinnerCard({ result, members, tag, chosen, footer }: WinnerCardP
   return (
     <View style={[styles.card, chosen && styles.chosen]} accessibilityLabel={`${option.name}, ${tag}`}>
       <View style={styles.photo}>
-        <Scene kind={option.plan_json.scene} banner />
+        <OptionPicture plan={option.plan_json} banner />
         <View style={styles.tag}>
           <Txt style={styles.tagText} color={colors.white}>
             {tag}
@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
     ...shadow,
   },
   chosen: { borderColor: colors.teal },
-  photo: { height: 84 },
+  photo: { height: 110 },
   tag: {
     position: 'absolute',
     left: 10,

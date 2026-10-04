@@ -22,7 +22,7 @@ export function useGenerateOptions(data: PlanningData) {
     setGenerating(true);
     setError(null);
     try {
-      const { options: drafts } = await generateTripOptions(trip.id, {
+      const { options: drafts, note } = await generateTripOptions(trip.id, {
         destination: trip.destination,
         lengthMin: trip.length_min ?? trip.length_days ?? 2,
         lengthMax: trip.length_days ?? 3,
@@ -32,6 +32,8 @@ export function useGenerateOptions(data: PlanningData) {
           mustHaves: p.must_haves,
           noGo: p.no_go,
         })),
+        freeDates: answeredPrefs.map((p) => p.free_dates),
+        totalMembers: members.length,
       });
       const toSave = drafts.map((draft) => {
         const fit = optionFit(
@@ -47,7 +49,7 @@ export function useGenerateOptions(data: PlanningData) {
       });
       // Only the member who moves the trip to voting saves the options.
       const mine = trip.stage === 'preferences' ? await claimVoting(trip.id) : true;
-      if (mine) await insertOptions(trip.id, toSave);
+      if (mine) await insertOptions(trip.id, toSave, note);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['trip', trip.id] }),
         queryClient.invalidateQueries({ queryKey: ['options', trip.id] }),

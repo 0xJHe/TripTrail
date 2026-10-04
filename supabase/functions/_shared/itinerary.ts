@@ -29,6 +29,9 @@ export interface StopDraft {
   tip: string | null;
   lat: number | null;
   lng: number | null;
+  /** From Google Places, when found. */
+  address?: string | null;
+  placeId?: string | null;
 }
 
 type Seed = [time: string, name: string, price: number, estimate: boolean, category: StopCategory, outdoor: boolean, lat: number, lng: number, tip: string];
@@ -126,4 +129,305 @@ export function sampleItinerary(req: ItineraryRequest): StopDraft[] {
     }
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// AI itinerary (generate-itinerary Edge Function): prompt, checks, retry,
+// budget fit and Google Places lookups. Gemini and Google come in as `deps`
+// so this file needs no imports and tests can use fake answers.
+
+export interface PlannerMember {
+  dailyBudget: number | null;
+  foodNeeds: string[];
+  mustHaves: string[];
+  noGo: string | null;
+}
+
+export interface ItineraryInput extends ItineraryRequest {
+  /** First day, 'YYYY-MM-DD'; null if dates are not set. */
+  startDate: string | null;
+  members: PlannerMember[];
+  /** Group budget per person for the whole trip (lowest daily budget × days); null if none set. */
+  budget: number | null;
+}
+
+interface FoundPlace {
+  placeId: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+}
+
+export interface PlannerDeps {
+  /** Ask Gemini; `attempt` is 0 or 1. Null when there's no API key. */
+  ask: ((prompt: string, attempt: number) => Promise<string>) | null;
+  /** Look a stop up in Google Places (cache first). Null when there's no Google key. */
+  findPlace:
+    | ((query: string, near: { lat: number; lng: number } | null) => Promise<{ value: FoundPlace | null; limited: boolean; calls: number }>)
+    | null;
+  log?: (message: string) => void;
+}
+
+export interface ItineraryResponse {
+  stops: StopDraft[];
+  source: 'ai' | 'sample';
+  /** Small note for the app, e.g. when Google's daily limit was reached. */
+  note: string | null;
+  googleCalls: number;
+}
+
+const CATEGORIES: StopCategory[] = ['sight', 'food', 'beach', 'shopping'];
+const MIN_STOPS = 3;
+const MAX_STOPS = 7;
+/** Google results further than this from Gemini's own location are probably the wrong place. */
+const MAX_PLACE_DRIFT_KM = 40;
+
+export class OverBudgetError extends Error {
+  total: number;
+  budget: number;
+  stops: StopDraft[];
+  constructor(total: number, budget: number, stops: StopDraft[]) {
+    super(`The plan costs RM ${total} per person but the budget is RM ${budget}. Make it cheaper.`);
+    this.total = total;
+    this.budget = budget;
+    this.stops = stops;
+  }
+}
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function dayLabel(start: string, day: number): string {
+  const [y, m, d] = start.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + day - 1));
+  return ` ${WEEKDAYS[date.getUTCDay()]} ${date.toISOString().slice(0, 10)}`;
+}
+
+export function buildItineraryPrompt(input: ItineraryInput, feedback?: string): string {
+  const days = Array.from({ length: input.days }, (_, i) => {
+    const title = input.dayTitles[i] ? ` (theme: ${input.dayTitles[i]})` : '';
+    const when = input.startDate ? dayLabel(input.startDate, i + 1) : '';
+    return `Day ${i + 1}${when}${title}`;
+  }).join('\n');
+  const members = input.members
+    .map(
+      (m, i) =>
+        `Member ${i + 1}: daily budget ${m.dailyBudget != null ? `RM ${m.dailyBudget}` : 'not set'}; food needs: ${m.foodNeeds.join(', ') || 'none'}; must-haves: ${m.mustHaves.join(', ') || 'none'}; no-go: ${m.noGo ?? 'none'}.`,
+    )
+    .join('\n');
+  const budget =
+    input.budget != null
+      ? `The total of every stop's price, all days together, must be at most RM ${Math.round(input.budget)} per person. Aim for about RM ${Math.round(input.budget * 0.6)}, because the hotel and travel are added separately.`
+      : 'Keep it good value.';
+  const halal = input.halal
+    ? 'Someone needs halal food: EVERY food stop must be a halal or Muslim-friendly place, with "halal": true.'
+    : 'Set "halal" honestly for food stops.';
+
+  return `You plan day-by-day group trips for a travel app used in Malaysia. Prices are in Malaysian ringgit (RM), per person.
+
+Trip: ${input.destination}, ${input.days} day${input.days === 1 ? '' : 's'}:
+${days}
+
+What each member answered:
+${members}
+
+Rules:
+- ${MIN_STOPS} to 6 stops per day, real named places that exist (no "local café"), in the order they are visited, with time to travel between them.
+- Include lunch and dinner each day as food stops.
+- Cover the group's must-haves across the days. Never plan anything that is someone's no-go (no starts before 08:00 if "Early mornings" is a no-go, nothing after 22:00 if "Late nights", no long hikes if "Long hikes").
+- ${halal}
+- ${budget}
+- "start" and "end": 24-hour "HH:MM", end after start.
+- "price": per person in RM (0 if free). "estimate": true when the price is a guess (food, markets), false for fixed ticket prices.
+- "outdoor": true if the stop is mostly outside (matters for rain).
+- "category": one of ${CATEGORIES.join(', ')}.
+- "search": the place name plus area and city, for Google Maps, e.g. "Kek Lok Si Temple, Air Itam, Penang".
+- "lat"/"lng": your best guess of the location.
+- "tip": one short, practical first-timer tip (max 20 words).
+No flights or hotels: the group adds those themselves.
+${feedback ? `\nYour last answer had a problem: ${feedback}\nFix it.\n` : ''}
+Reply with JSON only, no other text, in this shape:
+{"days":[{"day":1,"stops":[{"name":"","search":"","start":"09:00","end":"10:30","price":0,"estimate":false,"outdoor":true,"category":"sight","halal":false,"tip":"","lat":5.4,"lng":100.3}]}]}`;
+}
+
+const CLOCK = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+const minutesOf = (t: string) => {
+  const m = CLOCK.exec(t)!;
+  return Number(m[1]) * 60 + Number(m[2]);
+};
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const tidyClock = (t: string) => {
+  const mins = minutesOf(t);
+  return `${pad2(Math.floor(mins / 60))}:${pad2(mins % 60)}`;
+};
+
+function fail(message: string): never {
+  throw new Error(message);
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const str = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+function num(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() && Number.isFinite(Number(v))) return Number(v);
+  return null;
+}
+
+/** Total of every stop's price. */
+export function planTotal(stops: Pick<StopDraft, 'price'>[]): number {
+  return stops.reduce((sum, s) => sum + s.price, 0);
+}
+
+/**
+ * Check Gemini's answer and turn it into stops. Throws a plain reason (sent
+ * back to Gemini on the retry) when it can't be used; OverBudgetError when the
+ * only problem is the price.
+ */
+export function checkItinerary(text: string, input: ItineraryInput): StopDraft[] {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    fail('The answer was not valid JSON.');
+  }
+  if (!isObj(raw) || !Array.isArray(raw.days)) fail('The answer needs a "days" list.');
+  const allDays = raw.days as unknown[];
+  const stops: StopDraft[] = [];
+  for (let day = 1; day <= input.days; day++) {
+    const entry = allDays.find((d) => isObj(d) && num(d.day) === day) ?? allDays[day - 1];
+    if (!isObj(entry) || !Array.isArray(entry.stops)) fail(`Day ${day} is missing.`);
+    const list = entry.stops as unknown[];
+    if (list.length < MIN_STOPS) fail(`Day ${day} needs at least ${MIN_STOPS} stops.`);
+    const dayStops: StopDraft[] = [];
+    for (const s of list.slice(0, MAX_STOPS)) {
+      if (!isObj(s)) fail(`Day ${day} has a stop that is not an object.`);
+      const name = str(s.name, 80) ?? fail(`A stop on day ${day} has no name.`);
+      const start = typeof s.start === 'string' && CLOCK.test(s.start.trim()) ? s.start.trim() : fail(`"${name}" needs a start time like 09:00.`);
+      const end = typeof s.end === 'string' && CLOCK.test(s.end.trim()) ? s.end.trim() : fail(`"${name}" needs an end time like 10:30.`);
+      if (minutesOf(end) <= minutesOf(start)) fail(`"${name}" ends before it starts.`);
+      const price = num(s.price);
+      if (price == null || price < 0 || price > 5000) fail(`"${name}" needs a price in RM (0 if free).`);
+      const category = CATEGORIES.includes(s.category as StopCategory) ? (s.category as StopCategory) : 'sight';
+      if (input.halal && category === 'food' && s.halal !== true) {
+        fail(`"${name}" is a food stop but not halal; every food stop must be halal.`);
+      }
+      const lat = num(s.lat);
+      const lng = num(s.lng);
+      const located = lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+      dayStops.push({
+        day,
+        time: tidyClock(start),
+        endTime: tidyClock(end),
+        name,
+        price: Math.round(price),
+        isEstimate: s.estimate !== false,
+        category,
+        isOutdoor: s.outdoor === true,
+        tip: str(s.tip, 160),
+        lat: located ? lat : null,
+        lng: located ? lng : null,
+        address: str(s.search, 160), // the search text until Google gives the real address
+        placeId: null,
+      });
+    }
+    dayStops.sort((a, b) => minutesOf(a.time) - minutesOf(b.time));
+    stops.push(...dayStops);
+  }
+  const total = planTotal(stops);
+  if (input.budget != null && total > input.budget) throw new OverBudgetError(total, Math.round(input.budget), stops);
+  return stops;
+}
+
+/**
+ * Make a plan that's over budget fit: drop the most expensive non-food stops
+ * first (keeping at least 3 a day), then scale the remaining prices down.
+ */
+export function fitToBudget(stops: StopDraft[], budget: number): StopDraft[] {
+  let out = [...stops];
+  while (planTotal(out) > budget) {
+    const perDay = (day: number) => out.filter((s) => s.day === day).length;
+    const droppable = out
+      .filter((s) => s.category !== 'food' && s.price > 0 && perDay(s.day) > MIN_STOPS)
+      .sort((a, b) => b.price - a.price)[0];
+    if (!droppable) break;
+    out = out.filter((s) => s !== droppable);
+  }
+  const total = planTotal(out);
+  if (total > budget) {
+    const scale = budget / total;
+    out = out.map((s) => ({ ...s, price: Math.floor(s.price * scale), isEstimate: true }));
+  }
+  return out;
+}
+
+export const GOOGLE_LIMIT_NOTE = "Google's daily limit for this trip was reached, so some places use approximate locations.";
+
+function kmBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const h =
+    Math.sin(rad(b.lat - a.lat) / 2) ** 2 +
+    Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lng - a.lng) / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
+}
+
+/** Real address, location and place ID for each stop (cache first; stops that have a place ID are skipped). */
+async function addPlaces(stops: StopDraft[], input: ItineraryInput, deps: PlannerDeps) {
+  let calls = 0;
+  let limited = false;
+  const out = [...stops];
+  if (!deps.findPlace) return { stops: out, calls, limited };
+  const place = input.destination.split('·')[0].trim();
+  for (let i = 0; i < out.length; i += 4) {
+    await Promise.all(
+      out.slice(i, i + 4).map(async (s, j) => {
+        if (s.placeId) return;
+        if (!s.address && s.lat == null) return; // a made-up sample stop ("local café"): nothing real to find
+        const query = s.address && s.address !== s.name ? s.address : `${s.name}, ${place}`;
+        const near = s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null;
+        try {
+          const found = await deps.findPlace!(query, near);
+          calls += found.calls;
+          if (found.limited) limited = true;
+          const p = found.value;
+          const drift = p && near ? kmBetween(near, p) : 0;
+          if (p && drift <= MAX_PLACE_DRIFT_KM) {
+            out[i + j] = { ...s, placeId: p.placeId, address: p.address, lat: p.lat, lng: p.lng };
+          }
+        } catch (e) {
+          deps.log?.(`Places lookup failed for "${s.name}": ${e instanceof Error ? e.message : e}`);
+        }
+      }),
+    );
+  }
+  return { stops: out, calls, limited };
+}
+
+/**
+ * The whole flow: Gemini (one retry with the problem explained), else the
+ * sample plan; then Google Places for each stop. Never throws.
+ */
+export async function planItinerary(input: ItineraryInput, deps: PlannerDeps): Promise<ItineraryResponse> {
+  let stops: StopDraft[] | null = null;
+  let overBudget: OverBudgetError | null = null;
+  if (deps.ask) {
+    let feedback: string | undefined;
+    for (let attempt = 0; attempt < 2 && !stops; attempt++) {
+      try {
+        stops = checkItinerary(await deps.ask(buildItineraryPrompt(input, feedback), attempt), input);
+      } catch (e) {
+        if (e instanceof OverBudgetError) overBudget = e;
+        feedback = e instanceof Error ? e.message : String(e);
+        deps.log?.(`generate-itinerary attempt ${attempt + 1} failed: ${feedback}`);
+      }
+    }
+    if (!stops && overBudget) stops = fitToBudget(overBudget.stops, overBudget.budget);
+  }
+  const source: ItineraryResponse['source'] = stops ? 'ai' : 'sample';
+  const placed = await addPlaces(stops ?? sampleItinerary(input), input, deps);
+  return {
+    // Only Google's addresses are real; drop Gemini's search text.
+    stops: placed.stops.map((s) => (s.placeId ? s : { ...s, address: null, placeId: null })),
+    source,
+    note: placed.limited ? GOOGLE_LIMIT_NOTE : null,
+    googleCalls: placed.calls,
+  };
 }

@@ -1,9 +1,17 @@
+import type { ISODate } from './dates';
 import { atClock, clockOf, dayDate } from './stops';
 import type { NewStop, Stop } from './types';
-import type { ISODate } from './dates';
 
 /** Place = anything the group does; flight and hotel are booked by hand. */
 export type StopKind = 'place' | 'flight' | 'hotel';
+
+/** Where the stop is: picked from the Google search, or from the AI plan. */
+export interface FormPlace {
+  placeId: string | null;
+  address: string | null;
+  lat: number;
+  lng: number;
+}
 
 export interface StopFormValues {
   kind: StopKind;
@@ -14,6 +22,8 @@ export interface StopFormValues {
   price: string;
   /** Price is a guess, shown with "~". */
   estimate: boolean;
+  /** Null = no location (typed by hand). */
+  place: FormPlace | null;
 }
 
 export function formFromStop(stop: Stop): StopFormValues {
@@ -26,14 +36,18 @@ export function formFromStop(stop: Stop): StopFormValues {
     endTime: clockOf(stop.planned_end),
     price: String(stop.price ?? 0),
     estimate: stop.is_estimate,
+    place:
+      stop.lat != null && stop.lng != null
+        ? { placeId: stop.place_id, address: stop.address, lat: stop.lat, lng: stop.lng }
+        : null,
   };
 }
 
 export function emptyForm(day: number): StopFormValues {
-  return { kind: 'place', day, name: '', time: '', endTime: '', price: '', estimate: false };
+  return { kind: 'place', day, name: '', time: '', endTime: '', price: '', estimate: false, place: null };
 }
 
-export type StopFields = Omit<NewStop, 'position' | 'lat' | 'lng' | 'tip' | 'is_outdoor'>;
+export type StopFields = Omit<NewStop, 'position' | 'tip' | 'is_outdoor'>;
 
 /** Check the form and turn it into stop fields, or say what's wrong in plain words. */
 export function readStopForm(
@@ -58,6 +72,7 @@ export function readStopForm(
 
   const booked = form.kind !== 'place';
   const keepCategory = oldCategory && oldCategory !== 'flight' && oldCategory !== 'hotel' ? oldCategory : 'sight';
+  const place = form.place;
   return {
     ok: true,
     fields: {
@@ -69,6 +84,10 @@ export function readStopForm(
       is_estimate: !booked && form.estimate,
       is_booked: booked,
       category: booked ? (form.kind as 'flight' | 'hotel') : keepCategory,
+      address: place?.address ?? null,
+      lat: place?.lat ?? null,
+      lng: place?.lng ?? null,
+      place_id: place?.placeId ?? null,
     },
   };
 }

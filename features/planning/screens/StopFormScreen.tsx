@@ -10,6 +10,7 @@ import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { colors } from '@/lib/theme';
+import { PlaceNameField } from '../components/PlaceNameField';
 import { useStopForm } from '../hooks/useStopForm';
 import type { StopKind } from '../stopForm';
 
@@ -28,7 +29,7 @@ const NAME_HINT: Record<StopKind, string> = {
 /** Edit a stop (name, time, price), delete it, or add a new one. */
 export function StopFormScreen() {
   const params = useLocalSearchParams<{ id: string; stopId: string; day?: string }>();
-  const { form, set, save, remove, isNew, days, missing, saving, error } = useStopForm(
+  const { form, set, save, remove, isNew, days, near, missing, saving, error } = useStopForm(
     params.id,
     params.stopId,
     Number(params.day) || 1,
@@ -66,7 +67,15 @@ export function StopFormScreen() {
         </Chips>
 
         <Txt variant="sec">Name</Txt>
-        <Field value={form.name} onChangeText={(name) => set({ name })} placeholder={NAME_HINT[form.kind]} testID="stop-name" />
+        <PlaceNameField
+          tripId={params.id}
+          name={form.name}
+          place={form.place}
+          placeholder={NAME_HINT[form.kind]}
+          search={form.kind !== 'flight'}
+          near={near}
+          onChange={set}
+        />
 
         <Txt variant="sec">Time</Txt>
         <View style={styles.row}>

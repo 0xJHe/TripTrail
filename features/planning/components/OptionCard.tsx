@@ -7,7 +7,7 @@ import { freeLabel } from '../dateFinder';
 import { formatRange } from '../dates';
 import type { OptionFit } from '../optionFit';
 import type { TripOption } from '../types';
-import { Scene } from './Scene';
+import { OptionPicture } from './OptionPicture';
 
 interface OptionCardProps {
   option: TripOption;
@@ -46,7 +46,7 @@ export function OptionCard({ option, fit, solo, needsHalal }: OptionCardProps) {
   return (
     <View style={styles.card}>
       <View style={styles.photo}>
-        <Scene kind={plan.scene} />
+        <OptionPicture plan={plan} />
         {fit.fitsEveryone ? (
           <View style={styles.tag}>
             <Txt style={styles.tagText}>{solo ? 'Fits you' : 'Fits everyone'}</Txt>

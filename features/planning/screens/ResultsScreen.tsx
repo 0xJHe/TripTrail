@@ -12,6 +12,7 @@ import { memberAvatars, memberCountLabel } from '@/features/trip/members';
 import { colors } from '@/lib/theme';
 import { agreedOption, choiceLine, choosersByOption } from '../choice';
 import { ChooseBar } from '../components/ChooseBar';
+import { NoteLine } from '../components/NoteLine';
 import { RunnerUpRow } from '../components/RunnerUpRow';
 import { WinnerCard } from '../components/WinnerCard';
 import { useChooseTrip } from '../hooks/useChooseTrip';
@@ -82,6 +83,7 @@ export function ResultsScreen() {
               {!solo ? <Avatars people={avatars.map((a) => ({ ...a, muted: !members.find((m) => m.id === a.key)?.chosen_option_id }))} size={24} /> : null}
             </Card>
           ) : null}
+          {!decided && options[0]?.plan_json.fitNote ? <NoteLine text={options[0].plan_json.fitNote} /> : null}
           <WinnerCard result={top} members={members} tag={tag} chosen={myChoice === top.option.id} footer={footer(top)} />
           {others.length ? <Txt variant="lbl">Other trips</Txt> : null}
           {others.map((r) => (

@@ -1,7 +1,7 @@
 const mockInvoke = jest.fn();
 jest.mock('@/lib/supabase', () => ({ supabase: { functions: { invoke: (...args: unknown[]) => mockInvoke(...args) } } }));
 
-import { generateTripOptions, OPTION_COUNT, sampleTripOptions, type MemberAnswers } from '@/lib/ai';
+import { generateItinerary, generateTripOptions, OPTION_COUNT, sampleItinerary, sampleTripOptions, type MemberAnswers } from '@/lib/ai';
 
 const beachLover: MemberAnswers = {
   dailyBudget: 150,
@@ -56,10 +56,10 @@ describe('generateTripOptions', () => {
   });
 
   it('calls the Edge Function with the trip id and returns its options', async () => {
-    mockInvoke.mockResolvedValue({ data: { options: [aiOption], source: 'ai' }, error: null });
+    mockInvoke.mockResolvedValue({ data: { options: [aiOption], source: 'ai', note: null, googleCalls: 2 }, error: null });
     const result = await generateTripOptions('trip-1', req);
     expect(mockInvoke).toHaveBeenCalledWith('generate-trip-options', { body: { tripId: 'trip-1' } });
-    expect(result).toEqual({ options: [aiOption], source: 'ai' });
+    expect(result).toEqual({ options: [aiOption], source: 'ai', note: null });
   });
 
   it('falls back to sample options when the function fails', async () => {
@@ -72,5 +72,32 @@ describe('generateTripOptions', () => {
   it('falls back to sample options when the reply is broken', async () => {
     mockInvoke.mockResolvedValue({ data: { options: 'nope' }, error: null });
     expect((await generateTripOptions('trip-1', req)).source).toBe('sample');
+  });
+});
+
+describe('generateItinerary', () => {
+  const fallback = { destination: 'Penang', days: 2, dayTitles: [], halal: true };
+  const stop = {
+    day: 1, time: '09:00', endTime: '10:30', name: 'Kek Lok Si Temple', price: 0, isEstimate: false,
+    category: 'sight', isOutdoor: true, tip: 'Go early.', lat: 5.4, lng: 100.27, address: 'Air Itam, Penang', placeId: 'p1',
+  };
+  beforeEach(() => {
+    mockInvoke.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  it('calls the Edge Function with the trip, option and start date', async () => {
+    mockInvoke.mockResolvedValue({ data: { stops: [stop], source: 'ai', note: null, googleCalls: 1 }, error: null });
+    const result = await generateItinerary('trip-1', 'opt-1', '2026-10-12', fallback);
+    expect(mockInvoke).toHaveBeenCalledWith('generate-itinerary', {
+      body: { tripId: 'trip-1', optionId: 'opt-1', start: '2026-10-12' },
+    });
+    expect(result).toEqual({ stops: [stop], source: 'ai', note: null });
+  });
+
+  it('falls back to the sample plan when the function fails', async () => {
+    mockInvoke.mockResolvedValue({ data: null, error: new Error('offline') });
+    const result = await generateItinerary('trip-1', 'opt-1', null, fallback);
+    expect(result).toEqual({ stops: sampleItinerary(fallback), source: 'sample', note: null });
   });
 });

@@ -1,6 +1,6 @@
 import { emptyForm, readStopForm } from '@/features/planning/stopForm';
 import { atClock, clockOf, dayCount, draftsToStops, parseClock, priceLabel, sortStops, timeLabel } from '@/features/planning/stops';
-import { generateItinerary, sampleItinerary } from '@/lib/ai';
+import { sampleItinerary } from '@/lib/ai';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 
@@ -37,11 +37,6 @@ describe('plan from the sample itinerary', () => {
       expect(parseClock(d.time)).not.toBeNull();
       expect(d.price).toBeGreaterThanOrEqual(0);
     }
-  });
-
-  it('is what generateItinerary returns for now', async () => {
-    const result = await generateItinerary({ destination: 'Penang', days: 3, dayTitles: [], halal: true });
-    expect(result).toEqual({ stops: drafts, source: 'sample' });
   });
 
   it('dates each day from the trip start and numbers positions per day', () => {

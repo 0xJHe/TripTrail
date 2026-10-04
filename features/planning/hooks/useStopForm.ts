@@ -48,7 +48,7 @@ export function useStopForm(tripId: string, stopId: string, day: number) {
     const sameDay = plan.stops.filter((s) => s.day_number === read.fields.day_number);
     const position = Math.max(-1, ...sameDay.map((s) => s.position)) + 1;
     return run(() =>
-      addStop(tripId, { ...read.fields, position, lat: null, lng: null, tip: null, is_outdoor: false }),
+      addStop(tripId, { ...read.fields, position, tip: null, is_outdoor: false }),
     );
   }
 
@@ -61,8 +61,20 @@ export function useStopForm(tripId: string, stopId: string, day: number) {
     remove,
     isNew,
     days: plan.days,
+    /** Middle of the plan's stops, to search places nearby. */
+    near: centre(plan.stops),
     missing: !isNew && !plan.loading && !stop,
     saving,
     error,
+  };
+}
+
+/** Average location of the stops that have one. */
+function centre(stops: { lat: number | null; lng: number | null }[]): { lat: number; lng: number } | null {
+  const located = stops.filter((s) => s.lat != null && s.lng != null);
+  if (!located.length) return null;
+  return {
+    lat: located.reduce((sum, s) => sum + s.lat!, 0) / located.length,
+    lng: located.reduce((sum, s) => sum + s.lng!, 0) / located.length,
   };
 }

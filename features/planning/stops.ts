@@ -82,6 +82,8 @@ export function draftsToStops(drafts: StopDraft[], start: ISODate): NewStop[] {
       is_outdoor: d.isOutdoor,
       tip: d.tip,
       category: d.category,
+      address: d.address ?? null,
+      place_id: d.placeId ?? null,
     };
   });
 }

@@ -91,7 +91,8 @@ create table stops (
   category text, -- flight | hotel | sight | food | beach | shopping
   priority int default 2, -- 1 = drop first when re-planning, 3 = keep
   note text,
-  halal_available boolean
+  halal_available boolean,
+  place_id text -- Google place ID (from generate-itinerary or the Add a stop search)
 );
 
 create table locations (
@@ -221,10 +222,10 @@ begin
   if not found then raise exception 'That trip option is gone'; end if;
 
   insert into stops (trip_id, day_number, position, name, address, lat, lng, planned_time, planned_end,
-                     price, is_estimate, is_booked, is_outdoor, tip, category, priority)
+                     price, is_estimate, is_booked, is_outdoor, tip, category, priority, place_id)
   select p_trip, s.day_number, s.position, s.name, s.address, s.lat, s.lng, s.planned_time, s.planned_end,
          coalesce(s.price, 0), coalesce(s.is_estimate, true), coalesce(s.is_booked, false),
-         coalesce(s.is_outdoor, false), s.tip, s.category, coalesce(s.priority, 2)
+         coalesce(s.is_outdoor, false), s.tip, s.category, coalesce(s.priority, 2), s.place_id
   from jsonb_populate_recordset(null::stops, p_stops) s;
 
   update trips
@@ -233,6 +234,41 @@ begin
    where id = p_trip;
   return true;
 end $$;
+
+-- Google Places: every result is cached (including "nothing found") and calls are
+-- limited to 60 per trip per day (Malaysia time). Only the Edge Functions use these
+-- (service role): RLS is on with no policies.
+create table google_cache (
+  key text primary key,            -- e.g. 'stop:kek lok si temple, penang' or 'photo:wat arun, bangkok'
+  kind text not null,              -- stop | photo | autocomplete | place
+  data jsonb not null,
+  created_at timestamptz default now()
+);
+alter table google_cache enable row level security;
+
+create table google_usage (
+  trip_id uuid references trips(id) on delete cascade,
+  day date not null,
+  calls int not null default 0,
+  primary key (trip_id, day)
+);
+alter table google_usage enable row level security;
+
+-- Count one Google call for the trip; false when today's limit is already reached.
+create or replace function take_google_call(p_trip uuid, p_limit int default 60)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+  used int;
+begin
+  insert into google_usage (trip_id, day, calls) values (p_trip, today, 1)
+  on conflict (trip_id, day) do update set calls = google_usage.calls + 1
+    where google_usage.calls < p_limit
+  returning calls into used;
+  return used is not null;
+end $$;
+revoke execute on function take_google_call(uuid, int) from public, anon, authenticated;
+grant execute on function take_google_call(uuid, int) to service_role;
 
 -- Realtime
 alter publication supabase_realtime add table

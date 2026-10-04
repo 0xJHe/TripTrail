@@ -13,6 +13,7 @@ import { colors } from '@/lib/theme';
 import { castVote } from '../api';
 import { DeckActions } from '../components/DeckActions';
 import { DetailsSheet } from '../components/DetailsSheet';
+import { NoteLine } from '../components/NoteLine';
 import { SwipeDeck, type SwipeDeckHandle } from '../components/SwipeDeck';
 import { WaitingForAnswers } from '../components/WaitingForAnswers';
 import { useGenerateOptions } from '../hooks/useGenerateOptions';
@@ -94,6 +95,7 @@ export function TripOptionsScreen() {
               <Txt variant="s11">Built from {data.solo ? 'your' : "everyone's"} answers</Txt>
               <Avatars people={memberAvatars(data.members, (m) => !data.answeredIds.has(m.id))} />
             </View>
+            {options[0]?.plan_json.fitNote ? <NoteLine text={options[0].plan_json.fitNote} /> : null}
             <SwipeDeck
               ref={deck}
               options={remaining}

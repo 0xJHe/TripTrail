@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -13,6 +13,7 @@ import { tripEntryRoute } from '@/features/trip/routes';
 import { useCurrentTrip } from '@/features/trip/store';
 import { colors } from '@/lib/theme';
 import { AddStopRow } from '../components/AddStopRow';
+import { NoteLine } from '../components/NoteLine';
 import { StopRow } from '../components/StopRow';
 import { formatRange } from '../dates';
 import { useDayPlan } from '../hooks/useDayPlan';
@@ -22,6 +23,8 @@ import { dayDate } from '../stops';
 export function DayPlanScreen() {
   const tripId = useCurrentTrip((s) => s.currentTripId) ?? undefined;
   const plan = useDayPlan(tripId);
+  // Set after building, e.g. when Google's daily limit was reached.
+  const { note } = useLocalSearchParams<{ note?: string }>();
   const [picked, setPicked] = useState(1);
   const { trip, days, start } = plan;
   const day = Math.min(picked, days);
@@ -65,6 +68,7 @@ export function DayPlanScreen() {
             <Chip key={d} label={`Day ${d}`} selected={d === day} onPress={() => setPicked(d)} />
           ))}
         </Chips>
+        {note ? <NoteLine text={note} /> : null}
         <BudgetBar summary={plan.budget} />
         <View>
           {dayStops.length === 0 ? (

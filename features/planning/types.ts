@@ -1,4 +1,4 @@
-import type { SceneKind, StopCategory } from '@/lib/ai';
+import type { OptionPhoto, SceneKind, StopCategory } from '@/lib/ai';
 
 /** Row in `preferences` (one per member). */
 export interface Preferences {
@@ -22,6 +22,14 @@ export interface OptionPlan {
   avoids: string[];
   halal: boolean;
   dayTitles: string[];
+  /** Landmark the card photo shows, e.g. "Kek Lok Si Temple, Penang". */
+  landmark?: string | null;
+  /** One Google photo with its credit; null/missing = the drawing. */
+  photo?: OptionPhoto | null;
+  /** The photo was skipped because Google's daily limit was reached. */
+  photoLimited?: boolean;
+  /** Why the options can't fit everyone (same on every option of the trip). */
+  fitNote?: string | null;
 }
 
 /** Row in `trip_options`. */
@@ -73,6 +81,8 @@ export interface Stop {
   category: StopCategory | null;
   priority: number;
   note: string | null;
+  /** Google place ID, when the stop was found in Google Places. */
+  place_id: string | null;
 }
 
 /** A stop before it is saved (no id yet). */
@@ -91,4 +101,6 @@ export type NewStop = Pick<
   | 'is_outdoor'
   | 'tip'
   | 'category'
+  | 'address'
+  | 'place_id'
 >;

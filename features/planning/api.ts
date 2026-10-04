@@ -69,7 +69,8 @@ export interface OptionToSave {
   fitsEveryone: boolean;
 }
 
-export async function insertOptions(tripId: string, options: OptionToSave[]): Promise<void> {
+/** Save the options. `fitNote` = why they can't fit everyone (kept on every option). */
+export async function insertOptions(tripId: string, options: OptionToSave[], fitNote: string | null = null): Promise<void> {
   const rows = options.map(({ draft, window, fitsEveryone }, position) => ({
     trip_id: tripId,
     position,
@@ -87,6 +88,10 @@ export async function insertOptions(tripId: string, options: OptionToSave[]): Pr
       avoids: draft.avoids,
       halal: draft.halal,
       dayTitles: draft.dayTitles,
+      landmark: draft.landmark ?? null,
+      photo: draft.photo ?? null,
+      photoLimited: draft.photoLimited ?? false,
+      fitNote,
     },
   }));
   const { error } = await supabase.from('trip_options').insert(rows);
@@ -103,10 +108,15 @@ export async function chooseOption(memberId: string, optionId: string): Promise<
  * Build the day-by-day plan for the trip everyone chose and save it. The
  * database only builds it once, even if several people tap at the same time.
  */
-export async function buildPlan(trip: Trip, option: TripOption, window: DateWindow | null, halal: boolean): Promise<void> {
+export async function buildPlan(
+  trip: Trip,
+  option: TripOption,
+  window: DateWindow | null,
+  halal: boolean,
+): Promise<{ note: string | null }> {
   const days = option.plan_json.days;
   const start = window?.start ?? option.start_date ?? planStart(trip.start_date, []);
-  const { stops } = await generateItinerary({
+  const { stops, note } = await generateItinerary(trip.id, option.id, start, {
     destination: option.name,
     days,
     dayTitles: option.plan_json.dayTitles ?? [],
@@ -123,6 +133,7 @@ export async function buildPlan(trip: Trip, option: TripOption, window: DateWind
     if (/not everyone/i.test(error.message)) throw new Error('Not everyone has chosen this trip yet.');
     throw error;
   }
+  return { note };
 }
 
 export async function fetchStops(tripId: string): Promise<Stop[]> {
@@ -154,4 +165,46 @@ export async function updateStop(id: string, patch: StopPatch): Promise<void> {
 export async function deleteStop(id: string): Promise<void> {
   const { error } = await supabase.from('stops').update({ status: 'dropped' }).eq('id', id);
   if (error) throw error;
+}
+
+export interface PlaceSuggestion {
+  placeId: string;
+  name: string;
+  detail: string;
+}
+
+export interface PickedPlace {
+  placeId: string;
+  name: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+}
+
+/** Up to 5 real places matching what's typed (Google Places via the place-search function). */
+export async function searchPlaces(
+  tripId: string,
+  input: string,
+  sessionToken: string,
+  near: { lat: number; lng: number } | null,
+): Promise<{ suggestions: PlaceSuggestion[]; limited: boolean }> {
+  const { data, error } = await supabase.functions.invoke<{ suggestions: PlaceSuggestion[]; limited: boolean }>(
+    'place-search',
+    { body: { tripId, action: 'autocomplete', input, sessionToken, near } },
+  );
+  if (error) throw error;
+  return { suggestions: (data?.suggestions ?? []).slice(0, 5), limited: !!data?.limited };
+}
+
+/** Address and location of a picked suggestion. Ends the search session. */
+export async function getPlace(
+  tripId: string,
+  placeId: string,
+  sessionToken: string,
+): Promise<{ place: PickedPlace | null; limited: boolean }> {
+  const { data, error } = await supabase.functions.invoke<{ place: PickedPlace | null; limited: boolean }>('place-search', {
+    body: { tripId, action: 'details', placeId, sessionToken },
+  });
+  if (error) throw error;
+  return { place: data?.place ?? null, limited: !!data?.limited };
 }

@@ -1,8 +1,10 @@
-import type { TripOptionDraft } from '@/lib/ai';
+import { generateItinerary, type TripOptionDraft } from '@/lib/ai';
 import { supabase } from '@/lib/supabase';
 import type { Trip } from '@/features/trip/types';
 import type { DateWindow } from './dateFinder';
-import type { Preferences, TripOption, Vote } from './types';
+import { addDays } from './dates';
+import { draftsToStops, planStart } from './stops';
+import type { NewStop, Preferences, Stop, TripOption, Vote } from './types';
 
 export async function fetchPreferences(tripId: string): Promise<Preferences[]> {
   const { data, error } = await supabase.from('preferences').select('*').eq('trip_id', tripId);
@@ -91,15 +93,65 @@ export async function insertOptions(tripId: string, options: OptionToSave[]): Pr
   if (error) throw error;
 }
 
-/** Lock in the winner: destination, dates and stage. */
-export async function chooseWinner(tripId: string, option: TripOption, window: DateWindow | null): Promise<void> {
-  const patch: Partial<Trip> = {
-    winning_option_id: option.id,
+/** Choose (or change) the trip I want. Everyone sees it live on the Results screen. */
+export async function chooseOption(memberId: string, optionId: string): Promise<void> {
+  const { error } = await supabase.from('members').update({ chosen_option_id: optionId }).eq('id', memberId);
+  if (error) throw error;
+}
+
+/**
+ * Build the day-by-day plan for the trip everyone chose and save it. The
+ * database only builds it once, even if several people tap at the same time.
+ */
+export async function buildPlan(trip: Trip, option: TripOption, window: DateWindow | null, halal: boolean): Promise<void> {
+  const days = option.plan_json.days;
+  const start = window?.start ?? option.start_date ?? planStart(trip.start_date, []);
+  const { stops } = await generateItinerary({
     destination: option.name,
-    stage: 'decided',
-    start_date: window?.start ?? option.start_date,
-    end_date: window?.end ?? option.end_date,
-  };
-  const { error } = await supabase.from('trips').update(patch).eq('id', tripId);
+    days,
+    dayTitles: option.plan_json.dayTitles ?? [],
+    halal,
+  });
+  const { error } = await supabase.rpc('build_plan', {
+    p_trip: trip.id,
+    p_option: option.id,
+    p_start: start,
+    p_end: addDays(start, days - 1),
+    p_stops: draftsToStops(stops, start),
+  });
+  if (error) {
+    if (/not everyone/i.test(error.message)) throw new Error('Not everyone has chosen this trip yet.');
+    throw error;
+  }
+}
+
+export async function fetchStops(tripId: string): Promise<Stop[]> {
+  const { data, error } = await supabase.from('stops').select('*').eq('trip_id', tripId);
+  if (error) throw error;
+  return ((data ?? []) as Stop[]).map((s) => ({
+    ...s,
+    price: Number(s.price ?? 0),
+    actual_cost: s.actual_cost == null ? null : Number(s.actual_cost),
+  }));
+}
+
+export async function addStop(tripId: string, stop: NewStop): Promise<void> {
+  const { error } = await supabase.from('stops').insert({ ...stop, trip_id: tripId });
+  if (error) throw error;
+}
+
+export type StopPatch = Partial<Omit<NewStop, 'position'>>;
+
+export async function updateStop(id: string, patch: StopPatch): Promise<void> {
+  const { error } = await supabase.from('stops').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
+/**
+ * Take a stop out of the plan. It's marked "dropped" rather than deleted so the
+ * change reaches everyone live (Realtime can't filter deletes by trip).
+ */
+export async function deleteStop(id: string): Promise<void> {
+  const { error } = await supabase.from('stops').update({ status: 'dropped' }).eq('id', id);
   if (error) throw error;
 }

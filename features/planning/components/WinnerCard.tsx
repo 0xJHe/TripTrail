@@ -1,5 +1,5 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable, StyleSheet, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { Avatars } from '@/components/ui/Avatars';
 import { Txt } from '@/components/ui/Txt';
@@ -8,32 +8,29 @@ import type { Member } from '@/features/trip/types';
 import { colors, fontFamily, formatMoney, radius, shadow } from '@/lib/theme';
 import { freeLabelShort } from '../dateFinder';
 import { formatRange } from '../dates';
-import type { OptionResult } from '../tally';
+import { likesLabel, type OptionResult } from '../tally';
 import { Scene } from './Scene';
 
 interface WinnerCardProps {
   result: OptionResult;
   members: Member[];
-  /** "Winner · 4 of 4 liked", "Tied · 1 like each" or "Picked". */
+  /** "Most liked · 4 of 4", "Tied · 1 like each" or "Planned". */
   tag: string;
-  selected: boolean;
-  onPress: () => void;
+  /** Outlined in teal when it's my choice. */
+  chosen: boolean;
+  /** Who chose it and the "Choose this trip" button. */
+  footer?: ReactNode;
 }
 
-/** The top trip (prototype screen 4). Outlined in teal while it's the one being picked. */
-export function WinnerCard({ result, members, tag, selected, onPress }: WinnerCardProps) {
+/** The most-liked trip (prototype screen 4). */
+export function WinnerCard({ result, members, tag, chosen, footer }: WinnerCardProps) {
   const { option, likerIds, fit } = result;
   const days = option.plan_json.days;
   const when = fit.window ? ` · ${formatRange(fit.window.start, fit.window.end)} · ${freeLabelShort(fit.window)}` : '';
   const likers = memberAvatars(members).filter((a) => likerIds.includes(a.key));
 
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="radio"
-      accessibilityState={{ selected }}
-      accessibilityLabel={`${option.name}, ${tag}`}
-      style={[styles.card, selected && styles.selected]}>
+    <View style={[styles.card, chosen && styles.chosen]} accessibilityLabel={`${option.name}, ${tag}`}>
       <View style={styles.photo}>
         <Scene kind={option.plan_json.scene} banner />
         <View style={styles.tag}>
@@ -57,23 +54,12 @@ export function WinnerCard({ result, members, tag, selected, onPress }: WinnerCa
             ⚠ No {days} days in a row work yet
           </Txt>
         ) : null}
-        <View style={[styles.between, { marginTop: 8 }]}>
-          {likers.length ? <Avatars people={likers} /> : <Txt variant="s11">No likes yet</Txt>}
-          {selected ? <YourPick /> : null}
+        <View style={[styles.likes, { marginTop: 6 }]}>
+          <Txt variant="s11">{likesLabel(result.likes)}</Txt>
+          {likers.length ? <Avatars people={likers} size={20} /> : null}
         </View>
+        {footer}
       </View>
-    </Pressable>
-  );
-}
-
-/** "✓ Your pick" marker for the selected trip. */
-export function YourPick() {
-  return (
-    <View style={styles.pick}>
-      <Ionicons name="checkmark-circle" size={16} color={colors.teal} />
-      <Txt variant="s11" weight="bold" color={colors.tealDark}>
-        Your pick
-      </Txt>
     </View>
   );
 }
@@ -87,7 +73,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...shadow,
   },
-  selected: { borderColor: colors.teal },
+  chosen: { borderColor: colors.teal },
   photo: { height: 84 },
   tag: {
     position: 'absolute',
@@ -101,5 +87,5 @@ const styles = StyleSheet.create({
   tagText: { fontFamily: fontFamily.bold, fontSize: 10, lineHeight: 13 },
   info: { paddingVertical: 12, paddingHorizontal: 14 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  pick: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  likes: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });

@@ -24,7 +24,7 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: { fontSize: fontSize.small },
       }}>
-      <Tabs.Screen name="plan" options={{ title: 'Plan', tabBarIcon: tabIcon('list') }} />
+      <Tabs.Screen name="plan" options={{ title: 'Plan', headerShown: false, tabBarIcon: tabIcon('calendar-outline') }} />
       <Tabs.Screen name="today" options={{ title: 'Today', tabBarIcon: tabIcon('today') }} />
       <Tabs.Screen name="map" options={{ title: 'Map', tabBarIcon: tabIcon('map') }} />
       <Tabs.Screen name="group" options={{ title: 'Group', tabBarIcon: tabIcon('people') }} />

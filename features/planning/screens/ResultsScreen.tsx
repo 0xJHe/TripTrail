@@ -1,85 +1,65 @@
-import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 
+import { Avatars } from '@/components/ui/Avatars';
 import { BottomBar, BOTTOM_BAR_SPACE } from '@/components/ui/BottomBar';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
-import { memberCountLabel } from '@/features/trip/members';
-import { useCurrentTrip } from '@/features/trip/store';
+import { memberAvatars, memberCountLabel } from '@/features/trip/members';
 import { colors } from '@/lib/theme';
-import { chooseWinner } from '../api';
+import { agreedOption, choiceLine, choosersByOption } from '../choice';
+import { ChooseBar } from '../components/ChooseBar';
 import { RunnerUpRow } from '../components/RunnerUpRow';
 import { WinnerCard } from '../components/WinnerCard';
+import { useChooseTrip } from '../hooks/useChooseTrip';
 import { usePlanningData } from '../hooks/usePlanningData';
-import { finishedSwiping, likesLabel, rankOptions, tieBreakReason, tiedWithTop } from '../tally';
+import { finishedSwiping, likesLabel, rankOptions, tiedWithTop, type OptionResult } from '../tally';
 
 export function ResultsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const queryClient = useQueryClient();
-  const setCurrentTrip = useCurrentTrip((s) => s.setCurrentTrip);
   const data = usePlanningData(id);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pickedId, setPickedId] = useState<string | null>(null);
+  const { choose, choosingId, build, building, error, openPlan } = useChooseTrip(data);
 
-  const { trip, members, options, votes, fits, solo } = data;
+  const { trip, members, me, options, votes, fits, solo } = data;
   const ranked = options.length && fits.size === options.length ? rankOptions(options, votes, fits) : [];
   const decided = trip?.stage === 'decided';
-  // Once picked, the chosen trip stays on top even if votes change later.
+  // Once the plan is built, the planned trip stays on top.
   const top = (decided && ranked.find((r) => r.option.id === trip?.winning_option_id)) || ranked[0];
-  const runnersUp = ranked.filter((r) => r !== top);
-  // Any trip in the list can be picked instead, before or after the plan is built.
-  const selected = ranked.find((r) => r.option.id === pickedId) ?? top;
-  const switching = decided && !!selected && selected.option.id !== trip?.winning_option_id;
+  const others = ranked.filter((r) => r !== top);
   const tied = tiedWithTop(ranked);
   const doneIds = finishedSwiping(options, votes, members.map((m) => m.id));
-  const waitingFor = members.filter((m) => !doneIds.includes(m.id));
-  const everyoneDone = members.length > 0 && waitingFor.length === 0;
+  const stillSwiping = members.filter((m) => !doneIds.includes(m.id));
 
-  const title = solo
-    ? "You've swiped"
-    : everyoneDone
-      ? "Everyone's swiped"
-      : `${doneIds.length} of ${members.length} have swiped`;
+  const avatars = memberAvatars(members);
+  const chosenBy = choosersByOption(members);
+  const agreedId = agreedOption(members);
+  const agreed = ranked.find((r) => r.option.id === agreedId);
+  const myChoice = me?.chosen_option_id ?? null;
+  const line = choiceLine(members, ranked.map((r) => ({ id: r.option.id, name: r.option.name })));
 
-  let tag = 'Picked';
+  let tag = 'Planned';
   if (!decided && top) {
-    tag = tied.length ? `Tied · ${likesLabel(top.likes)} each` : `Winner · ${top.likes} of ${members.length} liked`;
+    tag = tied.length ? `Tied · ${likesLabel(top.likes)} each` : `Most liked · ${top.likes} of ${members.length}`;
   }
 
-  let buttonLabel = '';
-  if (selected) {
-    const name = selected.option.name;
-    buttonLabel = switching
-      ? `Switch the plan to ${name}`
-      : decided
-        ? `Open the plan for ${name}`
-        : `Build the plan for ${name}`;
-  }
-
-  async function build() {
-    if (!selected || !trip) return;
-    setSaving(true);
-    setError(null);
-    try {
-      if (!decided || switching) await chooseWinner(trip.id, selected.option, selected.fit.window);
-      setCurrentTrip(trip.id);
-      await queryClient.invalidateQueries({ queryKey: ['trip', trip.id] });
-      router.replace('/plan');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save. Check your internet and try again.');
-      setSaving(false);
-    }
-  }
+  const footer = (r: OptionResult) =>
+    decided ? null : (
+      <ChooseBar
+        optionName={r.option.name}
+        choosers={avatars.filter((a) => chosenBy.get(r.option.id)?.includes(a.key))}
+        mine={myChoice === r.option.id}
+        onChoose={() => choose(r.option.id)}
+        disabled={!!choosingId}
+      />
+    );
 
   return (
     <View style={styles.screen}>
       <NavyHeader
-        title={title}
+        title={decided ? 'Trip chosen' : solo ? 'Choose your trip' : 'Choose a trip together'}
         subtitle={`${options.length} trip${options.length === 1 ? '' : 's'} · ${memberCountLabel(members.length)}`}
         onBack={() => router.replace('/home')}
       />
@@ -89,62 +69,63 @@ export function ResultsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.body}>
-          <WinnerCard
-            result={top}
-            members={members}
-            tag={tag}
-            selected={selected === top}
-            onPress={() => setPickedId(top.option.id)}
-          />
-          {!decided && tied.length ? (
-            <Txt variant="s11">
-              Tied on {likesLabel(top.likes)} with {joinNames(tied.map((r) => r.option.name))}. {top.option.name} is
-              first because {tieBreakReason(top, tied[0], solo)}.
-            </Txt>
+          {!decided ? (
+            <Card style={styles.summary}>
+              <View style={{ flex: 1 }}>
+                <Txt variant="h14">{line}</Txt>
+                <Txt variant="s11" style={{ marginTop: 2 }}>
+                  {solo
+                    ? 'Likes are only a guide. Choose the trip you want.'
+                    : 'Likes are only a guide. Each of you chooses a trip; you can change any time.'}
+                </Txt>
+              </View>
+              {!solo ? <Avatars people={avatars.map((a) => ({ ...a, muted: !members.find((m) => m.id === a.key)?.chosen_option_id }))} size={24} /> : null}
+            </Card>
           ) : null}
-          {runnersUp.length ? (
-            <View style={styles.between}>
-              <Txt variant="lbl">Runners-up</Txt>
-              <Txt variant="s11">Tap a trip to pick it instead</Txt>
-            </View>
-          ) : null}
-          {runnersUp.map((r) => (
+          <WinnerCard result={top} members={members} tag={tag} chosen={myChoice === top.option.id} footer={footer(top)} />
+          {others.length ? <Txt variant="lbl">Other trips</Txt> : null}
+          {others.map((r) => (
             <RunnerUpRow
               key={r.option.id}
               result={r}
               members={members}
               solo={solo}
-              selected={selected === r}
-              onPress={() => setPickedId(r.option.id)}
+              chosen={myChoice === r.option.id}
+              footer={footer(r)}
             />
           ))}
-          {!everyoneDone && !decided ? (
+          {stillSwiping.length && !decided && !solo ? (
             <Txt variant="s11" style={styles.note}>
-              Still swiping: {waitingFor.map((m) => m.display_name).join(', ')}. Results update live.
+              Still swiping: {stillSwiping.map((m) => m.display_name).join(', ')}. Likes update live.
             </Txt>
           ) : null}
           {error ? <ErrorLine message={error} /> : null}
         </ScrollView>
       )}
-      {selected ? (
+      {top ? (
         <BottomBar>
-          <Button label={buttonLabel} onPress={build} loading={saving} testID="build-plan" />
+          {decided ? (
+            <Button label="Open the Day plan" onPress={openPlan} testID="open-plan" />
+          ) : agreed ? (
+            <Button label={`Build the plan for ${agreed.option.name}`} onPress={() => build(agreed)} loading={building} testID="build-plan" />
+          ) : (
+            <>
+              <Txt variant="s11" style={styles.note}>
+                {solo ? 'Choose a trip to build the plan' : 'Waiting for everyone to choose the same trip'}
+              </Txt>
+              <Button label="Build the plan" disabled testID="build-plan" />
+            </>
+          )}
         </BottomBar>
       ) : null}
     </View>
   );
 }
 
-/** "Melaka", "Melaka and Ipoh", "Melaka, Langkawi and Singapore" */
-function joinNames(names: string[]): string {
-  if (names.length <= 1) return names.join('');
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  body: { paddingHorizontal: 16, paddingTop: 14, gap: 12, paddingBottom: BOTTOM_BAR_SPACE },
-  note: { textAlign: 'center', marginTop: 4 },
-  between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  body: { paddingHorizontal: 16, paddingTop: 14, gap: 12, paddingBottom: BOTTOM_BAR_SPACE + 24 },
+  summary: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  note: { textAlign: 'center' },
 });

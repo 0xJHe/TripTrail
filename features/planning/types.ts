@@ -1,4 +1,4 @@
-import type { SceneKind } from '@/lib/ai';
+import type { SceneKind, StopCategory } from '@/lib/ai';
 
 /** Row in `preferences` (one per member). */
 export interface Preferences {
@@ -46,3 +46,49 @@ export interface Vote {
   trip_id: string;
   liked: boolean;
 }
+
+export type StopStatus = 'planned' | 'arrived' | 'done' | 'dropped';
+
+/** Row in `stops`. Times are ISO timestamps; prices are per person, RM. */
+export interface Stop {
+  id: string;
+  trip_id: string;
+  day_number: number;
+  position: number;
+  name: string;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  planned_time: string | null;
+  planned_end: string | null;
+  price: number;
+  is_estimate: boolean;
+  is_booked: boolean;
+  is_outdoor: boolean;
+  tip: string | null;
+  status: StopStatus;
+  arrived_at: string | null;
+  left_at: string | null;
+  actual_cost: number | null;
+  category: StopCategory | null;
+  priority: number;
+  note: string | null;
+}
+
+/** A stop before it is saved (no id yet). */
+export type NewStop = Pick<
+  Stop,
+  | 'day_number'
+  | 'position'
+  | 'name'
+  | 'lat'
+  | 'lng'
+  | 'planned_time'
+  | 'planned_end'
+  | 'price'
+  | 'is_estimate'
+  | 'is_booked'
+  | 'is_outdoor'
+  | 'tip'
+  | 'category'
+>;

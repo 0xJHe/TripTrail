@@ -27,6 +27,8 @@ export interface Member {
   display_name: string;
   avatar_color: string | null;
   joined_at: string;
+  /** Trip this member chose on the Results screen. */
+  chosen_option_id: string | null;
 }
 
 /** What the create-trip form saves. */

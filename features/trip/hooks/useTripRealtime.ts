@@ -10,6 +10,7 @@ const TABLE_KEYS = {
   preferences: 'preferences',
   trip_options: 'options',
   votes: 'votes',
+  stops: 'stops',
 } as const;
 
 export type RealtimeTable = keyof typeof TABLE_KEYS;

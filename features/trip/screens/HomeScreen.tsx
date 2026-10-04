@@ -13,11 +13,13 @@ import { SignOutButton } from '../components/SignOutButton';
 import { TripRow } from '../components/TripRow';
 import { useMyTrips } from '../hooks/useTrip';
 import { tripEntryRoute } from '../routes';
+import { useCurrentTrip } from '../store';
 
 export function HomeScreen() {
   const name = useDisplayName();
   const insets = useSafeAreaInsets();
   const trips = useMyTrips();
+  const setCurrentTrip = useCurrentTrip((s) => s.setCurrentTrip);
   const { refetch } = trips;
 
   useFocusEffect(
@@ -63,7 +65,14 @@ export function HomeScreen() {
           <Txt variant="s11">No trips yet. Start one, or join with a code a friend sent you.</Txt>
         ) : null}
         {trips.data?.map((trip) => (
-          <TripRow key={trip.id} trip={trip} onPress={() => router.push(tripEntryRoute(trip))} />
+          <TripRow
+            key={trip.id}
+            trip={trip}
+            onPress={() => {
+              setCurrentTrip(trip.id);
+              router.push(tripEntryRoute(trip));
+            }}
+          />
         ))}
 
         <Pressable

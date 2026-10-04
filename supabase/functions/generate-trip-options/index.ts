@@ -82,10 +82,16 @@ Deno.serve(async (req) => {
   if (!geminiKey) log('GEMINI_API_KEY is not set');
   if (!googleKey) log('GOOGLE_MAPS_API_KEY is not set');
 
+  let geminiCalls = 0;
   const result = await planTripOptions(request, {
-    ask: geminiKey ? (prompt, attempt) => askGemini(MODELS[attempt] ?? MODELS[0], prompt, geminiKey, 0.8) : null,
+    ask: geminiKey
+      ? (prompt, attempt) => {
+          geminiCalls++;
+          return askGemini(MODELS[attempt] ?? MODELS[0], prompt, geminiKey, 0.8);
+        }
+      : null,
     findPhoto: google ? (landmark) => findLandmarkPhoto(google, landmark) : null,
     log,
   });
-  return json(result);
+  return json({ ...result, geminiCalls });
 });

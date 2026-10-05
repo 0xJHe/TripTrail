@@ -27,6 +27,8 @@ const MIN = 60_000;
 export const LATE_BY_MIN = 20;
 /** The way to the late stop takes at least this long. */
 export const LATE_LEG_MIN = 12;
+/** The late stop and the stop before it should be this far apart, so waiting at one never counts as arriving at the other. */
+export const LATE_APART_M = 1000;
 /** Extra late at the running-late moment, so Google's real travel time (often shorter than the estimate) still says late. */
 export const LATE_MARGIN_MIN = 10;
 /** How far the wandering member gets from the rest of the group. */
@@ -135,10 +137,18 @@ export function buildDemoRoute({ tripId, day, stops, members, meId }: BuildInput
   });
   const idx = s.map((_, i) => i);
 
-  // Which stop gets which moment. Late: the second stop (the third if the second is booked),
-  // so the suggested new day has most of the day to rearrange, like prototype screen 7.
+  // Which stop gets which moment. Late: one of the first stops, so the suggested new day has
+  // most of the day to rearrange (prototype screen 7): the first that is at least 1 km from the
+  // stop before (else the furthest), never a booked one.
   const legMs = (i: number) => (i > 0 ? travelMs(at[i - 1], at[i]) : 0);
-  const late = n >= 2 ? (n >= 3 && s[1].is_booked && !s[2].is_booked ? 2 : 1) : 0;
+  const apart = (i: number) => haversineMeters(at[i - 1], at[i]);
+  const earlyOnes = idx.filter((i) => i > 0 && i <= Math.max(2, Math.ceil(n / 2)) && !s[i].is_booked);
+  const late =
+    n < 2
+      ? 0
+      : (earlyOnes.find((i) => apart(i) >= LATE_APART_M) ??
+        earlyOnes.reduce<number | undefined>((best, i) => (best == null || apart(i) > apart(best) ? i : best), undefined) ??
+        1);
   const plannedStay = (i: number) => end[i] - start[i];
   const notLate = idx.filter((i) => i !== late);
   const early = notLate.find((i) => i > late && plannedStay(i) >= 30 * MIN) ?? longest(notLate, plannedStay) ?? late;

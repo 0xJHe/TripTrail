@@ -52,9 +52,14 @@ export function useWeather(
 
   const data = query.data;
   return {
-    now: herePt ? nowWeatherText(data?.now ?? null, demoRainAt(route, herePt, time)) : null,
+    now: herePt ? nowWeatherText(data?.now ?? null, demoRainAt(route, herePt, time), new Date(time).getHours()) : null,
     next: nextPt
-      ? nextWeatherText(data?.next ?? null, clockOf(next?.planned_time ?? null), nextAt != null ? demoRainAt(route, nextPt, nextAt) : null)
+      ? nextWeatherText(
+          data?.next ?? null,
+          clockOf(next?.planned_time ?? null),
+          nextAt != null ? demoRainAt(route, nextPt, nextAt) : null,
+          new Date(nextAt ?? time).getHours(),
+        )
       : null,
   };
 }

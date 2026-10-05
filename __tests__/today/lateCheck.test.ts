@@ -180,8 +180,8 @@ describe("demo route's late moment", () => {
     expect(between).toEqual([]);
   });
 
-  it('is for the second stop of the day, so most of the day gets a new plan (screen 7)', () => {
-    // A short walk from the hotel to the first sight: the late moment still comes early in the day.
+  it('is one of the first stops, so most of the day gets a new plan (screen 7)', () => {
+    // No early pair is 1 km apart: the furthest early pair is used (still early in the day).
     const morning = [
       stop('Hotel · Muntri Street', 5.4183, 100.3376, at(8, 30), at(9), { is_booked: true, category: 'hotel' }),
       stop('Armenian Street murals', 5.4151, 100.3376, at(9, 30), at(10, 30), { is_outdoor: true }),
@@ -192,23 +192,41 @@ describe("demo route's late moment", () => {
     ];
     const r = buildDemoRoute({ tripId: 't1', day: 1, stops: morning, members: [], meId: 'me' })!;
     const ev = r.events.find((e) => e.kind === 'late')!;
-    expect(ev.stopId).toBe(morning[1].id);
+    expect(ev.stopId).toBe(morning[2].id); // Blue Mansion, ~700 m from the murals
 
     const readings = readingTimes(r.startsAt - 30_000, ev.at, 30_000).map((t) => {
       const loc = sampleRoute(r, t);
       return { ...(loc.me ?? loc.center), at: t };
     });
     const stops = applyChanges(morning, processReadings(emptyTracker(), morning, readings).changes);
-    expect(stops[0].status).toBe('arrived'); // still at the hotel
-    const next = stops[1] as Stop & { planned_time: string };
+    expect(stops[1].status).toBe('arrived'); // still at the murals
+    const next = stops[2] as Stop & { planned_time: string };
     const startsAt = Date.parse(next.planned_time);
     expect(dueChecks({ startsAt, lastLeft: lastLeftAt(stops, ev.at), now: ev.at, done: new Set() })).toEqual(['before']);
     const here = sampleRoute(r, ev.at).center;
     const travelMin = estimateMinutes(here, next as { lat: number; lng: number });
     const alert = lateAlertFor({ tripId: 't1', next, dayStops: stops, now: ev.at, travelMin, source: 'estimate' })!;
     expect(alert).not.toBeNull();
-    expect(alert.plan.items).toHaveLength(5); // the murals and every stop after them
-    expect(alert.plan.items[0]).toMatchObject({ name: 'Armenian Street murals', note: 'next slot' });
+    expect(alert.plan.items).toHaveLength(4); // the Blue Mansion and every stop after it
+    expect(alert.plan.items[0]).toMatchObject({ name: 'Cheong Fatt Tze Blue Mansion', note: 'next slot' });
+  });
+
+  it('picks the first early pair at least 1 km apart, so waiting never counts as arriving (Port Dickson)', () => {
+    const pd = [
+      stop('Teluk Kemang Beach', 2.4465, 101.8566, at(9, 30), at(10)),
+      stop('Siva house', 2.4469, 101.8569, at(10, 15), at(10, 30)), // ~55 m from the beach
+      stop('Restoran Nelayan Teluk Kemang', 2.4637, 101.8655, at(12), at(13), { category: 'food' }), // ~2 km
+      stop('Pantai Cahaya Negeri', 2.4049, 101.8752, at(15), at(17), { is_outdoor: true }),
+    ];
+    const r = buildDemoRoute({ tripId: 't1', day: 1, stops: pd, members: [], meId: 'me' })!;
+    const ev = r.events.find((e) => e.kind === 'late')!;
+    expect(ev.stopId).toBe(pd[2].id);
+    const readings = readingTimes(r.startsAt - 30_000, ev.at, 30_000).map((t) => {
+      const loc = sampleRoute(r, t);
+      return { ...(loc.me ?? loc.center), at: t };
+    });
+    const stops = applyChanges(pd, processReadings(emptyTracker(), pd, readings).changes);
+    expect(stops.map((x) => x.status)).toEqual(['done', 'arrived', 'planned', 'planned']);
   });
 
   it('skips a booked second stop and is late for the third', () => {

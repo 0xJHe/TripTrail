@@ -2,7 +2,8 @@ import type { Stop, StopStatus } from '@/features/planning/types';
 import type { NewDay } from '@/supabase/functions/_shared/newDay';
 
 /** The parts of a stop the arrive / leave rules read. */
-export type VisitStop = Pick<Stop, 'id' | 'lat' | 'lng' | 'status' | 'arrived_at' | 'left_at'>;
+export type VisitStop = Pick<Stop, 'id' | 'lat' | 'lng' | 'status' | 'arrived_at' | 'left_at'> &
+  Partial<Pick<Stop, 'planned_time'>>;
 
 /** A stop's visit, to save. `from` = the status it must still have (so two phones don't both write it). */
 export interface VisitChange {

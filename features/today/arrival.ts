@@ -5,6 +5,8 @@ import type { VisitChange, VisitStop } from './types';
  * Arrive / leave rules (CLAUDE.md "Key logic"):
  * - Arrived: within 100 m of a stop for 2 readings in a row -> status "arrived", arrived_at = now.
  * - Left: more than 150 m from the arrived stop for 3 minutes -> status "done", left_at = now.
+ * - Two stops within 150 m of each other: arriving at one only counts from 15 min before its
+ *   planned start, so being near it early doesn't skip the stop the group is at.
  * Pure functions; the tracker hook feeds them readings and saves the changes.
  */
 
@@ -12,6 +14,8 @@ export const ARRIVE_M = 100;
 export const ARRIVE_READINGS = 2;
 export const LEAVE_M = 150;
 export const LEAVE_AFTER_MS = 3 * 60_000;
+export const NEAR_STOPS_M = 150;
+export const EARLY_ARRIVE_MS = 15 * 60_000;
 
 export interface Reading extends LatLng {
   /** Time of the reading (ms). */
@@ -30,6 +34,12 @@ export interface TrackerState {
 export const emptyTracker = (): TrackerState => ({ near: null, awaySince: null, lastAt: null });
 
 const hasPlace = (s: VisitStop): s is VisitStop & LatLng => s.lat != null && s.lng != null;
+
+/** A stop with another one within 150 m that doesn't start for more than 15 min yet: not arrived. */
+function tooEarly(s: VisitStop & LatLng, stops: VisitStop[], at: number): boolean {
+  if (!s.planned_time || at >= Date.parse(s.planned_time) - EARLY_ARRIVE_MS) return false;
+  return stops.some((o) => o.id !== s.id && o.status !== 'dropped' && hasPlace(o) && haversineMeters(o, s) <= NEAR_STOPS_M);
+}
 
 /** The stop the group is at: the one marked arrived (latest, if more than one). */
 export function currentStop<T extends VisitStop>(stops: T[]): T | null {
@@ -82,8 +92,9 @@ export function processReading(
 
   // Arrived: the nearest planned stop within 100 m, for 2 readings in a row.
   const candidate = stops
-    .filter((s) => s.status === 'planned' && hasPlace(s))
-    .map((s) => ({ s, d: haversineMeters(r, s as LatLng) }))
+    .filter((s): s is VisitStop & LatLng => s.status === 'planned' && hasPlace(s))
+    .filter((s) => !tooEarly(s, stops, r.at))
+    .map((s) => ({ s, d: haversineMeters(r, s) }))
     .filter((x) => x.d <= ARRIVE_M)
     .sort((a, b) => a.d - b.d)[0]?.s;
 

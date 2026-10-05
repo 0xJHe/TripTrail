@@ -71,3 +71,22 @@ describe('demoRainAt', () => {
     expect(demoRainAt(null, centre, zone.startsAt + MIN)).toBeNull();
   });
 });
+
+describe('sun or moon by the trip clock (now() on lib/clock)', () => {
+  const clearNight: Weather = { tempC: 26, condition: 'clear with periodic clouds', kind: 'clear-night', windKmh: 2, isDay: false, rainChance: 0 };
+
+  it('shows the sun at 10:15 even when the weather was fetched at night', () => {
+    expect(nowWeatherText(clearNight, null, 10)?.kind).toBe('partly');
+    expect(nowWeatherText({ ...clearNight, condition: 'clear' }, null, 10)?.kind).toBe('sunny');
+  });
+
+  it('shows the moon at night even when the weather was fetched by day', () => {
+    expect(nowWeatherText(sunny, null, 21)?.kind).toBe('clear-night');
+    expect(nextWeatherText(sunny, '20:00', null, 20)?.kind).toBe('clear-night');
+  });
+
+  it('leaves clouds and rain alone', () => {
+    expect(nowWeatherText(cloudy, null, 2)?.kind).toBe('cloudy');
+    expect(nextWeatherText(cloudy, '14:00', null, 14)?.kind).toBe('cloudy');
+  });
+});

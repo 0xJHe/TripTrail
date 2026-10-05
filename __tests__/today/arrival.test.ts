@@ -194,3 +194,35 @@ describe('readingTimes', () => {
     expect(times[times.length - 1]).toBe(24 * 60 * MIN);
   });
 });
+
+describe('two stops within 150 m of each other', () => {
+  const beach = { lat: 2.4465, lng: 101.8566 };
+  const house = offsetMeters(beach, 60, 0); // 60 m away
+  const at = (min: number) => new Date(T0 + min * MIN).toISOString();
+  const stops = () => [
+    stop('beach', beach, { planned_time: at(0), status: 'arrived', arrived_at: at(0) }),
+    stop('house', house, { planned_time: at(60) }),
+  ];
+  const near = (sec: number) => ({ ...offsetMeters(beach, 30, 0), at: T0 + sec * SEC }); // inside 100 m of both
+
+  it('being near the next stop early does not count as arriving there', () => {
+    const out = run(stops(), [near(20 * 60), near(20 * 60 + 30), near(44 * 60)]);
+    expect(out.changes).toEqual([]);
+  });
+
+  it('counts from 15 min before its planned start', () => {
+    const out = run(stops(), [near(45 * 60), near(45 * 60 + 30)]);
+    expect(out.changes.map((c) => [c.stopId, c.status])).toEqual([
+      ['beach', 'done'],
+      ['house', 'arrived'],
+    ]);
+  });
+
+  it('does not hold back stops that are further apart', () => {
+    const apart = [
+      stop('temple', temple, { planned_time: at(0), status: 'arrived', arrived_at: at(0) }),
+      stop('cafe', cafe, { planned_time: at(120) }),
+    ];
+    expect(run(apart, [read(cafe, 10, 60), read(cafe, 10, 90)]).changes.map((c) => c.stopId)).toEqual(['temple', 'cafe']);
+  });
+});

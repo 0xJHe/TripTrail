@@ -177,9 +177,11 @@ Time and location rule (built; follow it in every live-trip feature):
 - Running late (features/today/late.ts, supabase/functions/_shared/eta.ts + newDay.ts):
   check the next stop once ~30 min before it starts and once when the group leaves
   a stop if the next starts in < 30 min (max 2 checks, one card per stop, shared
-  in late_alerts). Travel = straight line at 25 km/h; only if that is within 10 min
-  of the start or later, ask the eta function (Google Routes, one phone per stop,
-  max 20 calls per trip per day). now + travel > planned_time + 5 min -> late card.
+  in late_alerts). Only before the stop's planned start: it is an early warning,
+  never checked once the start time has passed. Travel = straight line at 25 km/h;
+  only if that is within 10 min of the start or later, ask the eta function (Google
+  Routes, one phone per stop, max 20 calls per trip per day).
+  now + travel > planned_time + 5 min -> late card.
   Suggested new day = simple rules, no AI: the late stop moves to the arrival time
   ("next slot", even a meal); later stops shift and those with spare time are
   shortened; only booked stops (hotel, flights) never move; if the day would still

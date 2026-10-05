@@ -50,6 +50,8 @@
   },
   "scripts": {
     "start": "expo start",
+    "tunnel": "node scripts/tunnel.js",
+    "start:tunnel": "node scripts/start-tunnel.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",

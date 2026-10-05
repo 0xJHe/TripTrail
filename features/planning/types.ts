@@ -24,6 +24,8 @@ export interface OptionPlan {
   dayTitles: string[];
   /** Landmark the card photo shows, e.g. "Kek Lok Si Temple, Penang". */
   landmark?: string | null;
+  /** Google place ID of the landmark, used to refresh an expired photo link. */
+  placeId?: string | null;
   /** One Google photo with its credit; null/missing = the drawing. */
   photo?: OptionPhoto | null;
   /** The photo was skipped because Google's daily limit was reached. */

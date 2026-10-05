@@ -55,7 +55,11 @@ function fakes(answers: string[], withPhotos = true) {
     findPhoto: withPhotos
       ? async (landmark) => {
           photoLookups.push(landmark);
-          return { value: { url: `https://photo/${landmark}`, credit: 'Ana Lim', creditUrl: null }, limited: false, calls: 2 };
+          return {
+            value: { placeId: `place-${landmark}`, url: `https://photo/${landmark}`, credit: 'Ana Lim', creditUrl: null },
+            limited: false,
+            calls: 2,
+          };
         }
       : null,
   };
@@ -93,6 +97,7 @@ describe('planTripOptions', () => {
     expect(result.note).toBeNull();
     expect(f.prompts).toHaveLength(1);
     expect(result.options[0].photo).toEqual({ url: 'https://photo/Penang landmark', credit: 'Ana Lim', creditUrl: null });
+    expect(result.options[0].placeId).toBe('place-Penang landmark'); // kept to refresh the photo link later
     expect(f.photoLookups).toEqual(['Penang landmark', 'Langkawi landmark', 'Ipoh landmark', 'Melaka landmark']);
     expect(result.googleCalls).toBe(8);
   });

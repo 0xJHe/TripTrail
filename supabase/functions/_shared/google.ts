@@ -17,7 +17,11 @@ export const FIELDS = {
   photo: 'places.id,places.photos',
   autocomplete: 'suggestions.placePrediction.placeId,suggestions.placePrediction.structuredFormat',
   details: 'id,displayName,formattedAddress,location',
+  placePhotos: 'id,photos',
 } as const;
+
+/** A refreshed photo link is reused this long, so a group seeing the same broken photo pays once. */
+export const FRESH_PHOTO_MINUTES = 30;
 
 export interface LatLng {
   lat: number;
@@ -75,6 +79,7 @@ export const cacheKeys = {
   photo: (landmark: string) => `photo:${normalizeKey(landmark)}`,
   autocomplete: (input: string, near?: LatLng | null) => `auto:${normalizeKey(input)}${nearKey(near)}`,
   details: (placeId: string) => `place:${placeId}`,
+  freshPhoto: (placeId: string) => `photo-fresh:${placeId}`,
 };
 
 /** Distance in km. */
@@ -141,6 +146,23 @@ export function findStopPlace(deps: GoogleDeps, query: string, near?: LatLng | n
   });
 }
 
+type RawPhoto = { name?: string; authorAttributions?: { displayName?: string; uri?: string }[] };
+
+/** Photo link (max 800 px wide) with the photographer credit. 1 call, counted. */
+async function photoLink(deps: GoogleDeps, placeId: string, photo: RawPhoto): Promise<Lookup<PlacePhoto>> {
+  if (!(await deps.takeCall())) return { value: null, limited: true, calls: 0 };
+  const media = await call(
+    deps,
+    `${PLACES_URL}/${photo.name}/media?maxWidthPx=${PHOTO_MAX_WIDTH}&skipHttpRedirect=true`,
+    null, // the photo endpoint returns only { name, photoUri }
+  );
+  const author = photo.authorAttributions?.[0];
+  const value = media?.photoUri
+    ? { placeId, url: media.photoUri as string, credit: author?.displayName ?? null, creditUrl: author?.uri ?? null }
+    : null;
+  return { value, limited: false, calls: 1 };
+}
+
 /** One photo (max 800 px wide) of a landmark, with the photographer credit. 2 calls: search + photo URL. */
 export async function findLandmarkPhoto(deps: GoogleDeps, landmark: string): Promise<Lookup<PlacePhoto>> {
   const key = cacheKeys.photo(landmark);
@@ -153,19 +175,38 @@ export async function findLandmarkPhoto(deps: GoogleDeps, landmark: string): Pro
   let value: PlacePhoto | null = null;
   let calls = 1;
   if (place?.id && photo?.name) {
-    if (!(await deps.takeCall())) return { value: null, limited: true, calls };
-    calls++;
-    const media = await call(
-      deps,
-      `${PLACES_URL}/${photo.name}/media?maxWidthPx=${PHOTO_MAX_WIDTH}&skipHttpRedirect=true`,
-      null, // the photo endpoint returns only { name, photoUri }
-    );
-    const author = photo.authorAttributions?.[0];
-    if (media?.photoUri) {
-      value = { placeId: place.id, url: media.photoUri, credit: author?.displayName ?? null, creditUrl: author?.uri ?? null };
-    }
+    const link = await photoLink(deps, place.id, photo);
+    if (link.limited) return { value: null, limited: true, calls };
+    calls += link.calls;
+    value = link.value;
   }
   await deps.cacheSet(key, 'photo', { value });
+  return { value, limited: false, calls };
+}
+
+/**
+ * A new photo link for a place we already know, because Google photo links stop
+ * working after a while. 2 calls: place details (photos only) + photo URL.
+ * Reused for FRESH_PHOTO_MINUTES; the old cached link is never trusted here.
+ */
+export async function refreshPlacePhoto(deps: GoogleDeps, placeId: string, now = Date.now()): Promise<Lookup<PlacePhoto>> {
+  const key = cacheKeys.freshPhoto(placeId);
+  const hit = (await deps.cacheGet(key)) as { value: PlacePhoto | null; at?: number } | undefined;
+  if (hit && typeof hit.at === 'number' && now - hit.at < FRESH_PHOTO_MINUTES * 60_000) {
+    return { value: hit.value, limited: false, calls: 0 };
+  }
+  if (!(await deps.takeCall())) return { value: null, limited: true, calls: 0 };
+  const place = await call(deps, `${PLACES_URL}/places/${encodeURIComponent(placeId)}`, FIELDS.placePhotos);
+  const photo = place?.photos?.[0];
+  let value: PlacePhoto | null = null;
+  let calls = 1;
+  if (photo?.name) {
+    const link = await photoLink(deps, placeId, photo);
+    if (link.limited) return { value: null, limited: true, calls };
+    calls += link.calls;
+    value = link.value;
+  }
+  await deps.cacheSet(key, 'photo', { value, at: now });
   return { value, limited: false, calls };
 }
 

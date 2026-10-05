@@ -46,7 +46,7 @@ export function OptionCard({ option, fit, solo, needsHalal }: OptionCardProps) {
   return (
     <View style={styles.card}>
       <View style={styles.photo}>
-        <OptionPicture plan={plan} />
+        <OptionPicture tripId={option.trip_id} plan={plan} />
         {fit.fitsEveryone ? (
           <View style={styles.tag}>
             <Txt style={styles.tagText}>{solo ? 'Fits you' : 'Fits everyone'}</Txt>

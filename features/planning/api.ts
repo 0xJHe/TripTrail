@@ -1,4 +1,4 @@
-import { generateItinerary, type TripOptionDraft } from '@/lib/ai';
+import { generateItinerary, type OptionPhoto, type TripOptionDraft } from '@/lib/ai';
 import { supabase } from '@/lib/supabase';
 import type { Trip } from '@/features/trip/types';
 import type { DateWindow } from './dateFinder';
@@ -89,6 +89,7 @@ export async function insertOptions(tripId: string, options: OptionToSave[], fit
       halal: draft.halal,
       dayTitles: draft.dayTitles,
       landmark: draft.landmark ?? null,
+      placeId: draft.placeId ?? draft.photo?.placeId ?? null,
       photo: draft.photo ?? null,
       photoLimited: draft.photoLimited ?? false,
       fitNote,
@@ -207,4 +208,16 @@ export async function getPlace(
   });
   if (error) throw error;
   return { place: data?.place ?? null, limited: !!data?.limited };
+}
+
+/**
+ * A new link for an option's Google photo (old links stop working after a while).
+ * Counted in the trip's 60 Google calls a day. Null = no photo (or the limit was reached).
+ */
+export async function refreshOptionPhoto(tripId: string, placeId: string): Promise<OptionPhoto | null> {
+  const { data, error } = await supabase.functions.invoke<{ photo: OptionPhoto | null; limited: boolean }>('refresh-photo', {
+    body: { tripId, placeId },
+  });
+  if (error) throw error;
+  return data?.photo?.url ? data.photo : null;
 }

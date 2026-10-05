@@ -32,7 +32,7 @@ export function WinnerCard({ result, members, tag, chosen, footer }: WinnerCardP
   return (
     <View style={[styles.card, chosen && styles.chosen]} accessibilityLabel={`${option.name}, ${tag}`}>
       <View style={styles.photo}>
-        <OptionPicture plan={option.plan_json} banner />
+        <OptionPicture tripId={option.trip_id} plan={option.plan_json} banner />
         <View style={styles.tag}>
           <Txt style={styles.tagText} color={colors.white}>
             {tag}

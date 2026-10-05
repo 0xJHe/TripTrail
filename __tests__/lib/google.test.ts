@@ -6,6 +6,7 @@ import {
   findLandmarkPhoto,
   findStopPlace,
   placeDetails,
+  refreshPlacePhoto,
   type GoogleDeps,
 } from '@/supabase/functions/_shared/google';
 
@@ -168,5 +169,66 @@ describe('Add a stop search', () => {
     expect(g.requests[0].url).toBe('https://places.googleapis.com/v1/places/ChIJkek?sessionToken=session-1');
     expect(header(g.requests[0], 'X-Goog-FieldMask')).toBe(FIELDS.details);
     expect((await placeDetails(g.deps, 'ChIJkek', 'session-2')).calls).toBe(0);
+  });
+});
+
+describe('refreshPlacePhoto', () => {
+  const place = {
+    id: 'ChIJwat',
+    photos: [{ name: 'places/ChIJwat/photos/new', authorAttributions: [{ displayName: 'Ana Lim', uri: 'https://maps.google.com/ana' }] }],
+  };
+  const t0 = Date.UTC(2026, 9, 5, 10, 0);
+
+  it('gets a new link from the saved place ID, counting both calls', async () => {
+    const g = fakeGoogle([{ body: place }, { body: { photoUri: 'https://lh3.example/wat-new.jpg' } }]);
+    // An old, expired link in the landmark cache is not used.
+    g.cache.set(cacheKeys.photo('Wat Arun, Bangkok'), { value: { placeId: 'ChIJwat', url: 'https://lh3.example/old.jpg' } });
+    const found = await refreshPlacePhoto(g.deps, 'ChIJwat', t0);
+    expect(found).toEqual({
+      value: { placeId: 'ChIJwat', url: 'https://lh3.example/wat-new.jpg', credit: 'Ana Lim', creditUrl: 'https://maps.google.com/ana' },
+      limited: false,
+      calls: 2,
+    });
+    expect(g.used()).toBe(2);
+    expect(g.requests[0].url).toBe('https://places.googleapis.com/v1/places/ChIJwat');
+    expect(header(g.requests[0], 'X-Goog-FieldMask')).toBe('id,photos');
+    expect(g.requests[1].url).toBe(
+      'https://places.googleapis.com/v1/places/ChIJwat/photos/new/media?maxWidthPx=800&skipHttpRedirect=true',
+    );
+  });
+
+  it('reuses a fresh link for 30 minutes, then asks again', async () => {
+    const g = fakeGoogle([
+      { body: place },
+      { body: { photoUri: 'https://lh3.example/a.jpg' } },
+      { body: place },
+      { body: { photoUri: 'https://lh3.example/b.jpg' } },
+    ]);
+    await refreshPlacePhoto(g.deps, 'ChIJwat', t0);
+    const soon = await refreshPlacePhoto(g.deps, 'ChIJwat', t0 + 29 * 60_000);
+    expect(soon).toMatchObject({ calls: 0, value: { url: 'https://lh3.example/a.jpg' } });
+    const later = await refreshPlacePhoto(g.deps, 'ChIJwat', t0 + 31 * 60_000);
+    expect(later).toMatchObject({ calls: 2, value: { url: 'https://lh3.example/b.jpg' } });
+  });
+
+  it('makes no Google call once the trip has used its 60 calls today', async () => {
+    const g = fakeGoogle([], 0);
+    expect(await refreshPlacePhoto(g.deps, 'ChIJwat', t0)).toEqual({ value: null, limited: true, calls: 0 });
+    expect(g.requests).toHaveLength(0);
+  });
+
+  it('stops when the limit is reached between the details and the photo', async () => {
+    const g = fakeGoogle([{ body: place }], 1);
+    expect(await refreshPlacePhoto(g.deps, 'ChIJwat', t0)).toEqual({ value: null, limited: true, calls: 1 });
+  });
+
+  it('gives null when the place has no photos any more', async () => {
+    const g = fakeGoogle([{ body: { id: 'ChIJwat', photos: [] } }]);
+    expect(await refreshPlacePhoto(g.deps, 'ChIJwat', t0)).toEqual({ value: null, limited: false, calls: 1 });
+  });
+
+  it('throws on a Google error (the function then answers with an error)', async () => {
+    const g = fakeGoogle([{ status: 403, body: { error: 'denied' } }]);
+    await expect(refreshPlacePhoto(g.deps, 'ChIJwat', t0)).rejects.toThrow('Google 403');
   });
 });

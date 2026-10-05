@@ -1,30 +1,31 @@
 import { Image } from 'expo-image';
-import { useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 
 import { Txt } from '@/components/ui/Txt';
 import { fontFamily } from '@/lib/theme';
+import { useOptionPhoto } from '../hooks/useOptionPhoto';
 import type { OptionPlan } from '../types';
 import { Scene } from './Scene';
 
 /**
  * The option's Google photo with the photographer credit on it, or the
- * drawing when there's no photo (or it fails to load).
+ * drawing when there's no photo. A link that fails to load is refreshed once;
+ * if that fails too, the drawing stays.
  */
-export function OptionPicture({ plan, banner }: { plan: OptionPlan; banner?: boolean }) {
-  const [broken, setBroken] = useState(false);
-  const photo = !broken ? plan.photo : null;
+export function OptionPicture({ tripId, plan, banner }: { tripId: string; plan: OptionPlan; banner?: boolean }) {
+  const { photo, onError } = useOptionPhoto(tripId, plan);
   return (
     <View style={StyleSheet.absoluteFill}>
       <Scene kind={plan.scene} banner={banner} />
       {photo ? (
         <>
           <Image
+            key={photo.url}
             source={{ uri: photo.url }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
             transition={200}
-            onError={() => setBroken(true)}
+            onError={onError}
             accessibilityLabel={plan.landmark ?? undefined}
           />
           {photo.credit ? (

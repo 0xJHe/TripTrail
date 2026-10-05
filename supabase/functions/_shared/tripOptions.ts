@@ -30,6 +30,8 @@ export interface OptionPhoto {
   /** Photographer credit Google returns; shown on the photo. */
   credit: string | null;
   creditUrl: string | null;
+  /** Google place ID of the landmark (older saved options kept it here). */
+  placeId?: string;
 }
 
 export interface TripOptionDraft {
@@ -45,6 +47,8 @@ export interface TripOptionDraft {
   dayTitles: string[];
   /** Well-known landmark or area for the card photo, e.g. "Kek Lok Si Temple, Penang". */
   landmark?: string | null;
+  /** Google place ID of the landmark, kept so an expired photo link can be refreshed. */
+  placeId?: string | null;
   /** One Google photo of the landmark; null = keep the drawing. */
   photo?: OptionPhoto | null;
   /** True when the photo was skipped because Google's daily limit was reached. */
@@ -505,7 +509,13 @@ async function addPhotos(options: TripOptionDraft[], deps: OptionsDeps) {
       try {
         const found = await deps.findPhoto!(o.landmark);
         calls += found.calls;
-        return { ...o, photo: found.value, photoLimited: found.limited };
+        const p = found.value;
+        return {
+          ...o,
+          placeId: p?.placeId ?? null,
+          photo: p ? { url: p.url, credit: p.credit, creditUrl: p.creditUrl } : null,
+          photoLimited: found.limited,
+        };
       } catch (e) {
         deps.log?.(`Photo lookup failed for "${o.landmark}": ${e instanceof Error ? e.message : e}`);
         return { ...o, photo: null };

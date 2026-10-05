@@ -172,6 +172,8 @@ Time and location rule (built; follow it in every live-trip feature):
 - Arrived: within 100 m of stop for 2 consecutive readings -> status "arrived",
   arrived_at = now. Left: more than 150 m away for 3 minutes after arrived ->
   left_at = now, status "done".
+  Two stops within 150 m of each other: arriving at the next one only counts from
+  15 min before its planned start (being near it early doesn't skip the current stop).
 - Running late (features/today/late.ts, supabase/functions/_shared/eta.ts + newDay.ts):
   check the next stop once ~30 min before it starts and once when the group leaves
   a stop if the next starts in < 30 min (max 2 checks, one card per stop, shared

@@ -14,7 +14,8 @@ import { CHECK_BEFORE_MIN, estimateMinutes, LATE_AFTER_MIN } from '@/supabase/fu
 export type RouteStop = Pick<
   Stop,
   'id' | 'name' | 'day_number' | 'position' | 'lat' | 'lng' | 'planned_time' | 'planned_end' | 'is_outdoor' | 'status'
->;
+> &
+  Partial<Pick<Stop, 'is_booked'>>;
 
 export interface RouteMember {
   id: string;
@@ -134,9 +135,10 @@ export function buildDemoRoute({ tripId, day, stops, members, meId }: BuildInput
   });
   const idx = s.map((_, i) => i);
 
-  // Which stop gets which moment. Late: the first stop with a real journey to it.
+  // Which stop gets which moment. Late: the second stop (the third if the second is booked),
+  // so the suggested new day has most of the day to rearrange, like prototype screen 7.
   const legMs = (i: number) => (i > 0 ? travelMs(at[i - 1], at[i]) : 0);
-  const late = n >= 2 ? (idx.find((i) => i > 0 && legMs(i) >= LATE_LEG_MIN * MIN) ?? 1) : 0;
+  const late = n >= 2 ? (n >= 3 && s[1].is_booked && !s[2].is_booked ? 2 : 1) : 0;
   const plannedStay = (i: number) => end[i] - start[i];
   const notLate = idx.filter((i) => i !== late);
   const early = notLate.find((i) => i > late && plannedStay(i) >= 30 * MIN) ?? longest(notLate, plannedStay) ?? late;

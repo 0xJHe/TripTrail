@@ -134,6 +134,19 @@ Settings has a Demo mode toggle. When on:
   on and "offline demo" is checked, responses come from seed/fake-ai.json.
 Every feature must be testable in Demo mode from a room, not a real trip.
 
+Time and location rule (built; follow it in every live-trip feature):
+- Get the time ONLY from lib/clock.ts: `now()` or the `useNow()` hook. Never call
+  `new Date()` / `Date.now()` for "what time is it" in Today, alerts, arrive/leave,
+  late/early, rain, group map, recap, etc.
+- Get positions ONLY from lib/location.ts: `getGroupLocation()` or the
+  `useGroupLocation()` hook (members, battery, centre, `rainSoon` in demo). Never
+  import expo-location anywhere else.
+- Demo mode lives in lib/demo.ts (Settings > Demo mode, saved on the phone). The fake
+  route is built from the open trip's Day plan by features/demo/route.ts: it walks
+  stop to stop and includes arriving late, leaving early, rain near an outdoor stop,
+  and one member 900 m away with low battery. The bar at the top (+15 min, Next
+  event, Reset) is features/demo/components/DemoBar.tsx.
+
 ## Behaviour rules for you (the agent)
 
 - Only edit the folder(s) named in the task plus tests. Ask before touching

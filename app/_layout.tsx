@@ -13,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { DemoFrame } from '@/features/demo/components/DemoFrame';
 import { useAuth, useAuthListener } from '@/features/trip/authStore';
 import { colors } from '@/lib/theme';
 
@@ -44,16 +45,18 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: colors.background },
-            animation: 'slide_from_right',
-          }}>
-          <Stack.Screen name="index" options={{ animation: 'none' }} />
-          <Stack.Screen name="intro" options={{ animation: 'fade' }} />
-          <Stack.Screen name="(tabs)" />
-        </Stack>
+        <DemoFrame>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: colors.background },
+              animation: 'slide_from_right',
+            }}>
+            <Stack.Screen name="index" options={{ animation: 'none' }} />
+            <Stack.Screen name="intro" options={{ animation: 'fade' }} />
+            <Stack.Screen name="(tabs)" />
+          </Stack>
+        </DemoFrame>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

@@ -24,6 +24,12 @@
     "plugins": [
       "expo-router",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "TripTrail uses your location during a trip to tick off stops and keep the day's plan on time."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#14284F",

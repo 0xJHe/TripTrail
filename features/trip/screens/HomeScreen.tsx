@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, V
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Txt } from '@/components/ui/Txt';
+import { SettingsButton } from '@/features/demo/components/SettingsButton';
 import { colors } from '@/lib/theme';
 import { useDisplayName } from '../authStore';
 import { ActionCard } from '../components/ActionCard';
@@ -34,7 +35,12 @@ export function HomeScreen() {
         brand
         title={`Hi ${name || 'there'} 👋`}
         subtitle="Where is the group going next?"
-        right={<SignOutButton />}
+        right={
+          <View style={styles.headerButtons}>
+            <SettingsButton />
+            <SignOutButton />
+          </View>
+        }
       />
       <ScrollView
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 24 }]}
@@ -95,6 +101,7 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   body: { padding: 16, gap: 12 },
+  headerButtons: { flexDirection: 'row', alignItems: 'center' },
   label: { marginTop: 10 },
   rename: { alignSelf: 'center', marginTop: 12, padding: 6 },
 });

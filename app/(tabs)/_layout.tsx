@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
 
+import { SettingsButton } from '@/features/demo/components/SettingsButton';
 import { colors, fontSize } from '@/lib/theme';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -23,6 +24,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.teal,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: { fontSize: fontSize.small },
+        headerRight: () => <SettingsButton />,
       }}>
       <Tabs.Screen name="plan" options={{ title: 'Plan', headerShown: false, tabBarIcon: tabIcon('calendar-outline') }} />
       <Tabs.Screen name="today" options={{ title: 'Today', tabBarIcon: tabIcon('today') }} />

@@ -86,7 +86,7 @@ export function TodayScreen() {
             leaving={today.leaving}
           />
         ) : heading ? (
-          <NowCard kind="heading" stop={heading} weather={today.weather.now} />
+          <NowCard kind="heading" stop={heading} weather={today.weather.now} onPin={() => router.push('/pin')} />
         ) : (
           <NowCard kind="finished" visited={done.length} />
         )}

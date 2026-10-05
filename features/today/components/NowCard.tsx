@@ -1,11 +1,10 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { Txt } from '@/components/ui/Txt';
 import { clockOf, priceLabel } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { colors, fontFamily } from '@/lib/theme';
-import { directionsUrl } from '../todayPlan';
 import type { WeatherText } from '../weather';
 import { WeatherLine } from './WeatherLine';
 
@@ -13,7 +12,7 @@ type NowCardProps =
   /** The group is at this stop. */
   | { kind: 'at'; stop: Stop; weather: WeatherText | null; onDone: () => void; onPin: () => void; leaving: boolean }
   /** Between stops: on the way to this one. */
-  | { kind: 'heading'; stop: Stop; weather: WeatherText | null }
+  | { kind: 'heading'; stop: Stop; weather: WeatherText | null; onPin: () => void }
   /** Every stop of the day is behind them. */
   | { kind: 'finished'; visited: number };
 
@@ -81,7 +80,7 @@ function StopBody(props: Extract<NowCardProps, { stop: Stop }>) {
             <Pill label="📍 Pin spot" onPress={props.onPin} ghost />
           </>
         ) : (
-          <Pill label="Directions" onPress={() => Linking.openURL(directionsUrl(stop)).catch(() => {})} />
+          <Pill label="📍 Pin spot" onPress={props.onPin} ghost />
         )}
       </View>
     </>

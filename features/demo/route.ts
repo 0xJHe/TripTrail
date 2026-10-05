@@ -1,8 +1,8 @@
 import { sortStops } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
-import { LEAVE_AFTER_MS, LEAVE_M } from '@/features/today/arrival';
 import { haversineMeters, offsetMeters, type LatLng } from '@/lib/distance';
 import type { DemoEvent, DemoMemberTrack, DemoRoute } from '@/lib/location';
+import { CHECK_BEFORE_MIN, estimateMinutes, LATE_AFTER_MIN } from '@/supabase/functions/_shared/eta';
 
 /**
  * Builds the fake day that Demo mode replays, from the trip's real Day plan.
@@ -24,8 +24,10 @@ export interface RouteMember {
 const MIN = 60_000;
 /** How late the group arrives at the "late" stop. */
 export const LATE_BY_MIN = 20;
-/** The way to the late stop takes at least this long, so leaving is noticed before getting there. */
+/** The way to the late stop takes at least this long. */
 export const LATE_LEG_MIN = 12;
+/** Extra late at the running-late moment, so Google's real travel time (often shorter than the estimate) still says late. */
+export const LATE_MARGIN_MIN = 10;
 /** How far the wandering member gets from the rest of the group. */
 export const FAR_M = 900;
 const LEAD_IN_MIN = 30;
@@ -140,8 +142,10 @@ export function buildDemoRoute({ tripId, day, stops, members, meId }: BuildInput
   const early = notLate.find((i) => i > late && plannedStay(i) >= 30 * MIN) ?? longest(notLate, plannedStay) ?? late;
   const outdoor = idx.filter((i) => s[i].is_outdoor);
   const rain = outdoor.find((i) => i > early) ?? outdoor.find((i) => i !== late) ?? outdoor[0] ?? n - 1;
-  const free = idx.filter((i) => i !== late && i !== early && i !== rain);
-  const far = longest(free, plannedStay) ?? longest(notLate, plannedStay) ?? n - 1;
+  // Not the stop before the late one: the group waits there for the running-late check.
+  const free = idx.filter((i) => i !== late && i !== late - 1 && i !== early && i !== rain);
+  const far =
+    longest(free, plannedStay) ?? longest(notLate.filter((i) => i !== late - 1), plannedStay) ?? longest(notLate, plannedStay) ?? n - 1;
 
   // Arrive / leave times.
   const arrive = [...start];
@@ -149,7 +153,21 @@ export function buildDemoRoute({ tripId, day, stops, members, meId }: BuildInput
   arrive[late] += LATE_BY_MIN * MIN;
   const earlyBy = Math.min(40 * MIN, end[early] - arrive[early] - 5 * MIN);
   if (earlyBy > 0) leave[early] = end[early] - earlyBy;
+  // Running late shows through the check ~30 min before the late stop starts, while the group
+  // is still at the stop before: they stay there until the free estimate from there says late.
+  const checkFrom = start[late] - CHECK_BEFORE_MIN * MIN;
+  const lateBy =
+    late > 0 ? start[late] + (LATE_AFTER_MIN + LATE_MARGIN_MIN) * MIN - estimateMinutes(at[late - 1], at[late]) * MIN : start[0];
+  let lateAt = start[0];
   for (let i = 0; i < n; i++) {
+    if (i === late && late > 0) {
+      // Arriving at the stop before inside the check window would run the check too soon: arrive late there too.
+      if (arrive[i - 1] >= checkFrom - MIN) arrive[i - 1] = Math.max(arrive[i - 1], lateBy);
+      lateAt = Math.max(checkFrom, lateBy, arrive[i - 1] + MIN);
+      const tr = Math.max(legMs(i), LATE_LEG_MIN * MIN);
+      arrive[i] = Math.max(arrive[i], lateAt + 5 * MIN + tr);
+      leave[i - 1] = Math.max(leave[i - 1], arrive[i - 1] + 5 * MIN);
+    }
     if (i > 0) {
       const tr = i === late ? Math.max(legMs(i), LATE_LEG_MIN * MIN) : legMs(i);
       // Late stop: they stayed too long at the one before. Otherwise they leave in time to be on time.
@@ -227,16 +245,10 @@ export function buildDemoRoute({ tripId, day, stops, members, meId }: BuildInput
   // Rain over the outdoor stop, wide enough to cover the way there from the stop before.
   const radiusM = Math.max(3000, rain > 0 ? haversineMeters(at[rain - 1], at[rain]) + 500 : 3000);
   const rainZone = { ...at[rain], radiusM, startsAt: arrive[rain] + 10 * MIN, endsAt: arrive[rain] + 70 * MIN };
-  const rainAt = Math.max(arrive[rain] - 45 * MIN, rain > 0 ? arrive[rain - 1] : startsAt);
+  const rainFrom = Math.max(arrive[rain] - 45 * MIN, rain > 0 ? arrive[rain - 1] : startsAt);
+  // Nothing else happens between the running-late check window opening and the late moment.
+  const rainAt = rainFrom >= checkFrom && rainFrom < lateAt ? lateAt + MIN : rainFrom;
 
-  // Late shows when the app notices they left the stop before (150 m away for 3 min): the late
-  // stop then starts in under 30 min, and now + travel is past its planned time + 5 min.
-  let lateAt = start[0];
-  if (late > 0) {
-    const leg = haversineMeters(at[late - 1], at[late]);
-    const awayAt = leave[late - 1] + Math.min(1, LEAVE_M / Math.max(leg, 1)) * (arrive[late] - leave[late - 1]);
-    lateAt = Math.min(awayAt + LEAVE_AFTER_MS + 90_000, arrive[late] - MIN);
-  }
 
   const events: DemoEvent[] = [{ at: startsAt, kind: 'start', title: `Day ${day} starts: heading to ${s[0].name}` }];
   s.forEach((x, i) => {

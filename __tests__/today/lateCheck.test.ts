@@ -4,6 +4,7 @@ import { applyChanges, emptyTracker, processReadings, readingTimes } from '@/fea
 import { beforeNewDays, checkable, dayEndsAt, dueChecks, lastLeftAt, lateAlertFor, openAlertFor } from '@/features/today/late';
 import { todayView } from '@/features/today/todayPlan';
 import type { LateAlert } from '@/features/today/types';
+import { haversineMeters } from '@/lib/distance';
 import { sampleRoute } from '@/lib/location';
 import { estimateMinutes, worthAskingGoogle } from '@/supabase/functions/_shared/eta';
 
@@ -142,32 +143,60 @@ describe('which card shows', () => {
 });
 
 describe("demo route's late moment", () => {
-  it('raises the running-late card when the app notices the group left the stop before', () => {
-    const route = buildDemoRoute({ tripId: 't1', day: 1, stops: day, members: [], meId: 'me' })!;
-    const late = route.events.find((e) => e.kind === 'late')!;
-    expect(late.stopId).toBe(funicular.id);
+  const route = buildDemoRoute({ tripId: 't1', day: 1, stops: day, members: [], meId: 'me' })!;
+  const late = route.events.find((e) => e.kind === 'late')!;
 
-    // Replay the route like useVisitTracker does (a reading every 30 s) up to the late moment.
-    const readings = readingTimes(route.startsAt - 30_000, late.at, 30_000).map((t) => {
-      const loc = sampleRoute(route, t);
-      return { ...(loc.me ?? loc.center), at: t };
+  /** Stops after replaying the route up to t, like useVisitTracker (a reading every 30 s). */
+  const stopsAt = (t: number) => {
+    const readings = readingTimes(route.startsAt - 30_000, t, 30_000).map((r) => {
+      const loc = sampleRoute(route, r);
+      return { ...(loc.me ?? loc.center), at: r };
     });
-    const { changes } = processReadings(emptyTracker(), day, readings);
-    const stops = applyChanges(day, changes);
-    expect(stops[0].status).toBe('done'); // the leave was noticed
-    expect(stops[1].status).toBe('planned'); // not at the funicular yet
+    return applyChanges(day, processReadings(emptyTracker(), day, readings).changes);
+  };
+
+  it('is the 30-minutes-before check, while the group is still at the stop before (screen 7)', () => {
+    expect(late.stopId).toBe(funicular.id);
+    const stops = stopsAt(late.at);
+    expect(stops[0].status).toBe('arrived'); // Now block: the stop before, with We're done here
+    expect(stops[1].status).toBe('planned');
 
     const view = todayView({ stage: 'decided', start: '2026-10-12', days: 1, stops, now: new Date(late.at) });
     if (view.kind !== 'day') throw new Error('expected a day');
+    expect(view.now?.id).toBe(day[0].id);
     expect(view.next?.id).toBe(funicular.id);
     const kinds = dueChecks({ startsAt: start, lastLeft: lastLeftAt(stops, late.at), now: late.at, done: new Set() });
-    expect(kinds).toContain('left');
+    expect(kinds).toEqual(['before']);
 
-    // Free estimate from where the group is: late, and close enough that Google is asked too.
+    // Late by the free estimate, and still late if Google's real time is up to 10 min shorter.
     const here = sampleRoute(route, late.at).center;
     const estimate = estimateMinutes(here, funicular as { lat: number; lng: number });
     expect(worthAskingGoogle(late.at, estimate, start)).toBe(true);
-    const alert = lateAlertFor({ tripId: 't1', next: view.next as Stop & { planned_time: string }, dayStops: stops, now: late.at, travelMin: estimate, source: 'estimate' });
-    expect(alert).not.toBeNull();
+    const next = view.next as Stop & { planned_time: string };
+    const args = { tripId: 't1', next, dayStops: stops, now: late.at, source: 'estimate' as const };
+    expect(lateAlertFor({ ...args, travelMin: estimate })).not.toBeNull();
+    expect(lateAlertFor({ ...args, travelMin: estimate - 9 })).not.toBeNull();
+  });
+
+  it('has no other moment between the check window opening and the late moment', () => {
+    const windowOpens = start - 30 * MIN;
+    const between = route.events.filter((e) => e.at >= windowOpens && e.at < late.at);
+    expect(between).toEqual([]);
+  });
+
+  it('works when the stop before starts inside the check window too', () => {
+    const close = [
+      stop('Kopi at Toh Soon', 5.418, 100.3329, at(9, 10), at(9, 25), { category: 'food' }),
+      stop('Penang Hill', 5.4239, 100.2691, at(9, 30), at(11)),
+    ];
+    const r = buildDemoRoute({ tripId: 't1', day: 1, stops: close, members: [], meId: 'me' })!;
+    const ev = r.events.find((e) => e.kind === 'late')!;
+    const arriveBefore = r.events.find((e) => e.kind === 'arrive' && e.stopId === close[0].id)!;
+    const hill = Date.parse(close[1].planned_time!);
+    // By the time they reach the stop before, the estimate from there already says late.
+    const est = estimateMinutes(close[0] as { lat: number; lng: number }, close[1] as { lat: number; lng: number });
+    expect(arriveBefore.at + est * MIN).toBeGreaterThan(hill + 5 * MIN);
+    expect(ev.at).toBeGreaterThan(arriveBefore.at);
+    expect(haversineMeters(sampleRoute(r, ev.at).center, close[0] as { lat: number; lng: number })).toBeLessThan(100);
   });
 });

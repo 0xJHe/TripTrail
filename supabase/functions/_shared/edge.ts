@@ -83,3 +83,53 @@ export function googleDeps(admin: Db, apiKey: string, tripId: string, log: (m: s
     },
   };
 }
+
+/** A {lat, lng} from a request body, or null. */
+export function readPoint(v: unknown): { lat: number; lng: number } | null {
+  if (typeof v !== 'object' || v === null) return null;
+  const { lat, lng } = v as Record<string, unknown>;
+  return typeof lat === 'number' && typeof lng === 'number' && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+}
+
+/**
+ * Count one call of `kind` (e.g. 'routes', 'ai_replan') for the trip today with
+ * take_api_call(); false when `limit` is reached or it can't be counted.
+ */
+export async function takeApiCall(admin: Db, tripId: string, kind: string, limit: number, log: (m: string) => void): Promise<boolean> {
+  const { data, error } = await admin.rpc('take_api_call', { p_trip: tripId, p_kind: kind, p_limit: limit });
+  if (error) {
+    log(`take_api_call(${kind}) failed: ${error.message}`);
+    return false; // can't count it, so don't spend it
+  }
+  return data === true;
+}
+
+/**
+ * Locks as google_cache rows ("lock:<key>"): only one insert of the same key can win,
+ * so only one phone of the group asks Google / Gemini. A lock older than `staleMs`
+ * is from a request that died and is taken over.
+ */
+export function cacheLock(admin: Db, staleMs: number) {
+  const lockKey = (key: string) => `lock:${key}`;
+  return {
+    claim: async (key: string): Promise<boolean> => {
+      const row = { key: lockKey(key), kind: 'lock', data: { at: Date.now() } };
+      const first = await admin.from('google_cache').insert(row);
+      if (!first.error) return true;
+      const { data } = await admin.from('google_cache').select('data').eq('key', row.key).maybeSingle();
+      const at = data?.data?.at;
+      if (typeof at === 'number' && Date.now() - at < staleMs) return false;
+      // Stale lock: replace it only if it is still the same stale row.
+      const taken = await admin
+        .from('google_cache')
+        .update({ data: row.data })
+        .eq('key', row.key)
+        .eq('data->>at', String(at))
+        .select('key');
+      return !taken.error && (taken.data ?? []).length > 0;
+    },
+    release: async (key: string): Promise<void> => {
+      await admin.from('google_cache').delete().eq('key', lockKey(key));
+    },
+  };
+}

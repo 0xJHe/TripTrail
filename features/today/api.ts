@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase';
+import type { CheckKind, EtaReply } from '@/supabase/functions/_shared/eta';
+import type { ReplanReply } from '@/supabase/functions/_shared/replan';
 import type { WeatherReply } from '@/supabase/functions/_shared/weather';
-import type { VisitChange } from './types';
+import type { LateAlert, NewLateAlert, VisitChange } from './types';
 
 export interface WeatherRequest {
   /** Where the group is (current weather). */
@@ -27,5 +29,56 @@ export async function saveVisit(change: VisitChange): Promise<void> {
     .update({ status: change.status, arrived_at: change.arrived_at, left_at: change.left_at })
     .eq('id', change.stopId)
     .eq('status', change.from);
+  if (error) throw error;
+}
+
+export async function fetchLateAlerts(tripId: string): Promise<LateAlert[]> {
+  const { data, error } = await supabase.from('late_alerts').select('*').eq('trip_id', tripId);
+  if (error) throw error;
+  return (data ?? []) as LateAlert[];
+}
+
+/** Save the running-late card for a stop. If another phone already did, theirs stays (one card per stop). */
+export async function raiseLateAlert(alert: NewLateAlert): Promise<void> {
+  const { error } = await supabase.from('late_alerts').upsert(alert, { onConflict: 'stop_id', ignoreDuplicates: true });
+  if (error) throw error;
+}
+
+/** Real travel time from Google (eta Edge Function); null = keep the free estimate. */
+export async function fetchEta(
+  tripId: string,
+  stopId: string,
+  kind: CheckKind,
+  from: { lat: number; lng: number },
+): Promise<EtaReply> {
+  const { data, error } = await supabase.functions.invoke<EtaReply>('eta', { body: { tripId, stopId, kind, from } });
+  if (error) throw error;
+  return data ?? { minutes: null, source: null, limited: false, routesCalls: 0 };
+}
+
+/** "Ask AI for a better plan" (replan-day Edge Function). The plan is also saved on the card. */
+export async function askReplan(
+  tripId: string,
+  stopId: string,
+  now: Date,
+  here: { lat: number; lng: number } | null,
+): Promise<ReplanReply> {
+  const { data, error } = await supabase.functions.invoke<ReplanReply>('replan-day', {
+    body: { tripId, stopId, now: now.toISOString(), here, tzOffset: -now.getTimezoneOffset() },
+  });
+  if (error) throw error;
+  return data ?? { plan: null, note: null, limited: false, geminiCalls: 0 };
+}
+
+/** Accept a new day ('rules' / 'ai') or keep the original. False if someone else already decided. */
+export async function decideNewDay(stopId: string, choice: 'rules' | 'ai' | 'keep'): Promise<boolean> {
+  const { data, error } = await supabase.rpc('decide_new_day', { p_stop: stopId, p_choice: choice });
+  if (error) throw error;
+  return data === true;
+}
+
+/** Demo mode Reset: forget cards checked after `after`, putting back accepted stop times. */
+export async function undoLateAlerts(tripId: string, after: Date): Promise<void> {
+  const { error } = await supabase.rpc('undo_late_alerts', { p_trip: tripId, p_after: after.toISOString() });
   if (error) throw error;
 }

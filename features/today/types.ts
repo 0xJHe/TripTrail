@@ -1,4 +1,5 @@
 import type { Stop, StopStatus } from '@/features/planning/types';
+import type { NewDay } from '@/supabase/functions/_shared/replan';
 
 /** The parts of a stop the arrive / leave rules read. */
 export type VisitStop = Pick<Stop, 'id' | 'lat' | 'lng' | 'status' | 'arrived_at' | 'left_at'>;
@@ -30,3 +31,31 @@ export type TodayView =
       /** "on time", "12 min behind", or null before the first arrival. */
       pace: string | null;
     };
+
+/** Row in `late_alerts`: the group's one running-late card for a stop. */
+export interface LateAlert {
+  stop_id: string;
+  trip_id: string;
+  day_number: number;
+  /** now() when the check found them late (the fake time in Demo mode). */
+  checked_at: string;
+  travel_min: number;
+  travel_source: 'estimate' | 'google';
+  starts_at: string | null;
+  /** The simple-rules new day. */
+  plan: NewDay;
+  /** Gemini's new day, once someone tapped "Ask AI". */
+  ai_plan: NewDay | null;
+  status: 'open' | 'accepted' | 'kept';
+  chosen: 'rules' | 'ai' | null;
+  /** The stops' times before accepting (Demo mode builds its route from these). */
+  original: Pick<Stop, 'id' | 'planned_time' | 'planned_end' | 'status'>[] | null;
+  decided_by: string | null;
+  decided_at: string | null;
+}
+
+/** What a phone saves when it finds the group will be late. */
+export type NewLateAlert = Pick<
+  LateAlert,
+  'stop_id' | 'trip_id' | 'day_number' | 'checked_at' | 'travel_min' | 'travel_source' | 'starts_at' | 'plan'
+>;

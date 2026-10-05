@@ -10,6 +10,7 @@ import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { tripEntryRoute } from '@/features/trip/routes';
 import { colors } from '@/lib/theme';
 import { DayProgress } from '../components/DayProgress';
+import { LateCard } from '../components/LateCard';
 import { LocationPill, PermissionCard } from '../components/LocationStatus';
 import { NoPlan } from '../components/NoPlan';
 import { NowCard } from '../components/NowCard';
@@ -19,7 +20,10 @@ import { useToday } from '../hooks/useToday';
 import { longDate } from '../todayPlan';
 import type { TodayView } from '../types';
 
-/** Today card (prototype screen 6): Now, Next, Done, first-timer tip and the day's progress. */
+/**
+ * Today card (prototype screen 6): Now, Next, Done, first-timer tip and the day's progress.
+ * Running late (screen 7): the late card under Now, with the late stop as its Next.
+ */
 export function TodayScreen() {
   const today = useToday();
   const [hiddenTip, setHiddenTip] = useState<string | null>(null);
@@ -58,6 +62,8 @@ export function TodayScreen() {
   const { now, done } = view;
   const { heading, upNext } = today;
   const tip = now?.tip && hiddenTip !== now.id ? now.tip : null;
+  // The card is for view.next: the Next stop when at a stop, the navy block's stop when on the way.
+  const lateFor = today.late.alert ? view.next : null;
 
   return (
     <Frame title={`Today · Day ${view.day}`} subtitle={[longDate(view.date), place].filter(Boolean).join(' · ')}>
@@ -85,7 +91,11 @@ export function TodayScreen() {
           <NowCard kind="finished" visited={done.length} />
         )}
 
-        {upNext ? (
+        {lateFor ? (
+          <LateCard late={today.late} stop={lateFor} time={today.time} next={now ? { weather: today.weather.next } : null} />
+        ) : null}
+
+        {upNext && !(lateFor && now) ? (
           <>
             <Txt variant="lbl">Next</Txt>
             <NextCard stop={upNext} weather={today.weather.next} />

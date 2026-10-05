@@ -7,6 +7,7 @@ import { now as clockNow, useNow } from '@/lib/clock';
 import { useDemoRoute, useGroupLocation } from '@/lib/location';
 import { useLocationAccess } from '../permission';
 import { todayView } from '../todayPlan';
+import { useLateAlert } from './useLateAlert';
 import { useSaveVisits } from './useSaveVisits';
 import { useWeather } from './useWeather';
 
@@ -32,6 +33,7 @@ export function useToday() {
   const heading = day && !day.now ? day.next : null;
   const upNext = day ? (day.now ? day.next : day.after) : null;
   const weather = useWeather(tripId, day?.now ?? heading, upNext);
+  const late = useLateAlert(tripId, day?.next ?? null);
 
   /** "We're done here": the stop is finished now, without waiting for the 3 minutes away. */
   const doneHere = useCallback(
@@ -61,6 +63,8 @@ export function useToday() {
     heading,
     upNext,
     weather,
+    late,
+    time,
     members: plan.members,
     loading: plan.loading,
     error: plan.error,

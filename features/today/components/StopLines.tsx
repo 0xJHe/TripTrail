@@ -12,10 +12,19 @@ import { WeatherLine } from './WeatherLine';
 
 /** The next stop: "14:00 · Chulia Street street food", price · forecast, and a directions pin. */
 export function NextCard({ stop, weather }: { stop: Stop; weather: WeatherText | null }) {
+  return (
+    <Card testID="next-card">
+      <NextLine stop={stop} weather={weather} />
+    </Card>
+  );
+}
+
+/** The inside of the Next card (also shown at the bottom of the running-late card). */
+export function NextLine({ stop, weather }: { stop: Stop; weather: WeatherText | null }) {
   const time = clockOf(stop.planned_time);
   const title = time ? `${time} · ${stop.name}` : stop.name;
   return (
-    <Card style={styles.between} testID="next-card">
+    <View style={styles.between}>
       <View style={{ flex: 1 }}>
         <Txt variant="h14">{title}</Txt>
         <View style={styles.meta}>
@@ -36,7 +45,7 @@ export function NextCard({ stop, weather }: { stop: Stop; weather: WeatherText |
         style={({ pressed }) => pressed && { opacity: 0.6 }}>
         <Ionicons name="location-outline" size={20} color={colors.textMuted} />
       </Pressable>
-    </Card>
+    </View>
   );
 }
 

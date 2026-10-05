@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from 'react';
 
 import { useStops } from '@/features/planning/hooks/usePlanning';
+import { useLateAlerts } from '@/features/today/hooks/useLateCheck';
+import { beforeNewDays } from '@/features/today/late';
 import { useMembers, useMyMember } from '@/features/trip/hooks/useTrip';
 import { useCurrentTrip } from '@/features/trip/store';
 import { setFakeTime } from '@/lib/clock';
@@ -12,6 +14,7 @@ import { buildDemoRoute, demoDays, pickDemoDay } from '../route';
  * While Demo mode is on: builds the fake route from the open trip's Day plan and hands it
  * to lib/location, and starts the fake clock at the top of Day 1 for a newly opened trip.
  * The day replayed follows the fake time (it moves on to Day 2 once its replay starts).
+ * Accepting a running-late new day doesn't move the replay: it uses the times from before.
  */
 export function useDemoReplay() {
   const enabled = useDemo((s) => s.enabled);
@@ -19,7 +22,12 @@ export function useDemoReplay() {
   const anchor = useDemo((s) => s.anchor);
   const tripId = useCurrentTrip((s) => s.currentTripId) ?? undefined;
   const activeTrip = enabled ? tripId : undefined;
-  const stops = useStops(activeTrip);
+  const stopsQuery = useStops(activeTrip);
+  const alerts = useLateAlerts(activeTrip);
+  const stops = useMemo(
+    () => ({ data: stopsQuery.data ? beforeNewDays(stopsQuery.data, alerts.data ?? []) : undefined, isLoading: stopsQuery.isLoading }),
+    [stopsQuery.data, stopsQuery.isLoading, alerts.data],
+  );
   const members = useMembers(activeTrip);
   const me = useMyMember(activeTrip);
 

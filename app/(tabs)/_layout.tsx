@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
 
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
+import { useLateCheck } from '@/features/today/hooks/useLateCheck';
 import { useVisitTracker } from '@/features/today/hooks/useVisitTracker';
 import { colors, fontSize } from '@/lib/theme';
 
@@ -18,6 +19,8 @@ function tabIcon(name: IconName) {
 export default function TabsLayout() {
   // Ticks stops off on arrive / leave while the app is open, whichever tab is showing.
   useVisitTracker();
+  // Checks whether the group will be late for the next stop (running-late card).
+  useLateCheck();
   return (
     <Tabs
       screenOptions={{

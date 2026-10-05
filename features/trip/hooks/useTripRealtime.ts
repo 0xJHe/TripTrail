@@ -12,6 +12,7 @@ const TABLE_KEYS = {
   votes: 'votes',
   stops: 'stops',
   pins: 'pins',
+  late_alerts: 'lateAlerts',
 } as const;
 
 export type RealtimeTable = keyof typeof TABLE_KEYS;

@@ -1,5 +1,6 @@
 import { sortStops } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
+import { LEAVE_AFTER_MS, LEAVE_M } from '@/features/today/arrival';
 import { haversineMeters, offsetMeters, type LatLng } from '@/lib/distance';
 import type { DemoEvent, DemoMemberTrack, DemoRoute } from '@/lib/location';
 
@@ -23,6 +24,8 @@ export interface RouteMember {
 const MIN = 60_000;
 /** How late the group arrives at the "late" stop. */
 export const LATE_BY_MIN = 20;
+/** The way to the late stop takes at least this long, so leaving is noticed before getting there. */
+export const LATE_LEG_MIN = 12;
 /** How far the wandering member gets from the rest of the group. */
 export const FAR_M = 900;
 const LEAD_IN_MIN = 30;
@@ -72,6 +75,34 @@ export function travelMs(a: LatLng, b: LatLng): number {
   return Math.max(3, Math.round(minutes)) * MIN;
 }
 
+const LEAD_IN_M = 1500;
+
+/** Metres from p to the segment a-b (flat map around a; fine for a few km). */
+function metersToSegment(p: LatLng, a: LatLng, b: LatLng): number {
+  const kx = 111_320 * Math.cos((a.lat * Math.PI) / 180);
+  const ky = 110_540;
+  const [px, py] = [(p.lng - a.lng) * kx, (p.lat - a.lat) * ky];
+  const [bx, by] = [(b.lng - a.lng) * kx, (b.lat - a.lat) * ky];
+  const len = bx * bx + by * by;
+  const f = len === 0 ? 0 : Math.max(0, Math.min(1, (px * bx + py * by) / len));
+  return Math.hypot(px - f * bx, py - f * by);
+}
+
+/**
+ * Where the day's walk starts: 1.5 km from the first stop, from the side that keeps the
+ * walk in furthest from the day's other stops (passing within 100 m would tick one off).
+ */
+function leadInStart(at: LatLng[]): LatLng {
+  let best = { p: offsetMeters(at[0], -LEAD_IN_M * Math.SQRT1_2, -LEAD_IN_M * Math.SQRT1_2), clear: -1 };
+  for (let k = 0; k < 8; k++) {
+    const angle = Math.PI * (1.25 + k / 4); // south-west first, then round the compass
+    const p = offsetMeters(at[0], LEAD_IN_M * Math.cos(angle), LEAD_IN_M * Math.sin(angle));
+    const clear = Math.min(Infinity, ...at.slice(1).map((s) => metersToSegment(s, p, at[0])));
+    if (clear > best.clear + 1) best = { p, clear };
+  }
+  return best.p;
+}
+
 /** Index of the stop with the longest stay among `candidates` (first one wins ties). */
 function longest(candidates: number[], stay: (i: number) => number): number | undefined {
   return candidates.reduce<number | undefined>((best, i) => (best == null || stay(i) > stay(best) ? i : best), undefined);
@@ -101,8 +132,9 @@ export function buildDemoRoute({ tripId, day, stops, members, meId }: BuildInput
   });
   const idx = s.map((_, i) => i);
 
-  // Which stop gets which moment.
-  const late = n >= 2 ? 1 : 0;
+  // Which stop gets which moment. Late: the first stop with a real journey to it.
+  const legMs = (i: number) => (i > 0 ? travelMs(at[i - 1], at[i]) : 0);
+  const late = n >= 2 ? (idx.find((i) => i > 0 && legMs(i) >= LATE_LEG_MIN * MIN) ?? 1) : 0;
   const plannedStay = (i: number) => end[i] - start[i];
   const notLate = idx.filter((i) => i !== late);
   const early = notLate.find((i) => i > late && plannedStay(i) >= 30 * MIN) ?? longest(notLate, plannedStay) ?? late;
@@ -119,7 +151,7 @@ export function buildDemoRoute({ tripId, day, stops, members, meId }: BuildInput
   if (earlyBy > 0) leave[early] = end[early] - earlyBy;
   for (let i = 0; i < n; i++) {
     if (i > 0) {
-      const tr = travelMs(at[i - 1], at[i]);
+      const tr = i === late ? Math.max(legMs(i), LATE_LEG_MIN * MIN) : legMs(i);
       // Late stop: they stayed too long at the one before. Otherwise they leave in time to be on time.
       leave[i - 1] = i === late ? Math.max(leave[i - 1], arrive[i] - tr) : Math.min(leave[i - 1], arrive[i] - tr);
       leave[i - 1] = Math.max(leave[i - 1], arrive[i - 1] + 5 * MIN);
@@ -136,7 +168,7 @@ export function buildDemoRoute({ tripId, day, stops, members, meId }: BuildInput
   const endsAt = Math.max(leave[n - 1] + 30 * MIN, rejoin + 10 * MIN);
 
   // Group path: from 1.5 km out, then stop to stop.
-  const group = [{ t: startsAt, ...offsetMeters(at[0], -1060, -1060) }];
+  const group = [{ t: startsAt, ...leadInStart(at) }];
   for (let i = 0; i < n; i++) group.push({ t: arrive[i], ...at[i] }, { t: leave[i], ...at[i] });
   group.push({ t: endsAt, ...at[n - 1] });
 
@@ -197,10 +229,14 @@ export function buildDemoRoute({ tripId, day, stops, members, meId }: BuildInput
   const rainZone = { ...at[rain], radiusM, startsAt: arrive[rain] + 10 * MIN, endsAt: arrive[rain] + 70 * MIN };
   const rainAt = Math.max(arrive[rain] - 45 * MIN, rain > 0 ? arrive[rain - 1] : startsAt);
 
-  // Late shows once "travel time + now" passes the planned time + 5 min, while still at the stop before.
-  const lateTravel = late > 0 ? travelMs(at[late - 1], at[late]) : 0;
-  const lateAt =
-    late > 0 ? Math.min(Math.max(start[late] + 6 * MIN - lateTravel, arrive[late - 1]), leave[late - 1]) : start[0];
+  // Late shows when the app notices they left the stop before (150 m away for 3 min): the late
+  // stop then starts in under 30 min, and now + travel is past its planned time + 5 min.
+  let lateAt = start[0];
+  if (late > 0) {
+    const leg = haversineMeters(at[late - 1], at[late]);
+    const awayAt = leave[late - 1] + Math.min(1, LEAVE_M / Math.max(leg, 1)) * (arrive[late] - leave[late - 1]);
+    lateAt = Math.min(awayAt + LEAVE_AFTER_MS + 90_000, arrive[late] - MIN);
+  }
 
   const events: DemoEvent[] = [{ at: startsAt, kind: 'start', title: `Day ${day} starts: heading to ${s[0].name}` }];
   s.forEach((x, i) => {

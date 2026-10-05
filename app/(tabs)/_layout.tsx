@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
 
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
+import { useVisitTracker } from '@/features/today/hooks/useVisitTracker';
 import { colors, fontSize } from '@/lib/theme';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -15,6 +16,8 @@ function tabIcon(name: IconName) {
 }
 
 export default function TabsLayout() {
+  // Ticks stops off on arrive / leave while the app is open, whichever tab is showing.
+  useVisitTracker();
   return (
     <Tabs
       screenOptions={{
@@ -27,7 +30,7 @@ export default function TabsLayout() {
         headerRight: () => <SettingsButton />,
       }}>
       <Tabs.Screen name="plan" options={{ title: 'Plan', headerShown: false, tabBarIcon: tabIcon('calendar-outline') }} />
-      <Tabs.Screen name="today" options={{ title: 'Today', tabBarIcon: tabIcon('today') }} />
+      <Tabs.Screen name="today" options={{ title: 'Today', headerShown: false, tabBarIcon: tabIcon('today') }} />
       <Tabs.Screen name="map" options={{ title: 'Map', tabBarIcon: tabIcon('map') }} />
       <Tabs.Screen name="group" options={{ title: 'Group', tabBarIcon: tabIcon('people') }} />
     </Tabs>

@@ -154,6 +154,32 @@ async function gpsAllowed(): Promise<boolean> {
   return status === 'granted';
 }
 
+/** granted; ask = not asked yet (or can ask again); blocked = denied for good, only Settings can turn it on. */
+export type LocationPermission = 'granted' | 'ask' | 'blocked';
+
+const toPermission = (p: Location.LocationPermissionResponse): LocationPermission =>
+  p.status === 'granted' ? 'granted' : p.canAskAgain ? 'ask' : 'blocked';
+
+/** Whether this phone may read GPS, without showing the system prompt. Always granted in Demo mode. */
+export async function locationPermission(): Promise<LocationPermission> {
+  if (isDemoMode()) return 'granted';
+  try {
+    return toPermission(await Location.getForegroundPermissionsAsync());
+  } catch {
+    return 'ask';
+  }
+}
+
+/** Show the system location prompt (call after explaining why). */
+export async function requestLocationPermission(): Promise<LocationPermission> {
+  if (isDemoMode()) return 'granted';
+  try {
+    return toPermission(await Location.requestForegroundPermissionsAsync());
+  } catch {
+    return 'ask';
+  }
+}
+
 /**
  * The group's current location, once. Demo mode: the fake route at now().
  * Real mode: this phone's GPS. null if there is no route / no permission / no fix.

@@ -1,12 +1,11 @@
-import { buildDemoRoute } from '@/features/demo/route';
+import { buildDemoRoute, demoTravelMin, LATE_WARN_MIN } from '@/features/demo/route';
 import type { Stop } from '@/features/planning/types';
 import { applyChanges, emptyTracker, processReadings, readingTimes } from '@/features/today/arrival';
 import { beforeNewDays, checkable, dueChecks, lastLeftAt, lateAlertFor, openAlertFor } from '@/features/today/late';
 import { todayView } from '@/features/today/todayPlan';
 import type { LateAlert } from '@/features/today/types';
-import { haversineMeters } from '@/lib/distance';
-import { sampleRoute } from '@/lib/location';
-import { estimateMinutes, worthAskingGoogle } from '@/supabase/functions/_shared/eta';
+import { sampleRoute, type DemoRoute } from '@/lib/location';
+import { estimateMinutes } from '@/supabase/functions/_shared/eta';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -72,16 +71,22 @@ describe('dueChecks', () => {
   it('checks again when the group leaves a stop and the next starts in under 30 min', () => {
     const done = new Set(['before'] as const);
     expect(dueChecks({ startsAt: start, lastLeft: iso(start - 20 * MIN), now: start - 19 * MIN, done })).toEqual(['left']);
-    expect(dueChecks({ startsAt: start, lastLeft: iso(start + 5 * MIN), now: start + 6 * MIN, done })).toEqual(['left']);
     // Left 45 min before: the "before" check covers it.
     expect(dueChecks({ startsAt: start, lastLeft: iso(start - 45 * MIN), now: start - 44 * MIN, done: none })).toEqual([]);
   });
 
   it('runs at most 2 checks per stop', () => {
     const both = new Set(['before', 'left'] as const);
-    expect(dueChecks({ startsAt: start, lastLeft: iso(start - 5 * MIN), now: start, done: both })).toEqual([]);
+    expect(dueChecks({ startsAt: start, lastLeft: iso(start - 5 * MIN), now: start - 4 * MIN, done: both })).toEqual([]);
     // Both due at once (app was closed): one check marks both.
-    expect(dueChecks({ startsAt: start, lastLeft: iso(start - 5 * MIN), now: start, done: none })).toEqual(['before', 'left']);
+    expect(dueChecks({ startsAt: start, lastLeft: iso(start - 5 * MIN), now: start - 4 * MIN, done: none })).toEqual(['before', 'left']);
+  });
+
+  it('never checks once the stop has started: it is an early warning', () => {
+    expect(dueChecks({ startsAt: start, lastLeft: null, now: start, done: none })).toEqual([]);
+    expect(dueChecks({ startsAt: start, lastLeft: iso(start + 5 * MIN), now: start + 6 * MIN, done: none })).toEqual([]);
+    // Left before the start, but the app only looks after it: too late to warn.
+    expect(dueChecks({ startsAt: start, lastLeft: iso(start - 5 * MIN), now: start + 2 * MIN, done: none })).toEqual([]);
   });
 });
 
@@ -139,44 +144,63 @@ describe('which card shows', () => {
 });
 
 describe("demo route's late moment", () => {
+  /** Stops after replaying a route up to t, like useVisitTracker (a reading every 30 s). */
+  const replay = (r: DemoRoute, stops: Stop[], t: number) => {
+    const readings = readingTimes(r.startsAt - 30_000, t, 30_000).map((x) => {
+      const loc = sampleRoute(r, x);
+      return { ...(loc.me ?? loc.center), at: x };
+    });
+    return applyChanges(stops, processReadings(emptyTracker(), stops, readings).changes);
+  };
+
+  /** What useLateCheck does at time t for the stop the group is heading to. */
+  const check = (r: DemoRoute, stops: Stop[], t: number) => {
+    const now = replay(r, stops, t);
+    const view = todayView({ stage: 'decided', start: '2026-10-12', days: 1, stops: now, now: new Date(t) });
+    if (view.kind !== 'day' || !view.next) throw new Error('expected a next stop');
+    const next = view.next as Stop & { planned_time: string; lat: number; lng: number };
+    const kinds = dueChecks({ startsAt: Date.parse(next.planned_time), lastLeft: lastLeftAt(now, t), now: t, done: new Set() });
+    const here = sampleRoute(r, t).center;
+    const travelMin = Math.max(estimateMinutes(here, next), demoTravelMin(r, next.id, t) ?? 0);
+    const alert = lateAlertFor({ tripId: 't1', next, dayStops: now, now: t, travelMin, source: 'demo' });
+    return { stops: now, view, next, kinds, travelMin, alert };
+  };
+
   const route = buildDemoRoute({ tripId: 't1', day: 1, stops: day, members: [], meId: 'me' })!;
   const late = route.events.find((e) => e.kind === 'late')!;
 
-  /** Stops after replaying the route up to t, like useVisitTracker (a reading every 30 s). */
-  const stopsAt = (t: number) => {
-    const readings = readingTimes(route.startsAt - 30_000, t, 30_000).map((r) => {
-      const loc = sampleRoute(route, r);
-      return { ...(loc.me ?? loc.center), at: r };
-    });
-    return applyChanges(day, processReadings(emptyTracker(), day, readings).changes);
-  };
-
-  it('is the 30-minutes-before check, while the group is still at the stop before (screen 7)', () => {
+  it('comes ~25 min before the late stop starts, while the group is at the stop before (screen 7)', () => {
     expect(late.stopId).toBe(funicular.id);
-    const stops = stopsAt(late.at);
-    expect(stops[0].status).toBe('arrived'); // Now block: the stop before, with We're done here
-    expect(stops[1].status).toBe('planned');
+    expect(late.at).toBe(start - LATE_WARN_MIN * MIN);
+    const c = check(route, day, late.at);
+    expect(c.view.now?.id).toBe(day[0].id); // Now block: the stop before, with We're done here
+    expect(c.next.id).toBe(funicular.id);
+    expect(c.kinds).toEqual(['before']);
+    expect(c.alert).not.toBeNull();
+    expect(c.alert!.plan.items[0]).toMatchObject({ stopId: funicular.id, note: 'next slot' });
+  });
 
-    const view = todayView({ stage: 'decided', start: '2026-10-12', days: 1, stops, now: new Date(late.at) });
-    if (view.kind !== 'day') throw new Error('expected a day');
-    expect(view.now?.id).toBe(day[0].id);
-    expect(view.next?.id).toBe(funicular.id);
-    const kinds = dueChecks({ startsAt: start, lastLeft: lastLeftAt(stops, late.at), now: late.at, done: new Set() });
-    expect(kinds).toEqual(['before']);
+  it("uses the replay's own travel time: they really do get there late", () => {
+    const arrival = route.events.find((e) => e.kind === 'arrive' && e.stopId === funicular.id)!;
+    expect(arrival.at).toBeGreaterThan(start + 5 * MIN);
+    expect(demoTravelMin(route, funicular.id, late.at)).toBe(Math.ceil((arrival.at - late.at) / MIN));
+    expect(demoTravelMin(route, funicular.id, arrival.at + MIN)).toBeNull();
+  });
 
-    // Late by the free estimate, and still late if Google's real time is up to 10 min shorter.
-    const here = sampleRoute(route, late.at).center;
-    const estimate = estimateMinutes(here, funicular as { lat: number; lng: number });
-    expect(worthAskingGoogle(late.at, estimate, start)).toBe(true);
-    const next = view.next as Stop & { planned_time: string };
-    const args = { tripId: 't1', next, dayStops: stops, now: late.at, source: 'estimate' as const };
-    expect(lateAlertFor({ ...args, travelMin: estimate })).not.toBeNull();
-    expect(lateAlertFor({ ...args, travelMin: estimate - 9 })).not.toBeNull();
+  it('shows the same warning if +15 min lands anywhere in the check window instead', () => {
+    for (let t = start - 30 * MIN; t < start; t += 5 * MIN) {
+      const c = check(route, day, t);
+      if (c.next.id !== funicular.id) continue;
+      expect(c.alert).not.toBeNull();
+    }
+  });
+
+  it('never checks after the late stop has started', () => {
+    expect(check(route, day, start + MIN).kinds).toEqual([]);
   });
 
   it('has no other moment between the check window opening and the late moment', () => {
-    const windowOpens = start - 30 * MIN;
-    const between = route.events.filter((e) => e.at >= windowOpens && e.at < late.at);
+    const between = route.events.filter((e) => e.at >= start - 30 * MIN && e.at < late.at);
     expect(between).toEqual([]);
   });
 
@@ -193,66 +217,50 @@ describe("demo route's late moment", () => {
     const r = buildDemoRoute({ tripId: 't1', day: 1, stops: morning, members: [], meId: 'me' })!;
     const ev = r.events.find((e) => e.kind === 'late')!;
     expect(ev.stopId).toBe(morning[2].id); // Blue Mansion, ~700 m from the murals
-
-    const readings = readingTimes(r.startsAt - 30_000, ev.at, 30_000).map((t) => {
-      const loc = sampleRoute(r, t);
-      return { ...(loc.me ?? loc.center), at: t };
-    });
-    const stops = applyChanges(morning, processReadings(emptyTracker(), morning, readings).changes);
-    expect(stops[1].status).toBe('arrived'); // still at the murals
-    const next = stops[2] as Stop & { planned_time: string };
-    const startsAt = Date.parse(next.planned_time);
-    expect(dueChecks({ startsAt, lastLeft: lastLeftAt(stops, ev.at), now: ev.at, done: new Set() })).toEqual(['before']);
-    const here = sampleRoute(r, ev.at).center;
-    const travelMin = estimateMinutes(here, next as { lat: number; lng: number });
-    const alert = lateAlertFor({ tripId: 't1', next, dayStops: stops, now: ev.at, travelMin, source: 'estimate' })!;
-    expect(alert).not.toBeNull();
-    expect(alert.plan.items).toHaveLength(4); // the Blue Mansion and every stop after it
-    expect(alert.plan.items[0]).toMatchObject({ name: 'Cheong Fatt Tze Blue Mansion', note: 'next slot' });
+    const c = check(r, morning, ev.at);
+    expect(c.view.now?.id).toBe(morning[1].id); // still at the murals
+    expect(c.kinds).toEqual(['before']);
+    expect(c.alert!.plan.items).toHaveLength(4); // the Blue Mansion and every stop after it
+    expect(c.alert!.plan.items[0]).toMatchObject({ name: 'Cheong Fatt Tze Blue Mansion', note: 'next slot' });
   });
 
-  it('picks the first early pair at least 1 km apart, so waiting never counts as arriving (Port Dickson)', () => {
+  it('picks the first early pair at least 1 km apart and warns before it starts (Port Dickson)', () => {
     const pd = [
       stop('Teluk Kemang Beach', 2.4465, 101.8566, at(9, 30), at(10)),
       stop('Siva house', 2.4469, 101.8569, at(10, 15), at(10, 30)), // ~55 m from the beach
       stop('Restoran Nelayan Teluk Kemang', 2.4637, 101.8655, at(12), at(13), { category: 'food' }), // ~2 km
-      stop('Pantai Cahaya Negeri', 2.4049, 101.8752, at(15), at(17), { is_outdoor: true }),
+      stop('PD Ostrich Show Farm', 2.4904, 101.8487, at(14, 15), at(15, 45)),
     ];
     const r = buildDemoRoute({ tripId: 't1', day: 1, stops: pd, members: [], meId: 'me' })!;
     const ev = r.events.find((e) => e.kind === 'late')!;
     expect(ev.stopId).toBe(pd[2].id);
-    const readings = readingTimes(r.startsAt - 30_000, ev.at, 30_000).map((t) => {
-      const loc = sampleRoute(r, t);
-      return { ...(loc.me ?? loc.center), at: t };
-    });
-    const stops = applyChanges(pd, processReadings(emptyTracker(), pd, readings).changes);
-    expect(stops.map((x) => x.status)).toEqual(['done', 'arrived', 'planned', 'planned']);
+    expect(ev.at).toBeLessThan(Date.parse(pd[2].planned_time!));
+    const c = check(r, pd, ev.at);
+    expect(c.stops.map((x) => x.status)).toEqual(['done', 'arrived', 'planned', 'planned']);
+    expect(c.alert).not.toBeNull();
   });
 
   it('skips a booked second stop and is late for the third', () => {
-    const withFlight = [
+    const withFerry = [
       stop('Breakfast at Toh Soon', 5.418, 100.3329, at(8), at(8, 45), { category: 'food' }),
       stop('Ferry to Butterworth', 5.4141, 100.3424, at(9), at(9, 30), { is_booked: true }),
       stop('Fort Cornwallis', 5.4207, 100.3436, at(10, 30), at(11, 30), { is_outdoor: true }),
       stop('Lunch at Kapitan', 5.417, 100.3383, at(12, 30), at(13, 30), { category: 'food' }),
     ];
-    const r = buildDemoRoute({ tripId: 't1', day: 1, stops: withFlight, members: [], meId: 'me' })!;
-    expect(r.events.find((e) => e.kind === 'late')!.stopId).toBe(withFlight[2].id);
+    const r = buildDemoRoute({ tripId: 't1', day: 1, stops: withFerry, members: [], meId: 'me' })!;
+    expect(r.events.find((e) => e.kind === 'late')!.stopId).toBe(withFerry[2].id);
   });
 
-  it('works when the stop before starts inside the check window too', () => {
+  it('works when the stop before starts just before the late stop', () => {
     const close = [
       stop('Kopi at Toh Soon', 5.418, 100.3329, at(9, 10), at(9, 25), { category: 'food' }),
       stop('Penang Hill', 5.4239, 100.2691, at(9, 30), at(11)),
     ];
     const r = buildDemoRoute({ tripId: 't1', day: 1, stops: close, members: [], meId: 'me' })!;
     const ev = r.events.find((e) => e.kind === 'late')!;
-    const arriveBefore = r.events.find((e) => e.kind === 'arrive' && e.stopId === close[0].id)!;
-    const hill = Date.parse(close[1].planned_time!);
-    // By the time they reach the stop before, the estimate from there already says late.
-    const est = estimateMinutes(close[0] as { lat: number; lng: number }, close[1] as { lat: number; lng: number });
-    expect(arriveBefore.at + est * MIN).toBeGreaterThan(hill + 5 * MIN);
-    expect(ev.at).toBeGreaterThan(arriveBefore.at);
-    expect(haversineMeters(sampleRoute(r, ev.at).center, close[0] as { lat: number; lng: number })).toBeLessThan(100);
+    expect(ev.at).toBeLessThan(Date.parse(close[1].planned_time!));
+    const c = check(r, close, ev.at);
+    expect(c.view.now?.id).toBe(close[0].id);
+    expect(c.alert).not.toBeNull();
   });
 });

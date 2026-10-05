@@ -2,7 +2,7 @@ import { sortStops } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { haversineMeters, offsetMeters, type LatLng } from '@/lib/distance';
 import type { DemoEvent, DemoMemberTrack, DemoRoute } from '@/lib/location';
-import { CHECK_BEFORE_MIN, estimateMinutes, LATE_AFTER_MIN } from '@/supabase/functions/_shared/eta';
+import { CHECK_BEFORE_MIN } from '@/supabase/functions/_shared/eta';
 
 /**
  * Builds the fake day that Demo mode replays, from the trip's real Day plan.
@@ -24,13 +24,13 @@ export interface RouteMember {
 
 const MIN = 60_000;
 /** How late the group arrives at the "late" stop. */
-export const LATE_BY_MIN = 20;
+export const LATE_BY_MIN = 10;
+/** The running-late warning comes this long before the late stop starts (prototype screen 7). */
+export const LATE_WARN_MIN = 25;
 /** The way to the late stop takes at least this long. */
 export const LATE_LEG_MIN = 12;
 /** The late stop and the stop before it should be this far apart, so waiting at one never counts as arriving at the other. */
 export const LATE_APART_M = 1000;
-/** Extra late at the running-late moment, so Google's real travel time (often shorter than the estimate) still says late. */
-export const LATE_MARGIN_MIN = 10;
 /** How far the wandering member gets from the rest of the group. */
 export const FAR_M = 900;
 const LEAD_IN_MIN = 30;
@@ -71,6 +71,15 @@ export function pickDemoDay(stops: RouteStop[], t: number | null): number | null
   if (days.length === 0) return null;
   if (t == null) return days[0].day;
   return [...days].reverse().find((d) => d.startsAt <= t)?.day ?? days[0].day;
+}
+
+/**
+ * Demo mode's real travel time to a stop: minutes until the replay gets there (null if it
+ * never does, or already has). The running-late check uses it instead of Google.
+ */
+export function demoTravelMin(route: DemoRoute, stopId: string, t: number): number | null {
+  const arrival = route.events.find((e) => e.kind === 'arrive' && e.stopId === stopId);
+  return arrival && arrival.at > t ? Math.ceil((arrival.at - t) / MIN) : null;
 }
 
 /** Rough door-to-door time: walk up to 1.2 km, else a car at ~25 km/h plus 5 min. */
@@ -165,23 +174,22 @@ export function buildDemoRoute({ tripId, day, stops, members, meId }: BuildInput
   arrive[late] += LATE_BY_MIN * MIN;
   const earlyBy = Math.min(40 * MIN, end[early] - arrive[early] - 5 * MIN);
   if (earlyBy > 0) leave[early] = end[early] - earlyBy;
-  // Running late shows through the check ~30 min before the late stop starts, while the group
-  // is still at the stop before: they stay there until the free estimate from there says late.
+  // Running late shows through the check ~30 min before the late stop starts (about 25 min
+  // before), while the group is still at the stop before: they stay too long and arrive late.
+  // In Demo mode the check's travel time is the replay's own (demoTravelMin), so it says late.
   const checkFrom = start[late] - CHECK_BEFORE_MIN * MIN;
-  const lateBy =
-    late > 0 ? start[late] + (LATE_AFTER_MIN + LATE_MARGIN_MIN) * MIN - estimateMinutes(at[late - 1], at[late]) * MIN : start[0];
+  const lateTr = Math.min(Math.max(legMs(late), LATE_LEG_MIN * MIN), 30 * MIN);
   let lateAt = start[0];
+  // They must already be at the stop before when the warning comes.
+  if (late > 0) arrive[late - 1] = Math.min(arrive[late - 1], start[late] - 10 * MIN);
   for (let i = 0; i < n; i++) {
     if (i === late && late > 0) {
-      // Arriving at the stop before inside the check window would run the check too soon: arrive late there too.
-      if (arrive[i - 1] >= checkFrom - MIN) arrive[i - 1] = Math.max(arrive[i - 1], lateBy);
-      lateAt = Math.max(checkFrom, lateBy, arrive[i - 1] + MIN);
-      const tr = Math.max(legMs(i), LATE_LEG_MIN * MIN);
-      arrive[i] = Math.max(arrive[i], lateAt + 5 * MIN + tr);
+      lateAt = Math.min(Math.max(start[late] - LATE_WARN_MIN * MIN, arrive[i - 1] + MIN), start[late] - 2 * MIN);
+      arrive[i] = Math.max(arrive[i], lateAt + 5 * MIN + lateTr);
       leave[i - 1] = Math.max(leave[i - 1], arrive[i - 1] + 5 * MIN);
     }
     if (i > 0) {
-      const tr = i === late ? Math.max(legMs(i), LATE_LEG_MIN * MIN) : legMs(i);
+      const tr = i === late ? lateTr : legMs(i);
       // Late stop: they stayed too long at the one before. Otherwise they leave in time to be on time.
       leave[i - 1] = i === late ? Math.max(leave[i - 1], arrive[i] - tr) : Math.min(leave[i - 1], arrive[i] - tr);
       leave[i - 1] = Math.max(leave[i - 1], arrive[i - 1] + 5 * MIN);

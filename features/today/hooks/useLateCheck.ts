@@ -4,14 +4,16 @@ import { useEffect, useRef, useState } from 'react';
 import { planningKeys, useStops } from '@/features/planning/hooks/usePlanning';
 import { dayCount, planStart, sortStops } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
+import { demoTravelMin } from '@/features/demo/route';
 import { useTrip } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
 import { useCurrentTrip } from '@/features/trip/store';
 import { now, useNow } from '@/lib/clock';
-import { getGroupLocation, useDemoRoute } from '@/lib/location';
+import { getGroupLocation, useDemoRoute, type DemoRoute } from '@/lib/location';
 import { estimateMinutes, worthAskingGoogle, type CheckKind } from '@/supabase/functions/_shared/eta';
 import { fetchEta, fetchLateAlerts, raiseLateAlert, undoLateAlerts } from '../api';
 import { checkable, dueChecks, lastLeftAt, lateAlertFor } from '../late';
+import type { LateAlert } from '../types';
 import { useLocationAccess } from '../permission';
 import { todayView } from '../todayPlan';
 
@@ -42,7 +44,8 @@ export function useLateCheck() {
   const stops = useStops(tripId);
   const alerts = useLateAlerts(tripId);
   useTripRealtime(tripId, ['late_alerts']);
-  const demo = useDemoRoute((s) => s.route) != null;
+  const route = useDemoRoute((s) => s.route);
+  const demo = route != null;
   const permission = useLocationAccess((s) => s.permission);
   const time = useNow().getTime();
   const queryClient = useQueryClient();
@@ -107,7 +110,7 @@ export function useLateCheck() {
       const at = now().getTime();
       const loc = await getGroupLocation();
       if (!loc) return; // no position yet: try again on the next tick
-      const travel = await travelMinutes(tripId, next, kinds[0], loc.center, at);
+      const travel = await travelMinutes(tripId, next, kinds[0], loc.center, at, route);
       // Both due at once (e.g. the app was closed): one check covers both.
       for (const k of kinds) done.current.set(`${next.id}:${k}`, at);
       const alert = lateAlertFor({ tripId, next, dayStops, now: at, ...travel });
@@ -124,18 +127,24 @@ export function useLateCheck() {
           setRound((r) => r + 1);
         }
       });
-  }, [tripId, trip.data, stops.data, alerts.data, time, demo, permission, queryClient, round]);
+  }, [tripId, trip.data, stops.data, alerts.data, time, demo, route, permission, queryClient, round]);
 }
 
-/** Free estimate; Google's real time instead when the estimate is close to (or past) the start. */
+/**
+ * Free estimate; Google's real time instead when the estimate is close to (or past) the start.
+ * Demo mode: the replay's own time to get there (it knows when the group arrives), no Google.
+ */
 async function travelMinutes(
   tripId: string,
   next: Stop & { planned_time: string; lat: number; lng: number },
   kind: CheckKind,
   from: { lat: number; lng: number },
   at: number,
-): Promise<{ travelMin: number; source: 'estimate' | 'google' }> {
+  route: DemoRoute | null,
+): Promise<{ travelMin: number; source: LateAlert['travel_source'] }> {
   const estimate = estimateMinutes(from, next);
+  const demo = route ? demoTravelMin(route, next.id, at) : null;
+  if (demo != null) return { travelMin: Math.max(estimate, demo), source: 'demo' };
   if (!worthAskingGoogle(at, estimate, Date.parse(next.planned_time))) return { travelMin: estimate, source: 'estimate' };
   try {
     const eta = await fetchEta(tripId, next.id, kind, from);

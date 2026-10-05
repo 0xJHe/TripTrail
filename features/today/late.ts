@@ -8,6 +8,7 @@ import type { LateAlert, NewLateAlert } from './types';
  * to show. Pure functions; useLateCheck feeds them the time, stops and travel time.
  * - Check the next stop once ~30 min before it starts, if the group isn't there yet.
  * - Check once more when the group leaves a stop, if the next one starts in under 30 min.
+ * - Only before the stop's planned start: it's an early warning, never after the fact.
  * - At most 2 checks per stop (one of each); one late card per stop.
  */
 
@@ -26,7 +27,7 @@ export function lastLeftAt(dayStops: Pick<Stop, 'left_at'>[], now: number): stri
   }, null);
 }
 
-/** Checks due now for the next stop (none once both were done). */
+/** Checks due now for the next stop (none once both were done, or once it has started). */
 export function dueChecks(input: {
   /** Planned start of the next stop (ms). */
   startsAt: number;
@@ -37,8 +38,10 @@ export function dueChecks(input: {
 }): CheckKind[] {
   const { startsAt, lastLeft, now, done } = input;
   const due: CheckKind[] = [];
+  if (now >= startsAt) return due;
   if (!done.has('before') && now >= startsAt - CHECK_BEFORE_MIN * MIN) due.push('before');
-  if (!done.has('left') && lastLeft && startsAt - Date.parse(lastLeft) < CHECK_BEFORE_MIN * MIN) due.push('left');
+  const left = lastLeft ? Date.parse(lastLeft) : null;
+  if (!done.has('left') && left != null && left < startsAt && startsAt - left < CHECK_BEFORE_MIN * MIN) due.push('left');
   return due;
 }
 
@@ -52,7 +55,7 @@ export function lateAlertFor(input: {
   dayStops: Stop[];
   now: number;
   travelMin: number;
-  source: 'estimate' | 'google';
+  source: LateAlert['travel_source'];
 }): NewLateAlert | null {
   const { tripId, next, dayStops, now, travelMin, source } = input;
   const startsAt = Date.parse(next.planned_time);

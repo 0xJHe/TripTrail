@@ -341,7 +341,7 @@ create table if not exists late_alerts (
   day_number int not null,
   checked_at timestamptz not null, -- now() of the check (the fake time in Demo mode)
   travel_min int not null,
-  travel_source text not null,     -- estimate | google
+  travel_source text not null,     -- estimate | google | demo
   starts_at timestamptz,           -- the stop's planned start when checked
   plan jsonb not null,             -- the suggested new day
   status text not null default 'open', -- open | accepted | kept

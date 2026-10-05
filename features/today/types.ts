@@ -41,7 +41,8 @@ export interface LateAlert {
   /** now() when the check found them late (the fake time in Demo mode). */
   checked_at: string;
   travel_min: number;
-  travel_source: 'estimate' | 'google';
+  /** demo = Demo mode: the time until the replay reaches the stop. */
+  travel_source: 'estimate' | 'google' | 'demo';
   starts_at: string | null;
   /** The suggested new day (simple rules). */
   plan: NewDay;

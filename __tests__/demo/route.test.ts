@@ -1,4 +1,4 @@
-import { buildDemoRoute, demoDays, FAR_M, pickDemoDay, travelMs, type RouteStop } from '@/features/demo/route';
+import { buildDemoRoute, demoDays, demoTravelMin, FAR_M, pickDemoDay, type RouteStop } from '@/features/demo/route';
 import { centroid, haversineMeters } from '@/lib/distance';
 import { eventsAround, rainSoonAt, sampleRoute, type DemoRoute } from '@/lib/location';
 
@@ -68,16 +68,19 @@ describe('buildDemoRoute', () => {
     route.events.forEach((e, i) => i > 0 && expect(e.at).toBeGreaterThanOrEqual(route.events[i - 1].at));
   });
 
-  it('arrives late at one stop, and the late warning fires before getting there', () => {
+  it('arrives late at one stop, and the late warning comes before it starts', () => {
     const late = event(route, 'late');
     const target = stopOf(late.stopId);
+    const startsAt = Date.parse(target.planned_time!);
     const arrival = route.events.find((e) => e.kind === 'arrive' && e.stopId === target.id)!;
-    expect(arrival.at - Date.parse(target.planned_time!)).toBeGreaterThan(5 * MIN);
+    expect(arrival.at - startsAt).toBeGreaterThan(5 * MIN);
     expect(arrival.title).toMatch(/min late/);
-    // Running-late rule: travel time from here + now > planned time + 5 min.
-    expect(late.at).toBeLessThan(arrival.at);
-    const here = sampleRoute(route, late.at).me!;
-    expect(late.at + travelMs(here, pos(target))).toBeGreaterThan(Date.parse(target.planned_time!) + 5 * MIN);
+    // An early warning: before the planned start, while still at the stop before.
+    expect(late.at).toBeLessThan(startsAt);
+    const before = day1[day1.findIndex((s) => s.id === target.id) - 1];
+    expect(haversineMeters(sampleRoute(route, late.at).me!, pos(before))).toBeLessThan(100);
+    // Running-late rule with the replay's own travel time: now + travel > planned time + 5 min.
+    expect(late.at + demoTravelMin(route, target.id, late.at)! * MIN).toBeGreaterThan(startsAt + 5 * MIN);
   });
 
   it('leaves one stop more than 20 min before its planned end', () => {

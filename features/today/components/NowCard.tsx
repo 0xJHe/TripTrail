@@ -6,12 +6,14 @@ import { clockOf, priceLabel } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { colors, fontFamily } from '@/lib/theme';
 import { directionsUrl } from '../todayPlan';
+import type { WeatherText } from '../weather';
+import { WeatherLine } from './WeatherLine';
 
 type NowCardProps =
   /** The group is at this stop. */
-  | { kind: 'at'; stop: Stop; onDone: () => void; leaving: boolean }
+  | { kind: 'at'; stop: Stop; weather: WeatherText | null; onDone: () => void; onPin: () => void; leaving: boolean }
   /** Between stops: on the way to this one. */
-  | { kind: 'heading'; stop: Stop }
+  | { kind: 'heading'; stop: Stop; weather: WeatherText | null }
   /** Every stop of the day is behind them. */
   | { kind: 'finished'; visited: number };
 
@@ -67,9 +69,17 @@ function StopBody(props: Extract<NowCardProps, { stop: Stop }>) {
       <Txt style={styles.meta} color={META}>
         {line.filter(Boolean).join(' · ')}
       </Txt>
+      {props.weather ? (
+        <View style={{ marginTop: 2 }}>
+          <WeatherLine weather={props.weather} onNavy />
+        </View>
+      ) : null}
       <View style={styles.pills}>
         {props.kind === 'at' ? (
-          <Pill label="We're done here" onPress={props.onDone} busy={props.leaving} />
+          <>
+            <Pill label="We're done here" onPress={props.onDone} busy={props.leaving} />
+            <Pill label="📍 Pin spot" onPress={props.onPin} ghost />
+          </>
         ) : (
           <Pill label="Directions" onPress={() => Linking.openURL(directionsUrl(stop)).catch(() => {})} />
         )}
@@ -78,14 +88,14 @@ function StopBody(props: Extract<NowCardProps, { stop: Stop }>) {
   );
 }
 
-function Pill({ label, onPress, busy }: { label: string; onPress: () => void; busy?: boolean }) {
+function Pill({ label, onPress, busy, ghost }: { label: string; onPress: () => void; busy?: boolean; ghost?: boolean }) {
   return (
     <Pressable
       onPress={busy ? undefined : onPress}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={label.replace('📍 ', '')}
       accessibilityState={{ busy: !!busy }}
-      style={({ pressed }) => [styles.pill, pressed && { opacity: 0.85 }]}>
+      style={({ pressed }) => [styles.pill, ghost && styles.ghost, pressed && { opacity: 0.85 }]}>
       {busy ? <ActivityIndicator color={colors.white} size="small" /> : null}
       <Txt style={styles.pillText} color={colors.white}>
         {label}
@@ -120,5 +130,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: colors.teal,
   },
+  ghost: { backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
   pillText: { fontFamily: fontFamily.bold, fontSize: 12.5, lineHeight: 16 },
 });

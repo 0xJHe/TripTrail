@@ -8,6 +8,7 @@ import { useDemoRoute, useGroupLocation } from '@/lib/location';
 import { useLocationAccess } from '../permission';
 import { todayView } from '../todayPlan';
 import { useSaveVisits } from './useSaveVisits';
+import { useWeather } from './useWeather';
 
 /** Everything the Today tab shows. Arrive / leave detection itself runs in useVisitTracker. */
 export function useToday() {
@@ -26,6 +27,11 @@ export function useToday() {
     () => (trip ? todayView({ stage: trip.stage, start, days, stops, now: time }) : null),
     [trip, start, days, stops, time],
   );
+  const day = view?.kind === 'day' ? view : null;
+  // Between stops the navy block shows where they're heading, so Next is the one after it.
+  const heading = day && !day.now ? day.next : null;
+  const upNext = day ? (day.now ? day.next : day.after) : null;
+  const weather = useWeather(tripId, day?.now ?? heading, upNext);
 
   /** "We're done here": the stop is finished now, without waiting for the 3 minutes away. */
   const doneHere = useCallback(
@@ -52,6 +58,9 @@ export function useToday() {
     tripId,
     trip,
     view,
+    heading,
+    upNext,
+    weather,
     members: plan.members,
     loading: plan.loading,
     error: plan.error,

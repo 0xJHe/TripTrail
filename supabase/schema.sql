@@ -270,6 +270,40 @@ end $$;
 revoke execute on function take_google_call(uuid, int) from public, anon, authenticated;
 grant execute on function take_google_call(uuid, int) to service_role;
 
+-- Weather: max 30 Google Weather calls per trip per day (Malaysia time), separate
+-- from the Places limit. Only the weather Edge Function uses it (service role).
+create table weather_usage (
+  trip_id uuid references trips(id) on delete cascade,
+  day date not null,
+  calls int not null default 0,
+  primary key (trip_id, day)
+);
+alter table weather_usage enable row level security;
+
+create or replace function take_weather_call(p_trip uuid, p_limit int default 30)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare
+  today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
+  used int;
+begin
+  insert into weather_usage (trip_id, day, calls) values (p_trip, today, 1)
+  on conflict (trip_id, day) do update set calls = weather_usage.calls + 1
+    where weather_usage.calls < p_limit
+  returning calls into used;
+  return used is not null;
+end $$;
+revoke execute on function take_weather_call(uuid, int) from public, anon, authenticated;
+grant execute on function take_weather_call(uuid, int) to service_role;
+
+-- Pin photos: private bucket, one folder per trip ("<trip id>/<file>.jpg"); pins.photo_url keeps the path.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('pin-photos', 'pin-photos', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do nothing;
+create policy "pin photos read" on storage.objects for select to authenticated
+  using (bucket_id = 'pin-photos' and public.is_member(((storage.foldername(name))[1])::uuid));
+create policy "pin photos add" on storage.objects for insert to authenticated
+  with check (bucket_id = 'pin-photos' and public.is_member(((storage.foldername(name))[1])::uuid));
+
 -- Realtime
 alter publication supabase_realtime add table
   locations, stops, pins, meet_points, spends, members, votes, trips, preferences, trip_options;

@@ -55,10 +55,8 @@ export function TodayScreen() {
     );
   }
 
-  const { now, next, after, done } = view;
-  // Between stops the navy block shows where they're heading, so Next is the one after it.
-  const heading = !now ? next : null;
-  const upNext = now ? next : after;
+  const { now, done } = view;
+  const { heading, upNext } = today;
   const tip = now?.tip && hiddenTip !== now.id ? now.tip : null;
 
   return (
@@ -73,9 +71,16 @@ export function TodayScreen() {
         )}
 
         {now ? (
-          <NowCard kind="at" stop={now} onDone={() => today.doneHere(now)} leaving={today.leaving} />
+          <NowCard
+            kind="at"
+            stop={now}
+            weather={today.weather.now}
+            onDone={() => today.doneHere(now)}
+            onPin={() => router.push('/pin')}
+            leaving={today.leaving}
+          />
         ) : heading ? (
-          <NowCard kind="heading" stop={heading} />
+          <NowCard kind="heading" stop={heading} weather={today.weather.now} />
         ) : (
           <NowCard kind="finished" visited={done.length} />
         )}
@@ -83,7 +88,7 @@ export function TodayScreen() {
         {upNext ? (
           <>
             <Txt variant="lbl">Next</Txt>
-            <NextCard stop={upNext} />
+            <NextCard stop={upNext} weather={today.weather.next} />
           </>
         ) : null}
 

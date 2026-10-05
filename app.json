@@ -30,6 +30,13 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "TripTrail lets you add a photo to a pinned spot so your group can find it.",
+          "cameraPermission": "TripTrail lets you take a photo of a pinned spot so your group can find it."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#14284F",

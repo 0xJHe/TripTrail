@@ -1,7 +1,7 @@
 import { buildDemoRoute } from '@/features/demo/route';
 import type { Stop } from '@/features/planning/types';
 import { applyChanges, emptyTracker, processReadings, readingTimes } from '@/features/today/arrival';
-import { beforeNewDays, checkable, dayEndsAt, dueChecks, lastLeftAt, lateAlertFor, openAlertFor } from '@/features/today/late';
+import { beforeNewDays, checkable, dueChecks, lastLeftAt, lateAlertFor, openAlertFor } from '@/features/today/late';
 import { todayView } from '@/features/today/todayPlan';
 import type { LateAlert } from '@/features/today/types';
 import { haversineMeters } from '@/lib/distance';
@@ -95,16 +95,12 @@ describe('lateAlertFor', () => {
     expect(alert.plan.items[0]).toMatchObject({ stopId: funicular.id, note: 'next slot' });
     expect(new Date(alert.plan.items[0].start).getHours()).toBe(9);
     expect(new Date(alert.plan.items[0].start).getMinutes()).toBe(40);
-    // The meal after it never moves.
+    // Lunch had time to spare before it, so it stays.
     expect(alert.plan.items[1]).toMatchObject({ name: 'Nasi kandar at Line Clear', start: day[2].planned_time, note: null });
   });
 
   it('stays quiet when they will make it', () => {
     expect(lateAlertFor({ tripId: 't1', next: funicular as Stop & { planned_time: string }, dayStops, now: at(9, 8), travelMin: 27, source: 'estimate' })).toBeNull();
-  });
-
-  it('ends the day at 22:00 on the phone clock', () => {
-    expect(dayEndsAt(at(9, 30))).toBe(at(22));
   });
 });
 

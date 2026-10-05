@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Txt } from '@/components/ui/Txt';
@@ -51,9 +51,7 @@ export function LateCard({ late, stop, time, next }: LateCardProps) {
           <Tile icon="calendar-outline" label="Starts" value={clockOf(stop.planned_time)} />
         </View>
 
-        <NewDayList plan={plan} ai={late.showingAi} />
-        <AiLink late={late} />
-        {late.note ? <Txt variant="s11">{late.note}</Txt> : null}
+        <NewDayList plan={plan} />
 
         <Txt variant="b12" weight="bold" color={plan.costChange > 0 ? colors.red : colors.green}>
           {costText(plan.costChange)}
@@ -64,7 +62,7 @@ export function LateCard({ late, stop, time, next }: LateCardProps) {
             label="Accept new day"
             onPress={late.accept}
             loading={late.deciding === 'accept'}
-            disabled={late.deciding != null || late.asking}
+            disabled={late.deciding != null}
             style={styles.button}
           />
           <Button
@@ -77,6 +75,7 @@ export function LateCard({ late, stop, time, next }: LateCardProps) {
             style={styles.button}
           />
         </View>
+        {late.note ? <Txt variant="s11">{late.note}</Txt> : null}
       </View>
 
       {next ? (
@@ -107,34 +106,6 @@ function Tile({ icon, label, value }: { icon: IconName; label: string; value: st
   );
 }
 
-/** "✨ Ask AI for a better plan", or switch between the AI and the simple plan once there is one. */
-function AiLink({ late }: { late: LateState }) {
-  if (late.asking) {
-    return (
-      <View style={styles.link}>
-        <ActivityIndicator size="small" color={colors.tealDark} />
-        <Txt variant="b12" color={colors.tealDark}>
-          Asking AI for a better plan…
-        </Txt>
-      </View>
-    );
-  }
-  const label = !late.hasAi ? '✨ Ask AI for a better plan' : late.showingAi ? 'Show the simple plan' : '✨ Show the AI plan';
-  return (
-    <Pressable
-      onPress={late.hasAi ? late.toggleAi : late.askAi}
-      disabled={late.deciding != null}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel={label.replace('✨ ', '')}
-      style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>
-      <Txt variant="b12" weight="semibold" color={colors.tealDark}>
-        {label}
-      </Txt>
-    </Pressable>
-  );
-}
-
 const RED_TINT = '#FDEDEB';
 
 const styles = StyleSheet.create({
@@ -162,7 +133,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   tileValue: { fontSize: 13, lineHeight: 17 },
-  link: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', minHeight: 24 },
   buttons: { flexDirection: 'row', gap: 10 },
   button: { flex: 1 },
   next: { borderTopWidth: 1, borderTopColor: RED_TINT, backgroundColor: '#FFF9F8', paddingTop: 11, paddingHorizontal: 14, paddingBottom: 14 },

@@ -304,10 +304,10 @@ create policy "pin photos read" on storage.objects for select to authenticated
 create policy "pin photos add" on storage.objects for insert to authenticated
   with check (bucket_id = 'pin-photos' and public.is_member(((storage.foldername(name))[1])::uuid));
 
--- Running late (migration 005).
+-- Running late (migrations 005, 006).
 -- Paid API calls per trip per day (Malaysia time), by kind: 'routes' (max 20, eta
--- function) and 'ai_replan' (max 5, replan-day function). Separate from the Places and
--- weather counters. Only the Edge Functions use it (service role): RLS on, no policies.
+-- function). Separate from the Places and weather counters. Only the Edge Functions
+-- use it (service role): RLS on, no policies.
 create table if not exists api_usage (
   trip_id uuid references trips(id) on delete cascade,
   day date not null,
@@ -318,7 +318,7 @@ create table if not exists api_usage (
 alter table api_usage enable row level security;
 
 create or replace function take_api_call(p_trip uuid, p_kind text, p_limit int)
-returns boolean language plpgsql security definer set search_path = public as $
+returns boolean language plpgsql security definer set search_path = public as $$
 declare
   today date := (now() at time zone 'Asia/Kuala_Lumpur')::date;
   used int;
@@ -328,13 +328,13 @@ begin
     where api_usage.calls < p_limit
   returning calls into used;
   return used is not null;
-end $;
+end $$;
 revoke execute on function take_api_call(uuid, text, int) from public, anon, authenticated;
 grant execute on function take_api_call(uuid, text, int) to service_role;
 
 -- One running-late card per stop, shared by the group: the first phone that finds the
--- group will be late saves it with the simple-rules new day; everyone sees it through
--- Realtime. "Ask AI" adds ai_plan. Accept / Keep original closes it for everyone.
+-- group will be late saves it with the suggested new day (simple rules); everyone sees
+-- it through Realtime. Accept / Keep original closes it for everyone.
 create table if not exists late_alerts (
   stop_id uuid primary key references stops(id) on delete cascade,
   trip_id uuid not null references trips(id) on delete cascade,
@@ -343,10 +343,8 @@ create table if not exists late_alerts (
   travel_min int not null,
   travel_source text not null,     -- estimate | google
   starts_at timestamptz,           -- the stop's planned start when checked
-  plan jsonb not null,             -- simple-rules new day
-  ai_plan jsonb,                   -- Gemini's new day, once someone asked
+  plan jsonb not null,             -- the suggested new day
   status text not null default 'open', -- open | accepted | kept
-  chosen text,                     -- rules | ai (when accepted)
   original jsonb,                  -- the stops' times before accepting (Demo mode Reset puts them back)
   decided_by uuid references members(id) on delete set null,
   decided_at timestamptz,
@@ -357,14 +355,13 @@ alter table late_alerts enable row level security;
 drop policy if exists "late alerts all" on late_alerts;
 create policy "late alerts all" on late_alerts for all using (is_member(trip_id)) with check (is_member(trip_id));
 
--- Accept a new day ('rules' or 'ai') or keep the original ('keep'), once for the group.
+-- Accept the suggested new day ('rules') or keep the original ('keep'), once for the group.
 -- Accepting moves the stops' times and drops stops in one go; everyone's Today and Plan
 -- change live through Realtime. Returns false if someone already decided.
 create or replace function decide_new_day(p_stop uuid, p_choice text)
-returns boolean language plpgsql security invoker set search_path = public as $
+returns boolean language plpgsql security invoker set search_path = public as $$
 declare
   a late_alerts%rowtype;
-  v_plan jsonb;
   v_me uuid;
 begin
   select * into a from late_alerts where stop_id = p_stop for update;
@@ -377,34 +374,33 @@ begin
     update late_alerts set status = 'kept', decided_by = v_me, decided_at = now() where stop_id = p_stop;
     return true;
   end if;
-  v_plan := case p_choice when 'ai' then a.ai_plan when 'rules' then a.plan end;
-  if v_plan is null then raise exception 'That plan is not there'; end if;
+  if p_choice <> 'rules' then raise exception 'Choose rules or keep'; end if;
 
   update late_alerts set
-    status = 'accepted', chosen = p_choice, decided_by = v_me, decided_at = now(),
+    status = 'accepted', decided_by = v_me, decided_at = now(),
     original = (
       select jsonb_agg(jsonb_build_object('id', s.id, 'planned_time', s.planned_time,
                                           'planned_end', s.planned_end, 'status', s.status))
-      from stops s join jsonb_to_recordset(v_plan->'items') x("stopId" uuid) on s.id = x."stopId"
+      from stops s join jsonb_to_recordset(a.plan->'items') x("stopId" uuid) on s.id = x."stopId"
       where s.trip_id = a.trip_id)
   where stop_id = p_stop;
 
   update stops s set planned_time = x.start, planned_end = x."end"
-    from jsonb_to_recordset(v_plan->'items') x("stopId" uuid, start timestamptz, "end" timestamptz, dropped boolean)
+    from jsonb_to_recordset(a.plan->'items') x("stopId" uuid, start timestamptz, "end" timestamptz, dropped boolean)
    where s.id = x."stopId" and s.trip_id = a.trip_id and s.status = 'planned'
      and not coalesce(x.dropped, false) and x.start is not null;
   update stops s set status = 'dropped'
-    from jsonb_to_recordset(v_plan->'items') x("stopId" uuid, dropped boolean)
+    from jsonb_to_recordset(a.plan->'items') x("stopId" uuid, dropped boolean)
    where s.id = x."stopId" and s.trip_id = a.trip_id and s.status = 'planned'
      and coalesce(x.dropped, false) and not coalesce(s.is_booked, false);
   return true;
-end $;
+end $$;
 
 -- Demo mode Reset: forget running-late cards checked after p_after, putting back the
 -- stop times (and dropped stops) of any that were accepted. Latest first, so a stop
 -- changed twice ends up with its first times.
 create or replace function undo_late_alerts(p_trip uuid, p_after timestamptz)
-returns int language plpgsql security invoker set search_path = public as $
+returns int language plpgsql security invoker set search_path = public as $$
 declare
   a record;
   n int;
@@ -425,7 +421,7 @@ begin
   delete from late_alerts where trip_id = p_trip and checked_at > p_after;
   get diagnostics n = row_count;
   return n;
-end $;
+end $$;
 
 -- Realtime
 alter publication supabase_realtime add table

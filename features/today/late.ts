@@ -1,6 +1,6 @@
 import type { Stop } from '@/features/planning/types';
 import { CHECK_BEFORE_MIN, isLate, type CheckKind } from '@/supabase/functions/_shared/eta';
-import { DAY_ENDS_HOUR, remainingFrom, ruleBasedNewDay } from '@/supabase/functions/_shared/replan';
+import { remainingFrom, ruleBasedNewDay } from '@/supabase/functions/_shared/newDay';
 import type { LateAlert, NewLateAlert } from './types';
 
 /**
@@ -42,12 +42,6 @@ export function dueChecks(input: {
   return due;
 }
 
-/** 22:00 on the phone's clock, on the day of `ms`. */
-export function dayEndsAt(ms: number): number {
-  const d = new Date(ms);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), DAY_ENDS_HOUR, 0).getTime();
-}
-
 /**
  * The late card to save, or null if the group will make it in time.
  * `dayStops` = all of the day's stops (the new day is made from the planned ones from `next` on).
@@ -63,11 +57,7 @@ export function lateAlertFor(input: {
   const { tripId, next, dayStops, now, travelMin, source } = input;
   const startsAt = Date.parse(next.planned_time);
   if (!isLate(now, travelMin, startsAt)) return null;
-  const plan = ruleBasedNewDay({
-    stops: remainingFrom(dayStops, next.id),
-    arriveAt: now + travelMin * MIN,
-    dayEndsAt: dayEndsAt(startsAt),
-  });
+  const plan = ruleBasedNewDay({ stops: remainingFrom(dayStops, next.id), arriveAt: now + travelMin * MIN });
   return {
     stop_id: next.id,
     trip_id: tripId,

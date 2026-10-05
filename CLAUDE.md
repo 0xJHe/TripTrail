@@ -32,8 +32,8 @@ Planning:
 During the trip:
 9. Auto-arrive: stop ticks itself off within ~100 m; real journey time shifts
    later stops (screen 6)
-10. Running late: Now / Travel / Starts tiles, suggested new day, cost change,
-    Accept new day / Keep original (screen 7)
+10. Running late: Now / Travel / Starts tiles, suggested new day (simple rules,
+    no AI), cost change, Accept new day / Keep original (screen 7)
 11. Running early: one nearby suggestion within budget, Add this / Go to next
     stop (screen 8)
 12. Group map: positions + battery %, far-from-group alert, low-battery alert,
@@ -99,8 +99,8 @@ seed/
 supabase/
   schema.sql          tables + RLS
 supabase/functions/   Supabase Edge Functions (Deno), one folder each with index.ts:
-  generate-trip-options  generate-itinerary  replan-day
-  nearby-suggestion      rain-check          eta        halal-check
+  generate-trip-options  generate-itinerary  eta
+  nearby-suggestion      rain-check          halal-check
   _shared/            shared: gemini client, google client, auth check, zod schemas,
                       tripOptions.ts (types + sample options, also imported by lib/ai.ts;
                       files here must stay plain TS with no imports so React Native
@@ -144,7 +144,8 @@ Time and location rule (built; follow it in every live-trip feature):
 - Demo mode lives in lib/demo.ts (Settings > Demo mode, saved on the phone). The fake
   route is built from the open trip's Day plan by features/demo/route.ts: it walks
   stop to stop and includes arriving late, leaving early, rain near an outdoor stop,
-  and one member 900 m away with low battery. The bar at the top (+15 min, Next
+  and one member 900 m away with low battery. The "late" moment is the
+  30-min-before check while the group is still at the stop before (screen 7). The bar at the top (+15 min, Next
   event, Reset) is features/demo/components/DemoBar.tsx.
 
 ## Behaviour rules for you (the agent)
@@ -171,8 +172,17 @@ Time and location rule (built; follow it in every live-trip feature):
 - Arrived: within 100 m of stop for 2 consecutive readings -> status "arrived",
   arrived_at = now. Left: more than 150 m away for 3 minutes after arrived ->
   left_at = now, status "done".
-- Running late: travel_minutes(current position -> next stop) + now >
-  next.planned_time + 5 min -> show late card -> call replan-day.
+- Running late (features/today/late.ts, supabase/functions/_shared/eta.ts + newDay.ts):
+  check the next stop once ~30 min before it starts and once when the group leaves
+  a stop if the next starts in < 30 min (max 2 checks, one card per stop, shared
+  in late_alerts). Travel = straight line at 25 km/h; only if that is within 10 min
+  of the start or later, ask the eta function (Google Routes, one phone per stop,
+  max 20 calls per trip per day). now + travel > planned_time + 5 min -> late card.
+  Suggested new day = simple rules, no AI: the late stop moves to the arrival time
+  ("next slot", even a meal); later stops shift and those with spare time are
+  shortened; only booked stops (hotel, flights) never move; if the day would still
+  end > 30 min after the original plan's end, drop the lowest-priority stop.
+  Accept / Keep original = decide_new_day RPC (once for the group).
 - Running early: left_at < planned_end - 20 min -> show early card -> call
   nearby-suggestion.
 - Rain: rain-check says rain at current position within 60 min and the current

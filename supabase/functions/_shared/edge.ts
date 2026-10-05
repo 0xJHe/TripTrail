@@ -92,7 +92,7 @@ export function readPoint(v: unknown): { lat: number; lng: number } | null {
 }
 
 /**
- * Count one call of `kind` (e.g. 'routes', 'ai_replan') for the trip today with
+ * Count one call of `kind` (e.g. 'routes') for the trip today with
  * take_api_call(); false when `limit` is reached or it can't be counted.
  */
 export async function takeApiCall(admin: Db, tripId: string, kind: string, limit: number, log: (m: string) => void): Promise<boolean> {

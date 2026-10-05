@@ -1,5 +1,5 @@
 import type { Stop, StopStatus } from '@/features/planning/types';
-import type { NewDay } from '@/supabase/functions/_shared/replan';
+import type { NewDay } from '@/supabase/functions/_shared/newDay';
 
 /** The parts of a stop the arrive / leave rules read. */
 export type VisitStop = Pick<Stop, 'id' | 'lat' | 'lng' | 'status' | 'arrived_at' | 'left_at'>;
@@ -42,12 +42,9 @@ export interface LateAlert {
   travel_min: number;
   travel_source: 'estimate' | 'google';
   starts_at: string | null;
-  /** The simple-rules new day. */
+  /** The suggested new day (simple rules). */
   plan: NewDay;
-  /** Gemini's new day, once someone tapped "Ask AI". */
-  ai_plan: NewDay | null;
   status: 'open' | 'accepted' | 'kept';
-  chosen: 'rules' | 'ai' | null;
   /** The stops' times before accepting (Demo mode builds its route from these). */
   original: Pick<Stop, 'id' | 'planned_time' | 'planned_end' | 'status'>[] | null;
   decided_by: string | null;

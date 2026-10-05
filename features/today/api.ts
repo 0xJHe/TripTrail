@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase';
 import type { CheckKind, EtaReply } from '@/supabase/functions/_shared/eta';
-import type { ReplanReply } from '@/supabase/functions/_shared/replan';
 import type { WeatherReply } from '@/supabase/functions/_shared/weather';
 import type { LateAlert, NewLateAlert, VisitChange } from './types';
 
@@ -56,22 +55,8 @@ export async function fetchEta(
   return data ?? { minutes: null, source: null, limited: false, routesCalls: 0 };
 }
 
-/** "Ask AI for a better plan" (replan-day Edge Function). The plan is also saved on the card. */
-export async function askReplan(
-  tripId: string,
-  stopId: string,
-  now: Date,
-  here: { lat: number; lng: number } | null,
-): Promise<ReplanReply> {
-  const { data, error } = await supabase.functions.invoke<ReplanReply>('replan-day', {
-    body: { tripId, stopId, now: now.toISOString(), here, tzOffset: -now.getTimezoneOffset() },
-  });
-  if (error) throw error;
-  return data ?? { plan: null, note: null, limited: false, geminiCalls: 0 };
-}
-
-/** Accept a new day ('rules' / 'ai') or keep the original. False if someone else already decided. */
-export async function decideNewDay(stopId: string, choice: 'rules' | 'ai' | 'keep'): Promise<boolean> {
+/** Accept the suggested new day ('rules') or keep the original. False if someone else already decided. */
+export async function decideNewDay(stopId: string, choice: 'rules' | 'keep'): Promise<boolean> {
   const { data, error } = await supabase.rpc('decide_new_day', { p_stop: stopId, p_choice: choice });
   if (error) throw error;
   return data === true;

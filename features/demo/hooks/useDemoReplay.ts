@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from 'react';
 
 import { useStops } from '@/features/planning/hooks/usePlanning';
+import { beforeEarlyChanges, withEarlyChanges } from '@/features/today/early';
+import { useEarlyAlerts } from '@/features/today/hooks/useEarlyCheck';
 import { useLateAlerts } from '@/features/today/hooks/useLateCheck';
 import { beforeNewDays } from '@/features/today/late';
 import { useMembers, useMyMember } from '@/features/trip/hooks/useTrip';
@@ -15,6 +17,8 @@ import { buildDemoRoute, demoDays, pickDemoDay } from '../route';
  * to lib/location, and starts the fake clock at the top of Day 1 for a newly opened trip.
  * The day replayed follows the fake time (it moves on to Day 2 once its replay starts).
  * Accepting a running-late new day doesn't move the replay: it uses the times from before.
+ * Running early does: the group walks to an added stop, and to a moved one at its new time
+ * (else the running-late check would find them late for it). The day's moments stay put.
  */
 export function useDemoReplay() {
   const enabled = useDemo((s) => s.enabled);
@@ -24,10 +28,17 @@ export function useDemoReplay() {
   const activeTrip = enabled ? tripId : undefined;
   const stopsQuery = useStops(activeTrip);
   const alerts = useLateAlerts(activeTrip);
-  const stops = useMemo(
-    () => ({ data: stopsQuery.data ? beforeNewDays(stopsQuery.data, alerts.data ?? []) : undefined, isLoading: stopsQuery.isLoading }),
-    [stopsQuery.data, stopsQuery.isLoading, alerts.data],
-  );
+  const earlyAlerts = useEarlyAlerts(activeTrip);
+  const stops = useMemo(() => {
+    const all = stopsQuery.data;
+    const late = alerts.data ?? [];
+    const early = earlyAlerts.data ?? [];
+    return {
+      data: all ? withEarlyChanges(beforeNewDays(all, late), early) : undefined,
+      base: all ? beforeNewDays(beforeEarlyChanges(all, early), late) : undefined,
+      isLoading: stopsQuery.isLoading,
+    };
+  }, [stopsQuery.data, stopsQuery.isLoading, alerts.data, earlyAlerts.data]);
   const members = useMembers(activeTrip);
   const me = useMyMember(activeTrip);
 
@@ -38,10 +49,11 @@ export function useDemoReplay() {
       tripId: activeTrip,
       day,
       stops: stops.data,
+      base: stops.base,
       members: (members.data ?? []).map((m) => ({ id: m.id, name: m.display_name })),
       meId: me?.id ?? null,
     });
-  }, [activeTrip, day, stops.data, members.data, me?.id]);
+  }, [activeTrip, day, stops.data, stops.base, members.data, me?.id]);
 
   useEffect(() => {
     setDemoRoute(route);

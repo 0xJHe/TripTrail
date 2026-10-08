@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
-import { planningKeys, useStops } from '@/features/planning/hooks/usePlanning';
+import { useStops } from '@/features/planning/hooks/usePlanning';
 import { dayCount, planStart, sortStops } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { demoTravelMin } from '@/features/demo/route';
@@ -11,7 +11,7 @@ import { useCurrentTrip } from '@/features/trip/store';
 import { now, useNow } from '@/lib/clock';
 import { getGroupLocation, useDemoRoute, type DemoRoute } from '@/lib/location';
 import { estimateMinutes, worthAskingGoogle, type CheckKind } from '@/supabase/functions/_shared/eta';
-import { fetchEta, fetchLateAlerts, raiseLateAlert, undoLateAlerts } from '../api';
+import { fetchEta, fetchLateAlerts, raiseLateAlert } from '../api';
 import { checkable, dueChecks, lastLeftAt, lateAlertFor } from '../late';
 import type { LateAlert } from '../types';
 import { useLocationAccess } from '../permission';
@@ -63,19 +63,14 @@ export function useLateCheck() {
     lastTime.current = null;
   }, [tripId, demo]);
 
-  // Demo mode, the fake clock went back (Reset): forget the checks and cards after it.
+  // Demo mode, the fake clock went back (Reset): forget the checks after it. The cards
+  // themselves are removed with the running-early ones (useEarlyCheck), early first.
   useEffect(() => {
     const last = lastTime.current;
     lastTime.current = time;
-    if (!demo || !tripId || last == null || time >= last) return;
+    if (!demo || last == null || time >= last) return;
     for (const [key, at] of done.current) if (at > time) done.current.delete(key);
-    undoLateAlerts(tripId, new Date(time))
-      .catch((e) => console.warn('Undoing running-late cards failed:', e instanceof Error ? e.message : e))
-      .finally(() => {
-        queryClient.invalidateQueries({ queryKey: lateKeys.alerts(tripId) });
-        queryClient.invalidateQueries({ queryKey: planningKeys.stops(tripId) });
-      });
-  }, [demo, tripId, time, queryClient]);
+  }, [demo, time]);
 
   useEffect(() => {
     if (busy.current) {

@@ -13,6 +13,8 @@ type NowCardProps =
   | { kind: 'at'; stop: Stop; weather: WeatherText | null; onDone: () => void; onPin: () => void; leaving: boolean }
   /** Between stops: on the way to this one. */
   | { kind: 'heading'; stop: Stop; weather: WeatherText | null; onPin: () => void }
+  /** Just left this stop, with time to spare before the next (running early, prototype screen 8). */
+  | { kind: 'left'; stop: Stop; weather: WeatherText | null; onPin: () => void }
   /** Every stop of the day is behind them. */
   | { kind: 'finished'; visited: number };
 
@@ -51,11 +53,13 @@ function StopBody(props: Extract<NowCardProps, { stop: Stop }>) {
   const line =
     props.kind === 'at'
       ? [`Arrived ${clockOf(stop.arrived_at)}`, until && `until ${until}`, priceLabel(stop)]
-      : [stop.planned_time && `Starts ${clockOf(stop.planned_time)}`, priceLabel(stop)];
+      : props.kind === 'left'
+        ? [stop.arrived_at && `Arrived ${clockOf(stop.arrived_at)}`, stop.left_at && `left ${clockOf(stop.left_at)}`, priceLabel(stop)]
+        : [stop.planned_time && `Starts ${clockOf(stop.planned_time)}`, priceLabel(stop)];
   return (
     <>
       <Txt style={styles.k} color={KICKER}>
-        {props.kind === 'at' ? 'Now' : 'On the way to'}
+        {KICKERS[props.kind]}
       </Txt>
       <Txt variant="h22" color={colors.white}>
         {stop.name}
@@ -103,6 +107,7 @@ function Pill({ label, onPress, busy, ghost }: { label: string; onPress: () => v
   );
 }
 
+const KICKERS = { at: 'Now', left: 'Just left', heading: 'On the way to' } as const;
 const KICKER = '#8FE0D2';
 const META = '#C9D8EE';
 

@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
 
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
+import { useEarlyCheck } from '@/features/today/hooks/useEarlyCheck';
 import { useLateCheck } from '@/features/today/hooks/useLateCheck';
 import { useVisitTracker } from '@/features/today/hooks/useVisitTracker';
 import { colors, fontSize } from '@/lib/theme';
@@ -21,6 +22,8 @@ export default function TabsLayout() {
   useVisitTracker();
   // Checks whether the group will be late for the next stop (running-late card).
   useLateCheck();
+  // Checks for 30+ min to spare when the group leaves a stop (running-early card).
+  useEarlyCheck();
   return (
     <Tabs
       screenOptions={{

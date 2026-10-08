@@ -77,14 +77,41 @@ export function estimateMinutes(from: LatLng, to: LatLng): number {
   return Math.max(1, Math.ceil((metersBetween(from, to) / 1000 / ESTIMATE_KMH) * 60));
 }
 
-/** The running-late rule: now + travel > planned start + 5 min. */
-export function isLate(nowMs: number, travelMin: number, startMs: number): boolean {
-  return nowMs + travelMin * MIN > startMs + LATE_AFTER_MIN * MIN;
+/** Running early: this much spare time or more before the next stop shows the early card. */
+export const EARLY_SPARE_MIN = 30;
+
+/**
+ * Spare time before the next stop (minutes): planned start − now − travel.
+ * The one calculation behind both running late and running early. Negative = arriving
+ * after the start.
+ */
+export function spareMinutes(nowMs: number, travelMin: number, startMs: number): number {
+  return (startMs - nowMs) / MIN - travelMin;
 }
 
-/** Worth paying for Google: the free estimate arrives within 10 min of the start, or later. */
+/**
+ * Late, early or on time for the next stop, from one spare-time figure, so the two cards
+ * can never both apply: late = more than 5 min short (now + travel > start + 5 min),
+ * early = 30 min or more to spare.
+ */
+export function paceFor(nowMs: number, travelMin: number, startMs: number): 'late' | 'on-time' | 'early' {
+  const spare = spareMinutes(nowMs, travelMin, startMs);
+  if (spare < -LATE_AFTER_MIN) return 'late';
+  return spare >= EARLY_SPARE_MIN ? 'early' : 'on-time';
+}
+
+/** The running-late rule: now + travel > planned start + 5 min. */
+export function isLate(nowMs: number, travelMin: number, startMs: number): boolean {
+  return paceFor(nowMs, travelMin, startMs) === 'late';
+}
+
+/**
+ * Worth paying for Google: the free estimate arrives within 10 min of the start, or later.
+ * Never true when the same estimate says "early" (30+ min spare), so Google can't turn an
+ * early stop into a late one.
+ */
 export function worthAskingGoogle(nowMs: number, estimateMin: number, startMs: number): boolean {
-  return nowMs + estimateMin * MIN >= startMs - ASK_GOOGLE_WITHIN_MIN * MIN;
+  return spareMinutes(nowMs, estimateMin, startMs) <= ASK_GOOGLE_WITHIN_MIN;
 }
 
 export const etaKey = (stopId: string, kind: CheckKind) => `eta:${stopId}:${kind}`;

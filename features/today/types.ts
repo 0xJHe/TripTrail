@@ -1,4 +1,5 @@
 import type { Stop, StopStatus } from '@/features/planning/types';
+import type { NearbySuggestion } from '@/supabase/functions/_shared/nearby';
 import type { NewDay } from '@/supabase/functions/_shared/newDay';
 
 /** The parts of a stop the arrive / leave rules read. */
@@ -57,4 +58,36 @@ export interface LateAlert {
 export type NewLateAlert = Pick<
   LateAlert,
   'stop_id' | 'trip_id' | 'day_number' | 'checked_at' | 'travel_min' | 'travel_source' | 'starts_at' | 'plan'
+>;
+
+/** A stop's times (what running early changes, and Demo mode Reset puts back). */
+export type StopTimes = Pick<Stop, 'id' | 'planned_time' | 'planned_end'>;
+
+/** Row in `early_alerts`: the group's one running-early card for the stop they're heading to. */
+export interface EarlyAlert {
+  stop_id: string;
+  trip_id: string;
+  day_number: number;
+  /** The stop the group had just left, and when. */
+  left_stop_id: string | null;
+  left_at: string | null;
+  /** now() when the check found spare time (the fake time in Demo mode). */
+  checked_at: string;
+  spare_min: number;
+  travel_min: number;
+  /** The nearby place; null = nothing fits ("Enjoy the extra time"). */
+  suggestion: NearbySuggestion | null;
+  /** offer = "Go to next stop" was tapped: asking whether to move the next stop earlier. */
+  status: 'open' | 'offer' | 'added' | 'moved' | 'kept';
+  added_stop_id: string | null;
+  original: StopTimes[] | null;
+  changed: StopTimes[] | null;
+  decided_by: string | null;
+  decided_at: string | null;
+}
+
+/** What a phone saves when the group has 30+ min to spare. */
+export type NewEarlyAlert = Pick<
+  EarlyAlert,
+  'stop_id' | 'trip_id' | 'day_number' | 'left_stop_id' | 'left_at' | 'checked_at' | 'spare_min' | 'travel_min' | 'suggestion'
 >;

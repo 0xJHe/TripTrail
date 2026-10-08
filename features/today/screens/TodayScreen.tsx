@@ -10,6 +10,7 @@ import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { tripEntryRoute } from '@/features/trip/routes';
 import { colors } from '@/lib/theme';
 import { DayProgress } from '../components/DayProgress';
+import { EarlyCard } from '../components/EarlyCard';
 import { LateCard } from '../components/LateCard';
 import { LocationPill, PermissionCard } from '../components/LocationStatus';
 import { NoPlan } from '../components/NoPlan';
@@ -23,6 +24,7 @@ import type { TodayView } from '../types';
 /**
  * Today card (prototype screen 6): Now, Next, Done, first-timer tip and the day's progress.
  * Running late (screen 7): the late card under Now, with the late stop as its Next.
+ * Running early (screen 8): the stop just left in the navy block, the early card, then Next.
  */
 export function TodayScreen() {
   const today = useToday();
@@ -60,10 +62,12 @@ export function TodayScreen() {
   }
 
   const { now, done } = view;
-  const { heading, upNext } = today;
+  const { heading, leftStop, upNext } = today;
   const tip = now?.tip && hiddenTip !== now.id ? now.tip : null;
   // The card is for view.next: the Next stop when at a stop, the navy block's stop when on the way.
   const lateFor = today.late.alert ? view.next : null;
+  // Running early is only ever for a stop without a late card (late wins), so never both.
+  const earlyFor = !lateFor && today.early.alert ? view.next : null;
 
   return (
     <Frame title={`Today · Day ${view.day}`} subtitle={[longDate(view.date), place].filter(Boolean).join(' · ')}>
@@ -85,6 +89,8 @@ export function TodayScreen() {
             onPin={() => router.push('/pin')}
             leaving={today.leaving}
           />
+        ) : leftStop ? (
+          <NowCard kind="left" stop={leftStop} weather={today.weather.now} onPin={() => router.push('/pin')} />
         ) : heading ? (
           <NowCard kind="heading" stop={heading} weather={today.weather.now} onPin={() => router.push('/pin')} />
         ) : (
@@ -94,6 +100,7 @@ export function TodayScreen() {
         {lateFor ? (
           <LateCard late={today.late} stop={lateFor} time={today.time} next={now ? { weather: today.weather.next } : null} />
         ) : null}
+        {earlyFor ? <EarlyCard early={today.early} stop={earlyFor} left={leftStop} /> : null}
 
         {upNext && !(lateFor && now) ? (
           <>

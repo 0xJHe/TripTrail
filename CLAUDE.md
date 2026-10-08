@@ -145,8 +145,11 @@ Time and location rule (built; follow it in every live-trip feature):
   route is built from the open trip's Day plan by features/demo/route.ts: it walks
   stop to stop and includes arriving late, leaving early, rain near an outdoor stop,
   and one member 900 m away with low battery. The "late" moment is the
-  30-min-before check while the group is still at the stop before (screen 7). The bar at the top (+15 min, Next
-  event, Reset) is features/demo/components/DemoBar.tsx.
+  30-min-before check while the group is still at the stop before (screen 7). The
+  "early" moment is a later stop left with ~45 min to spare before the next (screen 8);
+  the moments are picked from the plan before any running-early change, and the replay
+  follows added / moved stops. Reset undoes early cards, then late ones. The bar at the
+  top (+15 min, Next event, Reset) is features/demo/components/DemoBar.tsx.
 
 ## Behaviour rules for you (the agent)
 
@@ -181,14 +184,32 @@ Time and location rule (built; follow it in every live-trip feature):
   never checked once the start time has passed. Travel = straight line at 25 km/h;
   only if that is within 10 min of the start or later, ask the eta function (Google
   Routes, one phone per stop, max 20 calls per trip per day).
-  now + travel > planned_time + 5 min -> late card.
+  now + travel > planned_time + 5 min (paceFor = "late") -> late card.
   Suggested new day = simple rules, no AI: the late stop moves to the arrival time
   ("next slot", even a meal); later stops shift and those with spare time are
   shortened; only booked stops (hotel, flights) never move; if the day would still
   end > 30 min after the original plan's end, drop the lowest-priority stop.
   Accept / Keep original = decide_new_day RPC (once for the group).
-- Running early: left_at < planned_end - 20 min -> show early card -> call
-  nearby-suggestion.
+- Spare time (ONE shared rule for running late and running early, in
+  supabase/functions/_shared/eta.ts: spareMinutes / paceFor): spare = next stop's
+  planned start − now() − travel. spare < −5 min -> "late"; spare >= 30 min ->
+  "early"; else on time. One figure gives one answer, so both cards can never apply,
+  and the late check only asks Google when spare <= 10 (never when it is "early").
+- Running early (features/today/early.ts, useEarlyCheck, nearby-suggestion function):
+  checked when the group leaves a stop or taps "We're done here", with the free
+  estimate (straight line at 25 km/h, no Google). spare >= 30 min -> early card
+  "You're N minutes ahead". No card if there is no next stop today, if the next stop
+  has a late card (any status: late always wins, and an open late card hides an early
+  one), or if it already had an early card (once per stop, shared in early_alerts).
+  Suggestion: Places Nearby Search (id, name, location, types only) within 1 km,
+  up to 5 places, cached per ~500 m area for 1 h, max 10 searches per trip per day,
+  one phone per stop (pick saved in google_cache). Picked by rules, no AI: skip
+  places in the plan and no-gos; must-have types first, then nearest; meals only at
+  meal times; halal -> "Halal-friendly · not verified"; price from the place type;
+  must leave >= 20 min there. None / Google fails -> "Enjoy the extra time".
+  Add this = new stop now, length spare − walk there − walk on (max 60, min 15);
+  later stops move only if needed. Go to next stop = offer to move the next stop
+  earlier by the spare (5-min steps, never booked stops); decide_early RPC.
 - Rain: rain-check says rain at current position within 60 min and the current
   or next stop is outdoor -> show rain card.
 - Far from group: any member > 500 m from the group centroid -> amber alert.

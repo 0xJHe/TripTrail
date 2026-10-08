@@ -7,6 +7,7 @@ import { now as clockNow, useNow } from '@/lib/clock';
 import { useDemoRoute, useGroupLocation } from '@/lib/location';
 import { useLocationAccess } from '../permission';
 import { todayView } from '../todayPlan';
+import { useEarlyAlert } from './useEarlyAlert';
 import { useLateAlert } from './useLateAlert';
 import { useSaveVisits } from './useSaveVisits';
 import { useWeather } from './useWeather';
@@ -29,11 +30,15 @@ export function useToday() {
     [trip, start, days, stops, time],
   );
   const day = view?.kind === 'day' ? view : null;
-  // Between stops the navy block shows where they're heading, so Next is the one after it.
-  const heading = day && !day.now ? day.next : null;
-  const upNext = day ? (day.now ? day.next : day.after) : null;
-  const weather = useWeather(tripId, day?.now ?? heading, upNext);
+  const dayStops = useMemo(() => (day ? stops.filter((s) => s.day_number === day.day) : []), [stops, day?.day]);
   const late = useLateAlert(tripId, day?.next ?? null);
+  const early = useEarlyAlert(tripId, day?.next ?? null, dayStops);
+  // Running early (screen 8): the navy block shows the stop they just left, Next the one they're heading to.
+  const leftStop = day && !day.now && early.alert ? (dayStops.find((s) => s.id === early.alert!.left_stop_id) ?? null) : null;
+  // Otherwise, between stops the navy block shows where they're heading, so Next is the one after it.
+  const heading = day && !day.now && !leftStop ? day.next : null;
+  const upNext = day ? (day.now || leftStop ? day.next : day.after) : null;
+  const weather = useWeather(tripId, day?.now ?? leftStop ?? heading, upNext);
 
   /** "We're done here": the stop is finished now, without waiting for the 3 minutes away. */
   const doneHere = useCallback(
@@ -61,9 +66,11 @@ export function useToday() {
     trip,
     view,
     heading,
+    leftStop,
     upNext,
     weather,
     late,
+    early,
     time,
     members: plan.members,
     loading: plan.loading,

@@ -3,10 +3,11 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Txt } from '@/components/ui/Txt';
-import { clockOf } from '@/features/planning/stops';
+import { clockOf, durationText } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { colors, fontFamily, formatMoney, shadow } from '@/lib/theme';
 import type { NearbySuggestion } from '@/supabase/functions/_shared/nearby';
+import { aheadOf } from '../early';
 import type { EarlyState } from '../hooks/useEarlyAlert';
 
 interface EarlyCardProps {
@@ -17,13 +18,14 @@ interface EarlyCardProps {
   left: Stop | null;
 }
 
-/** "You're 40 minutes ahead". */
-export const aheadText = (minutes: number) => `You're ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ahead`;
+/** "You're 40 minutes ahead", "You're 1 h 15 min ahead"; null minutes = no planned end to compare with. */
+export const aheadText = (minutes: number | null) =>
+  minutes == null ? "You're ahead of the plan" : `You're ${durationText(minutes, true)} ahead`;
 
 /** "5 min walk · ~RM 15 · within everyone's budget". */
 export function suggestionMeta(s: NearbySuggestion): string {
   return [
-    `${s.walkMin} min walk`,
+    `${durationText(s.walkMin)} walk`,
     s.price > 0 ? formatMoney(s.price, true) : 'Free',
     s.withinBudget ? "within everyone's budget" : null,
   ]
@@ -49,7 +51,7 @@ export function EarlyCard({ early, stop, left }: EarlyCardProps) {
           <Ionicons name="time-outline" size={17} color={colors.green} />
         </View>
         <Txt style={styles.title} color={GREEN_TEXT}>
-          {aheadText(alert.spare_min)}
+          {aheadText(aheadOf(left, alert.left_at))}
         </Txt>
       </View>
       {leftLine ? <Txt variant="b12">{leftLine}</Txt> : null}

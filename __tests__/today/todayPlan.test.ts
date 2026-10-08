@@ -98,6 +98,7 @@ describe('helpers', () => {
     expect(paceLabel([stop(1, 'a', 9, { arrived_at: at(1, 9, 5) })])).toBe('on time');
     expect(paceLabel([stop(1, 'a', 9, { arrived_at: at(1, 8, 50) })])).toBe('on time');
     expect(paceLabel([stop(1, 'a', 9, { arrived_at: at(1, 9, 12) })])).toBe('12 min behind');
+    expect(paceLabel([stop(1, 'a', 9, { arrived_at: at(1, 10, 15) })])).toBe('1 h 15 min behind');
   });
 
   it('tripDayOn counts from the start date', () => {

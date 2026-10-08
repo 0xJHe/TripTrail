@@ -1,8 +1,8 @@
-import { sortStops } from '@/features/planning/stops';
+import { durationText, sortStops } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { haversineMeters, offsetMeters, type LatLng } from '@/lib/distance';
 import type { DemoEvent, DemoMemberTrack, DemoRoute } from '@/lib/location';
-import { CHECK_BEFORE_MIN, EARLY_SPARE_MIN, estimateMinutes, spareMinutes } from '@/supabase/functions/_shared/eta';
+import { CHECK_BEFORE_MIN, EARLY_AHEAD_MIN, EARLY_SPARE_MIN, estimateMinutes, spareMinutes } from '@/supabase/functions/_shared/eta';
 
 /**
  * Builds the fake day that Demo mode replays, from the trip's real Day plan.
@@ -38,6 +38,8 @@ export const FAR_M = 900;
  * needs 30 min, the rest covers the few minutes it takes to notice they've left.
  */
 export const EARLY_DEMO_SPARE_MIN = EARLY_SPARE_MIN + 15;
+/** ...and this long before the early stop's planned end (the card needs 15 min ahead of plan). */
+export const EARLY_DEMO_AHEAD_MIN = EARLY_AHEAD_MIN + 15;
 /** After leaving the early stop they walk this far out in a few minutes (then slowly on). */
 const WALK_OUT_M = 250;
 const WALK_OUT_MIN = 4;
@@ -186,15 +188,16 @@ function pickMoments(s: Usable[]): Moments {
         1);
   const plannedStay = (i: number) => end[i] - start[i];
   const notLate = idx.filter((i) => i !== late);
-  // Early (prototype screen 8): after the late stop, one the group can leave with 45+ min to
-  // spare before the next by the shared spare-time rule (free estimate): at least 25 min before
-  // its planned end, 15 min after getting there, and as close to 45 min to spare as that allows.
-  // Always followed by another stop.
+  // Early (prototype screen 8): after the late stop, one the group can leave both ahead of the
+  // plan and with time to spare, so the card's two rules hold even though the leave is only
+  // noticed a few minutes later: 30+ min before its planned end (the card needs 15 min ahead),
+  // 45+ min to spare before the next by the shared spare-time rule (the card needs 30), and
+  // at least 15 min after getting there. Always followed by another stop.
   const earlyLeave = (i: number): number | null => {
     if (i >= n - 1) return null;
     const latest = start[i + 1] - estimateMinutes(at[i], at[i + 1]) * MIN - EARLY_DEMO_SPARE_MIN * MIN;
-    const leave = Math.max(start[i] + 15 * MIN, Math.min(end[i] - 25 * MIN, latest));
-    return leave <= latest ? leave : null;
+    const leave = Math.max(start[i] + 15 * MIN, Math.min(end[i] - EARLY_DEMO_AHEAD_MIN * MIN, latest));
+    return leave <= latest && end[i] - leave >= EARLY_DEMO_AHEAD_MIN * MIN ? leave : null;
   };
   const early =
     notLate.find((i) => i > late && earlyLeave(i) != null) ??
@@ -350,7 +353,7 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
       at: arrive[i],
       kind: 'arrive',
       stopId: x.id,
-      title: lateMin > 5 ? `Arrived at ${x.name}, ${lateMin} min late` : `Arrived at ${x.name}`,
+      title: lateMin > 5 ? `Arrived at ${x.name}, ${durationText(lateMin)} late` : `Arrived at ${x.name}`,
     });
     const earlyMin = Math.round((end[i] - leave[i]) / MIN);
     // Spare time before the next stop when they leave (shared rule, free estimate).
@@ -361,7 +364,7 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
             at: leave[i],
             kind: 'early',
             stopId: x.id,
-            title: spare >= EARLY_SPARE_MIN ? `Left ${x.name} early: ${spare} min to spare` : `Left ${x.name} ${earlyMin} min early`,
+            title: `Left ${x.name} ${durationText(earlyMin)} early` + (spare >= EARLY_SPARE_MIN ? ` (${durationText(spare)} to spare)` : ''),
           }
         : { at: leave[i], kind: 'leave', stopId: x.id, title: `Left ${x.name}` },
     );

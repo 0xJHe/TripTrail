@@ -11,7 +11,7 @@ import { getGroupLocation, useDemoRoute } from '@/lib/location';
 import { estimateMinutes } from '@/supabase/functions/_shared/eta';
 import type { NearbySuggestion } from '@/supabase/functions/_shared/nearby';
 import { fetchEarlyAlerts, fetchNearby, raiseEarlyAlert, undoDemoMoments } from '../api';
-import { earlyAlertFor, earlySpare, justLeft } from '../early';
+import { earlyAlertFor, earlyCheck, justLeft } from '../early';
 import { checkable } from '../late';
 import { useLocationAccess } from '../permission';
 import { todayView } from '../todayPlan';
@@ -31,9 +31,9 @@ export function useEarlyAlerts(tripId: string | undefined) {
 }
 
 /**
- * When the group leaves a stop (or taps "We're done here"), checks whether there are 30+
- * minutes to spare before the next one and saves the running-early card for everyone, with
- * one nearby suggestion (nearby-suggestion function). Mounted once in the tabs layout.
+ * When the group leaves a stop (or taps "We're done here") 15+ min before its planned end,
+ * checks whether there are 30+ minutes to spare before the next one and saves the
+ * running-early card for everyone, with one nearby suggestion (nearby-suggestion function). Mounted once in the tabs layout.
  * Free straight-line estimate only (no Google for the travel time). Time from lib/clock and
  * position from lib/location, so Demo mode drives it too.
  */
@@ -115,8 +115,9 @@ export function useEarlyCheck() {
       if (!loc) return; // no position yet: try again on the next tick
       done.current.set(left.id, at);
       const travelMin = estimateMinutes(loc.center, next);
-      const spareMin = earlySpare({ next, now: at, travelMin, lateAlerts: lateAlerts.data, earlyAlerts: earlyAlerts.data });
-      if (spareMin == null) return;
+      const early = earlyCheck({ left, next, now: at, travelMin, lateAlerts: lateAlerts.data, earlyAlerts: earlyAlerts.data });
+      if (!early) return;
+      const { spareMin } = early;
       const clock = new Date(at);
       let suggestion: NearbySuggestion | null = null;
       try {

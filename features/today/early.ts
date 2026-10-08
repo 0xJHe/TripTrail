@@ -1,6 +1,6 @@
 import type { NewStop, Stop } from '@/features/planning/types';
 import type { LatLng } from '@/lib/distance';
-import { estimateMinutes, paceFor, spareMinutes } from '@/supabase/functions/_shared/eta';
+import { aheadMinutes, EARLY_AHEAD_MIN, estimateMinutes, paceFor, spareMinutes } from '@/supabase/functions/_shared/eta';
 import { fillMinutes, legMinutes, type NearbySuggestion } from '@/supabase/functions/_shared/nearby';
 import { isFixed, remainingFrom, ruleBasedNewDay } from '@/supabase/functions/_shared/newDay';
 import { checkable } from './late';
@@ -9,10 +9,11 @@ import type { EarlyAlert, LateAlert, NewEarlyAlert, StopTimes } from './types';
 /**
  * Running early (CLAUDE.md "Key logic"), the parts that decide when to show the card and
  * what its buttons change. Pure functions; useEarlyCheck feeds them the time and position.
- * - Checked when the group leaves a stop (or taps "We're done here"): spare time =
- *   next stop's start − now − travel (straight line at 25 km/h), the same calculation
- *   as running late (spareMinutes / paceFor in _shared/eta.ts).
- * - 30 min or more to spare -> early card; never when there is no next stop today.
+ * - Checked when the group leaves a stop (or taps "We're done here").
+ * - Ahead = that stop's planned end − when they left: the number on the card. Needs 15+ min.
+ * - Spare = next stop's start − now − travel (straight line at 25 km/h), the same calculation
+ *   as running late (spareMinutes / paceFor in _shared/eta.ts). Needs 30+ min; it sizes
+ *   "Add this" and the suggestion. Never when there is no next stop today.
  * - Running late always wins: no early card for a stop that has a late card (whatever was
  *   decided), and an open late card hides an early one.
  * - Once per stop the group is heading to.
@@ -37,26 +38,42 @@ export function justLeft<T extends Pick<Stop, 'status' | 'left_at'>>(dayStops: T
 }
 
 /**
- * Whole spare minutes if the early card should show for the trip to `next`, else null:
- * next is still planned with a time and a place and hasn't started, it has no late card
- * (late wins) and no early card yet (once per stop), and the shared rule says "early".
+ * How far ahead of the plan the group was when it left `left`: its planned end − when they
+ * left (the "You're N minutes ahead" on the card). null without a planned end or a leave.
  */
-export function earlySpare(input: {
+export function aheadOf(left: Pick<Stop, 'planned_end'> | null, leftAt: string | null): number | null {
+  if (!left?.planned_end || !leftAt) return null;
+  return aheadMinutes(Date.parse(left.planned_end), Date.parse(leftAt));
+}
+
+/**
+ * Whether the early card shows for the trip to `next`, with its two figures, else null.
+ * All of these must hold:
+ * - the group left `left` at least 15 min before its planned end (ahead of the plan);
+ * - 30+ min to spare before the next stop (shared spare-time rule, so never "late" too);
+ * - next is still planned with a time and a place and hasn't started;
+ * - it has no late card (late wins) and no early card yet (once per stop).
+ */
+export function earlyCheck(input: {
+  /** The stop the group just left. */
+  left: Pick<Stop, 'planned_end' | 'left_at'> | null;
   next: Stop | null;
   now: number;
   /** Free straight-line estimate to the next stop (estimateMinutes). */
   travelMin: number;
   lateAlerts: Pick<LateAlert, 'stop_id'>[];
   earlyAlerts: Pick<EarlyAlert, 'stop_id'>[];
-}): number | null {
-  const { next, now, travelMin, lateAlerts, earlyAlerts } = input;
+}): { aheadMin: number; spareMin: number } | null {
+  const { left, next, now, travelMin, lateAlerts, earlyAlerts } = input;
   if (!checkable(next)) return null;
   const startsAt = Date.parse(next.planned_time);
   if (now >= startsAt) return null;
   if (lateAlerts.some((a) => a.stop_id === next.id)) return null;
   if (earlyAlerts.some((a) => a.stop_id === next.id)) return null;
+  const aheadMin = aheadOf(left, left?.left_at ?? null);
+  if (aheadMin == null || aheadMin < EARLY_AHEAD_MIN) return null;
   if (paceFor(now, travelMin, startsAt) !== 'early') return null;
-  return Math.floor(spareMinutes(now, travelMin, startsAt));
+  return { aheadMin, spareMin: Math.floor(spareMinutes(now, travelMin, startsAt)) };
 }
 
 /** The early card to save. */

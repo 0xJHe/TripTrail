@@ -123,6 +123,8 @@ types.ts. Keep screens under ~200 lines; split into components.
   pinned to the bottom, min height 48.
 - Bottom tabs on every main screen: Plan · Today · Map · Group.
 - Money: estimates shown with "~" (e.g. ~RM 16). Currency RM.
+- Durations: durationText() in features/planning/stops.ts everywhere: "40 min", and
+  hours + minutes from 60 on ("1 h 15 min"); long form for titles ("40 minutes").
 
 ## Demo mode (must always work)
 
@@ -146,7 +148,8 @@ Time and location rule (built; follow it in every live-trip feature):
   stop to stop and includes arriving late, leaving early, rain near an outdoor stop,
   and one member 900 m away with low battery. The "late" moment is the
   30-min-before check while the group is still at the stop before (screen 7). The
-  "early" moment is a later stop left with ~45 min to spare before the next (screen 8);
+  "early" moment is a later stop left 30+ min before its planned end with 45+ min to
+  spare before the next (screen 8);
   the moments are picked from the plan before any running-early change, and the replay
   follows added / moved stops. Reset undoes early cards, then late ones. The bar at the
   top (+15 min, Next event, Reset) is features/demo/components/DemoBar.tsx.
@@ -196,9 +199,11 @@ Time and location rule (built; follow it in every live-trip feature):
   "early"; else on time. One figure gives one answer, so both cards can never apply,
   and the late check only asks Google when spare <= 10 (never when it is "early").
 - Running early (features/today/early.ts, useEarlyCheck, nearby-suggestion function):
-  checked when the group leaves a stop or taps "We're done here", with the free
-  estimate (straight line at 25 km/h, no Google). spare >= 30 min -> early card
-  "You're N minutes ahead". No card if there is no next stop today, if the next stop
+  checked when the group leaves a stop or taps "We're done here". Two figures:
+  ahead = that stop's planned_end − when they left (the number in the title,
+  "You're N minutes ahead"), and spare (shared rule above, free estimate at
+  25 km/h, no Google), which only sizes "Add this" and the suggestion. Card only if
+  ahead >= 15 min AND spare >= 30 min AND not "late". No card if there is no next stop today, if the next stop
   has a late card (any status: late always wins, and an open late card hides an early
   one), or if it already had an early card (once per stop, shared in early_alerts).
   Suggestion: Places Nearby Search (id, name, location, types only) within 1 km,

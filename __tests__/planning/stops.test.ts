@@ -1,5 +1,5 @@
 import { emptyForm, readStopForm } from '@/features/planning/stopForm';
-import { atClock, clockOf, dayCount, draftsToStops, parseClock, priceLabel, sortStops, timeLabel } from '@/features/planning/stops';
+import { atClock, clockOf, dayCount, draftsToStops, durationText, parseClock, priceLabel, sortStops, timeLabel } from '@/features/planning/stops';
 import { sampleItinerary } from '@/lib/ai';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
@@ -101,5 +101,22 @@ describe('stop form', () => {
     expect(readStopForm({ ...form, time: 'noon' }, '2026-10-12')).toEqual({ ok: false, error: 'Time should look like 09:30.' });
     expect(readStopForm({ ...form, endTime: '05:00' }, '2026-10-12')).toEqual({ ok: false, error: 'End time is before the start time.' });
     expect(readStopForm({ ...form, price: 'abc' }, '2026-10-12')).toEqual({ ok: false, error: 'Price should be a number, like 16.' });
+  });
+});
+
+describe('durationText', () => {
+  it('shows minutes under an hour, hours and minutes from 60 on', () => {
+    expect(durationText(40)).toBe('40 min');
+    expect(durationText(59)).toBe('59 min');
+    expect(durationText(60)).toBe('1 h');
+    expect(durationText(75)).toBe('1 h 15 min');
+    expect(durationText(133)).toBe('2 h 13 min');
+    expect(durationText(120)).toBe('2 h');
+  });
+
+  it('spells out short ones in full when asked (the early card title)', () => {
+    expect(durationText(40, true)).toBe('40 minutes');
+    expect(durationText(1, true)).toBe('1 minute');
+    expect(durationText(75, true)).toBe('1 h 15 min');
   });
 });

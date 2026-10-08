@@ -1,5 +1,5 @@
 import { daysBetween, todayISO, type ISODate } from '@/features/planning/dates';
-import { dayDate } from '@/features/planning/stops';
+import { dayDate, durationText } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import type { TripStage } from '@/features/trip/types';
 import { currentStop } from './arrival';
@@ -21,7 +21,7 @@ export function paceLabel(stops: Stop[]): string | null {
     .sort((a, b) => Date.parse(b.arrived_at!) - Date.parse(a.arrived_at!))[0];
   if (!last) return null;
   const late = Math.round((Date.parse(last.arrived_at!) - Date.parse(last.planned_time!)) / MIN);
-  return late > ON_TIME_MIN ? `${late} min behind` : 'on time';
+  return late > ON_TIME_MIN ? `${durationText(late)} behind` : 'on time';
 }
 
 interface TodayInput {

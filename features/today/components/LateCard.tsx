@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Txt } from '@/components/ui/Txt';
-import { clockOf } from '@/features/planning/stops';
+import { clockOf, durationText } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { colors, fontFamily, formatMoney, shadow } from '@/lib/theme';
 import type { LateState } from '../hooks/useLateAlert';
@@ -47,7 +47,7 @@ export function LateCard({ late, stop, time, next }: LateCardProps) {
 
         <View style={styles.tiles}>
           <Tile icon="time-outline" label="Now" value={clockOf(time.toISOString())} />
-          <Tile icon="car-outline" label="Travel" value={`${alert.travel_min} min`} />
+          <Tile icon="car-outline" label="Travel" value={durationText(alert.travel_min)} />
           <Tile icon="calendar-outline" label="Starts" value={clockOf(stop.planned_time)} />
         </View>
 

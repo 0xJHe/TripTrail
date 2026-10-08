@@ -21,6 +21,19 @@ export function clockText(minutes: number): string {
   return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 }
 
+/**
+ * A length of time for people to read: "40 min", or hours and minutes from 60 min on
+ * ("1 h 15 min", "2 h"). `long` spells out short ones in full ("40 minutes", "1 minute").
+ * Use it wherever the app shows minutes that can run past an hour.
+ */
+export function durationText(minutes: number, long = false): string {
+  const m = Math.max(0, Math.round(minutes));
+  if (m < 60) return long ? `${m} ${m === 1 ? 'minute' : 'minutes'}` : `${m} min`;
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  return rest === 0 ? `${h} h` : `${h} h ${rest} min`;
+}
+
 /** Phone-local timestamp for a date and "HH:MM". Stops are planned in the phone's time zone. */
 export function atClock(date: ISODate, clock: string): string | null {
   const minutes = parseClock(clock);

@@ -77,8 +77,19 @@ export function estimateMinutes(from: LatLng, to: LatLng): number {
   return Math.max(1, Math.ceil((metersBetween(from, to) / 1000 / ESTIMATE_KMH) * 60));
 }
 
-/** Running early: this much spare time or more before the next stop shows the early card. */
+/** Running early: this much spare time or more before the next stop shows the early card... */
 export const EARLY_SPARE_MIN = 30;
+/** ...and only if the group left its stop at least this long before the stop's planned end. */
+export const EARLY_AHEAD_MIN = 15;
+
+/**
+ * How far ahead of the plan the group is (minutes): the stop's planned end − when they
+ * actually left it (or tapped "We're done here"). This is the "You're N minutes ahead"
+ * on the early card; the spare time below only sizes what fits before the next stop.
+ */
+export function aheadMinutes(plannedEndMs: number, leftAtMs: number): number {
+  return Math.floor((plannedEndMs - leftAtMs) / MIN);
+}
 
 /**
  * Spare time before the next stop (minutes): planned start − now − travel.

@@ -1,10 +1,11 @@
-import { buildDemoRoute, demoTravelMin, EARLY_DEMO_SPARE_MIN } from '@/features/demo/route';
+import { buildDemoRoute, demoTravelMin, EARLY_DEMO_AHEAD_MIN, EARLY_DEMO_SPARE_MIN } from '@/features/demo/route';
 import type { Stop } from '@/features/planning/types';
 import { applyChanges, emptyTracker, processReadings, readingTimes } from '@/features/today/arrival';
 import {
   beforeEarlyChanges,
   earlyAlertFor,
-  earlySpare,
+  aheadOf,
+  earlyCheck,
   fillStop,
   justLeft,
   moveEarlier,
@@ -18,6 +19,7 @@ import type { EarlyAlert, LateAlert } from '@/features/today/types';
 import { sampleRoute, type DemoRoute } from '@/lib/location';
 import {
   CHECK_BEFORE_MIN,
+  EARLY_AHEAD_MIN,
   EARLY_SPARE_MIN,
   estimateMinutes,
   isLate,
@@ -166,39 +168,74 @@ describe('the shared spare-time rule (running late and running early)', () => {
       for (const travel of [1, 5, 12, 25, 40]) {
         const now = muralsStart - mins * MIN;
         const late = lateAlertFor({ tripId: 't1', next: murals as Stop & { planned_time: string }, dayStops: day, now, travelMin: travel, source: 'estimate' });
-        const early = earlySpare({ next: murals, now, travelMin: travel, lateAlerts: [], earlyAlerts: [] });
+        const early = earlyCheck({ left: leftAhead(now, 30), next: murals, now, travelMin: travel, lateAlerts: [], earlyAlerts: [] });
         expect(late != null && early != null).toBe(false);
       }
     }
   });
 });
 
-describe('earlySpare', () => {
+/** The stop the group just left at `now`, `ahead` minutes before its planned end. */
+const leftAhead = (now: number, ahead: number) => ({ planned_end: iso(now + ahead * MIN), left_at: iso(now) });
+
+describe('earlyCheck', () => {
   const none = { lateAlerts: [], earlyAlerts: [] };
 
-  it('shows the card from 30 min spare, with the spare time in whole minutes', () => {
-    expect(earlySpare({ next: murals, now: muralsStart - 45 * MIN, travelMin: 5, ...none })).toBe(40);
-    expect(earlySpare({ next: murals, now: muralsStart - 35 * MIN, travelMin: 5, ...none })).toBe(30);
-    expect(earlySpare({ next: murals, now: muralsStart - 34 * MIN, travelMin: 5, ...none })).toBeNull();
+  it("shows how far ahead of the plan they are, not the whole gap to the next stop", () => {
+    // Left 20 min before the stop's planned end, with 2 h 13 min until the next one.
+    const now = muralsStart - 135 * MIN;
+    expect(earlyCheck({ left: leftAhead(now, 20), next: murals, now, travelMin: 2, ...none })).toEqual({ aheadMin: 20, spareMin: 133 });
+  });
+
+  it('needs the group at least 15 min ahead of the plan', () => {
+    const now = muralsStart - 135 * MIN;
+    expect(earlyCheck({ left: leftAhead(now, 15), next: murals, now, travelMin: 2, ...none })?.aheadMin).toBe(15);
+    // Left on time (or nearly): a long planned gap alone is no early card.
+    expect(earlyCheck({ left: leftAhead(now, 14), next: murals, now, travelMin: 2, ...none })).toBeNull();
+    expect(earlyCheck({ left: leftAhead(now, 0), next: murals, now, travelMin: 2, ...none })).toBeNull();
+    expect(earlyCheck({ left: { planned_end: null, left_at: iso(now) }, next: murals, now, travelMin: 2, ...none })).toBeNull();
+    expect(earlyCheck({ left: null, next: murals, now, travelMin: 2, ...none })).toBeNull();
+  });
+
+  it('also needs 30 min to spare before the next stop, in whole minutes', () => {
+    const at45 = muralsStart - 45 * MIN;
+    expect(earlyCheck({ left: leftAhead(at45, 40), next: murals, now: at45, travelMin: 5, ...none })?.spareMin).toBe(40);
+    const at35 = muralsStart - 35 * MIN;
+    expect(earlyCheck({ left: leftAhead(at35, 40), next: murals, now: at35, travelMin: 5, ...none })?.spareMin).toBe(30);
+    const at34 = muralsStart - 34 * MIN;
+    expect(earlyCheck({ left: leftAhead(at34, 40), next: murals, now: at34, travelMin: 5, ...none })).toBeNull();
   });
 
   it('needs a next stop today that is still planned, with a time and a place, and not started', () => {
-    expect(earlySpare({ next: null, now: at(13), travelMin: 2, ...none })).toBeNull();
-    expect(earlySpare({ next: { ...murals, status: 'arrived' }, now: at(13), travelMin: 2, ...none })).toBeNull();
-    expect(earlySpare({ next: { ...murals, lat: null }, now: at(13), travelMin: 2, ...none })).toBeNull();
-    expect(earlySpare({ next: murals, now: muralsStart + MIN, travelMin: 2, ...none })).toBeNull();
+    const left = leftAhead(at(13), 30);
+    expect(earlyCheck({ left, next: null, now: at(13), travelMin: 2, ...none })).toBeNull();
+    expect(earlyCheck({ left, next: { ...murals, status: 'arrived' }, now: at(13), travelMin: 2, ...none })).toBeNull();
+    expect(earlyCheck({ left, next: { ...murals, lat: null }, now: at(13), travelMin: 2, ...none })).toBeNull();
+    expect(earlyCheck({ left, next: murals, now: muralsStart + MIN, travelMin: 2, ...none })).toBeNull();
   });
 
   it('never shows for a stop that had a late card, whatever the group decided', () => {
+    const left = leftAhead(at(13), 30);
     for (const status of ['open', 'accepted', 'kept'] as const) {
-      expect(earlySpare({ next: murals, now: at(13), travelMin: 2, lateAlerts: [lateRow(murals.id, status)], earlyAlerts: [] })).toBeNull();
+      expect(earlyCheck({ left, next: murals, now: at(13), travelMin: 2, lateAlerts: [lateRow(murals.id, status)], earlyAlerts: [] })).toBeNull();
     }
     // Each later stop is checked fresh.
-    expect(earlySpare({ next: mansion, now: at(15), travelMin: 2, lateAlerts: [lateRow(murals.id, 'kept')], earlyAlerts: [] })).toBe(58);
+    expect(
+      earlyCheck({ left: leftAhead(at(15), 30), next: mansion, now: at(15), travelMin: 2, lateAlerts: [lateRow(murals.id, 'kept')], earlyAlerts: [] }),
+    ).toEqual({ aheadMin: 30, spareMin: 58 });
   });
 
   it('shows once per stop', () => {
-    expect(earlySpare({ next: murals, now: at(13), travelMin: 2, lateAlerts: [], earlyAlerts: [earlyRow(murals.id, { status: 'kept' })] })).toBeNull();
+    const left = leftAhead(at(13), 30);
+    expect(earlyCheck({ left, next: murals, now: at(13), travelMin: 2, lateAlerts: [], earlyAlerts: [earlyRow(murals.id, { status: 'kept' })] })).toBeNull();
+  });
+});
+
+describe('aheadOf', () => {
+  it("is the stop's planned end minus when the group left", () => {
+    expect(aheadOf({ planned_end: iso(at(13, 30)) }, iso(at(12, 15)))).toBe(75);
+    expect(aheadOf({ planned_end: null }, iso(at(12)))).toBeNull();
+    expect(aheadOf(null, iso(at(12)))).toBeNull();
   });
 });
 
@@ -350,12 +387,12 @@ describe("demo route's early moment", () => {
     const next = view.next as (Stop & { planned_time: string; lat: number; lng: number }) | null;
     const here = sampleRoute(r, t).center;
     const left = justLeft(now, t);
-    const spare = next && !view.now ? earlySpare({ next, now: t, travelMin: estimateMinutes(here, next), lateAlerts: [], earlyAlerts: [] }) : null;
+    const early = next && !view.now ? earlyCheck({ left, next, now: t, travelMin: estimateMinutes(here, next), lateAlerts: [], earlyAlerts: [] }) : null;
     // The running-late check with Demo mode's travel time (the replay's own).
     const lateTravel = next ? Math.max(estimateMinutes(here, next), demoTravelMin(r, next.id, t) ?? 0) : 0;
     const late = next ? lateAlertFor({ tripId: 't1', next, dayStops: now, now: t, travelMin: lateTravel, source: 'demo' }) : null;
     const kinds = next ? dueChecks({ startsAt: Date.parse(next.planned_time), lastLeft: lastLeftAt(now, t), now: t, done: new Set() }) : [];
-    return { stops: now, view, next, left, spare, late, kinds };
+    return { stops: now, view, next, left, early, late, kinds };
   };
 
   const route = buildDemoRoute({ tripId: 't1', day: 1, stops: day, members: [], meId: 'me' })!;
@@ -369,18 +406,21 @@ describe("demo route's early moment", () => {
 
   it('leaves a stop after the late one, with another stop to go', () => {
     expect(early.stopId).toBe(lineClear.id);
-    expect(early.title).toMatch(/min to spare/);
+    expect(early.title).toMatch(/min early (.* to spare)/);
     expect(early.at).toBeGreaterThan(lateMoment.at);
   });
 
-  it('is noticed within a few minutes, with at least 30 min to spare: the early card shows', () => {
+  it('is noticed within a few minutes, 15+ min ahead with 30+ min to spare: the early card shows', () => {
     expect(noticed - early.at).toBeLessThanOrEqual(8 * MIN);
     const c = check(route, day, noticed);
     expect(c.left?.id).toBe(lineClear.id);
     expect(c.view.now).toBeNull();
     expect(c.next?.id).toBe(murals.id);
-    expect(c.spare).not.toBeNull();
-    expect(c.spare!).toBeGreaterThanOrEqual(EARLY_SPARE_MIN);
+    expect(c.early).not.toBeNull();
+    expect(c.early!.aheadMin).toBeGreaterThanOrEqual(EARLY_AHEAD_MIN);
+    expect(c.early!.spareMin).toBeGreaterThanOrEqual(EARLY_SPARE_MIN);
+    // The card's number is how far ahead of the plan they left, not the gap to the next stop.
+    expect(c.early!.aheadMin).toBe(Math.floor((Date.parse(lineClear.planned_end!) - Date.parse(c.left!.left_at!)) / MIN));
     expect(c.late).toBeNull();
   });
 
@@ -391,7 +431,10 @@ describe("demo route's early moment", () => {
     const next = view.next as Stop & { lat: number; lng: number };
     const travelMin = estimateMinutes(sampleRoute(route, early.at).center, next);
     expect(justLeft(now, early.at)?.id).toBe(lineClear.id);
-    expect(earlySpare({ next, now: early.at, travelMin, lateAlerts: [], earlyAlerts: [] })).toBeGreaterThanOrEqual(EARLY_DEMO_SPARE_MIN);
+    const left = justLeft(now, early.at);
+    const card = earlyCheck({ left, next, now: early.at, travelMin, lateAlerts: [], earlyAlerts: [] })!;
+    expect(card.spareMin).toBeGreaterThanOrEqual(EARLY_DEMO_SPARE_MIN);
+    expect(card.aheadMin).toBeGreaterThanOrEqual(EARLY_DEMO_AHEAD_MIN);
   });
 
   it('never meets a late card on the way to the next stop', () => {
@@ -404,7 +447,7 @@ describe("demo route's early moment", () => {
     expect(early.at).toBeGreaterThan(lateStart);
     expect(early.at < lateStart - CHECK_BEFORE_MIN * MIN || early.at > lateMoment.at).toBe(true);
     // And the late moment still has no early card: they haven't left yet there.
-    expect(check(route, day, lateMoment.at).spare).toBeNull();
+    expect(check(route, day, lateMoment.at).early).toBeNull();
   });
 
   it('keeps every moment in place after "Add this", and walks to the added stop on time', () => {
@@ -425,7 +468,7 @@ describe("demo route's early moment", () => {
 
   it('gets to a stop moved earlier on its new time, so no late card follows', () => {
     const c = check(route, day, noticed);
-    const moved = moveEarlier(murals, c.spare!)!;
+    const moved = moveEarlier(murals, c.early!.spareMin)!;
     const stops = day.map((s) => (s.id === murals.id ? { ...s, ...moved } : s));
     const after = buildDemoRoute({ tripId: 't1', day: 1, stops, base: day, members: [], meId: 'me' })!;
     expect(after.events.find((e) => e.kind === 'early')!.at).toBe(early.at);

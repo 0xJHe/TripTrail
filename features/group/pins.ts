@@ -1,4 +1,5 @@
 import { todayISO } from '@/features/planning/dates';
+import { durationText } from '@/features/planning/stops';
 import type { NewStop, Stop } from '@/features/planning/types';
 import { haversineMeters, type LatLng } from '@/lib/distance';
 import type { Pin, PinType } from './types';
@@ -29,7 +30,7 @@ export function pinTitle(pin: Pick<Pin, 'type' | 'name'>): string {
 export function pinDistance(pin: Pin, me: LatLng | null): string | null {
   if (!me) return null;
   const m = haversineMeters(me, pin);
-  if (pin.type === 'vehicle') return m < 40 ? 'right here' : `${Math.max(1, Math.round(m / WALK_M_PER_MIN))} min walk`;
+  if (pin.type === 'vehicle') return m < 40 ? 'right here' : `${durationText(Math.max(1, Math.round(m / WALK_M_PER_MIN)))} walk`;
   if (m < 40) return 'right here';
   return m < 1000 ? `${Math.round(m / 10) * 10} m away` : `${(m / 1000).toFixed(1)} km away`;
 }

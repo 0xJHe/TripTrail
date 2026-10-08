@@ -5,7 +5,10 @@
 //
 // Credit rules:
 // - Field mask: place ID, name, location and types only.
-// - Places are cached per ~500 m area (and type list) for 1 hour, for every trip.
+// - Places are cached per ~500 m area (and radius and type list) for 1 hour, for every
+//   trip; an empty or failed answer only for 10 minutes.
+// - At most 2 searches per stop: 1 km for the must-haves; only if nothing there is usable,
+//   2 km for the must-haves plus a few that suit anyone (park, museum, sight, café).
 // - Max 10 nearby searches per trip per day (its own counter).
 // - One pick per stop, saved for the whole group: one phone asks, the others wait a
 //   moment and read what it saved.
@@ -13,14 +16,18 @@
 export const NEARBY_URL = 'https://places.googleapis.com/v1/places:searchNearby';
 export const NEARBY_FIELDS = 'places.id,places.displayName,places.location,places.types';
 export const DAILY_NEARBY_LIMIT = 10;
-/** Search this far around the group. */
+/** First search this far around the group... */
 export const NEARBY_RADIUS_M = 1000;
+/** ...then once more this far if nothing there was usable. */
+export const WIDER_RADIUS_M = 2000;
 /** Places asked for per search. */
 export const NEARBY_MAX_RESULTS = 5;
 /** Area size for the cache: 0.005° ≈ 550 m. */
 const AREA_STEP = 0.005;
-/** A cached area (and a stop's pick) is reused this long. */
+/** A cached area (and a stop's pick) is reused this long... */
 export const NEARBY_FRESH_MIN = 60;
+/** ...but an empty or failed one only this long, so it's tried again soon. */
+export const EMPTY_FRESH_MIN = 10;
 /** How long another phone waits for the one asking Google about the same stop. */
 export const WAIT_FOR_OTHER_MS = 4_000;
 const WAIT_STEP_MS = 500;
@@ -153,8 +160,11 @@ export const KINDS: Kind[] = [
   },
 ];
 
-/** Searched when none of the group's must-haves maps to a place type. */
-const DEFAULT_KINDS = ['Café', 'Museum', 'Park', 'Sight'];
+/**
+ * The fallback: searched when none of the group's must-haves maps to a place type, and
+ * added to the wider second search, so the nearest of these that fits can still be offered.
+ */
+const FALLBACK_KINDS = ['Café', 'Museum', 'Park', 'Sight'];
 
 /** Breakfast, lunch and dinner (minutes since midnight): only then is a meal suggested. */
 export const MEAL_WINDOWS: [number, number][] = [
@@ -176,16 +186,21 @@ function mealAllowed(req: Pick<NearbyRequest, 'localMinutes' | 'next'>): boolean
   return isMealTime(req.localMinutes) && !req.next.isFood;
 }
 
-/** Kinds worth searching for: the must-haves' kinds, else a few that suit anyone. */
-export function kindsToSearch(req: Pick<NearbyRequest, 'localMinutes' | 'next' | 'prefs'>): Kind[] {
+/**
+ * Kinds worth searching for: the must-haves' kinds (else the fallback ones). The wider
+ * second search adds the fallback kinds to the must-haves'.
+ */
+export function kindsToSearch(req: Pick<NearbyRequest, 'localMinutes' | 'next' | 'prefs'>, wider = false): Kind[] {
   const usable = KINDS.filter((k) => k.food !== 'meal' || mealAllowed(req));
   const wanted = usable.filter((k) => k.mustHaves.some((m) => has(req.prefs.mustHaves, m)));
-  return wanted.length > 0 ? wanted : usable.filter((k) => DEFAULT_KINDS.includes(k.label));
+  const fallback = usable.filter((k) => FALLBACK_KINDS.includes(k.label));
+  if (wanted.length === 0) return fallback;
+  return wider ? [...new Set([...wanted, ...fallback])] : wanted;
 }
 
-/** The includedTypes of the search (sorted, so the same list hits the same cache row). */
-export function typesToSearch(req: Pick<NearbyRequest, 'localMinutes' | 'next' | 'prefs'>): string[] {
-  return [...new Set(kindsToSearch(req).flatMap((k) => k.types))].sort();
+/** The includedTypes of a search (sorted, so the same list hits the same cache row). */
+export function typesToSearch(req: Pick<NearbyRequest, 'localMinutes' | 'next' | 'prefs'>, wider = false): string[] {
+  return [...new Set(kindsToSearch(req, wider).flatMap((k) => k.types))].sort();
 }
 
 // ---------- No-go ----------
@@ -313,15 +328,20 @@ export function areaOf(p: LatLng): { key: string; centre: LatLng } {
 }
 
 export const nearbyKeys = {
-  area: (p: LatLng, types: string[]) => `nearby:${areaOf(p).key}:${types.join(',')}`,
+  area: (p: LatLng, radiusM: number, types: string[]) => `nearby:${areaOf(p).key}:${radiusM}:${types.join(',')}`,
   pick: (stopId: string) => `nearby-pick:${stopId}`,
 };
 
 type Saved<T> = { at: number; value: T };
 
+const isEmpty = (value: unknown) => value == null || (Array.isArray(value) && value.length === 0);
+
+/** Saved and still fresh: an hour for a real answer, 10 min for an empty or failed one. */
 function fresh<T>(deps: NearbyDeps, hit: unknown): hit is Saved<T> {
-  const at = (hit as Saved<T> | undefined)?.at;
-  return typeof at === 'number' && deps.now() - at < NEARBY_FRESH_MIN * MIN;
+  const saved = hit as Saved<T> | undefined;
+  if (typeof saved?.at !== 'number') return false;
+  const minutes = isEmpty(saved.value) ? EMPTY_FRESH_MIN : NEARBY_FRESH_MIN;
+  return deps.now() - saved.at < minutes * MIN;
 }
 
 type RawPlace = {
@@ -342,7 +362,7 @@ export function toPlaces(body: unknown): NearbyPlace[] {
 }
 
 /** One Nearby Search around the area's centre (1 call). */
-export async function searchNearby(deps: NearbyDeps, centre: LatLng, types: string[]): Promise<NearbyPlace[]> {
+export async function searchNearby(deps: NearbyDeps, centre: LatLng, types: string[], radiusM = NEARBY_RADIUS_M): Promise<NearbyPlace[]> {
   const res = await deps.fetch(NEARBY_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': deps.apiKey, 'X-Goog-FieldMask': NEARBY_FIELDS },
@@ -350,23 +370,52 @@ export async function searchNearby(deps: NearbyDeps, centre: LatLng, types: stri
       includedTypes: types,
       maxResultCount: NEARBY_MAX_RESULTS,
       rankPreference: 'DISTANCE',
-      locationRestriction: { circle: { center: { latitude: centre.lat, longitude: centre.lng }, radius: NEARBY_RADIUS_M } },
+      locationRestriction: { circle: { center: { latitude: centre.lat, longitude: centre.lng }, radius: radiusM } },
     }),
   });
   if (!res.ok) throw new Error(`Google Places ${res.status}: ${(await res.text()).slice(0, 200)}`);
   return toPlaces(await res.json());
 }
 
-/** Places around the group: cached area first, else one counted search (saved for an hour). */
-async function areaPlaces(deps: NearbyDeps, req: NearbyRequest): Promise<{ places: NearbyPlace[] | null; limited: boolean; calls: number }> {
-  const types = typesToSearch(req);
-  const key = nearbyKeys.area(req.from, types);
+type Found = { places: NearbyPlace[] | null; limited: boolean; calls: number };
+
+/**
+ * Places around the group: cached area first, else one counted search (saved for an hour,
+ * an empty answer for 10 min). A failed search gives null places (reported, not thrown).
+ */
+async function areaPlaces(deps: NearbyDeps, req: NearbyRequest, wider: boolean, onError: (e: unknown) => void): Promise<Found> {
+  const radiusM = wider ? WIDER_RADIUS_M : NEARBY_RADIUS_M;
+  const types = typesToSearch(req, wider);
+  const key = nearbyKeys.area(req.from, radiusM, types);
   const hit = await deps.cacheGet(key);
   if (fresh<NearbyPlace[]>(deps, hit)) return { places: hit.value, limited: false, calls: 0 };
   if (!(await deps.takeCall())) return { places: null, limited: true, calls: 0 };
-  const places = await searchNearby(deps, areaOf(req.from).centre, types);
-  await deps.cacheSet(key, { at: deps.now(), value: places } satisfies Saved<NearbyPlace[]>);
-  return { places, limited: false, calls: 1 };
+  try {
+    const places = await searchNearby(deps, areaOf(req.from).centre, types, radiusM);
+    await deps.cacheSet(key, { at: deps.now(), value: places } satisfies Saved<NearbyPlace[]>);
+    return { places, limited: false, calls: 1 };
+  } catch (e) {
+    onError(e);
+    return { places: null, limited: false, calls: 1 };
+  }
+}
+
+/**
+ * Up to two searches: 1 km for the must-haves; if nothing there passes the rules, 2 km for
+ * the must-haves plus the fallback kinds (so the nearest park, museum, sight or café that
+ * fits the time, budget and no-go is offered when no must-have place does). No second
+ * search after Google failed or the daily limit was reached: it would end the same way.
+ */
+async function findSuggestion(deps: NearbyDeps, req: NearbyRequest, onError: (e: unknown) => void) {
+  const near = await areaPlaces(deps, req, false, onError);
+  const first = near.places ? pickSuggestion(near.places, req) : null;
+  if (first || !near.places) return { suggestion: first, limited: near.limited, calls: near.calls };
+  const wide = await areaPlaces(deps, req, true, onError);
+  return {
+    suggestion: wide.places ? pickSuggestion(wide.places, req) : null,
+    limited: wide.limited,
+    calls: near.calls + wide.calls,
+  };
 }
 
 const reply = (suggestion: NearbySuggestion | null, limited = false, placesCalls = 0): NearbyReply => ({
@@ -377,9 +426,10 @@ const reply = (suggestion: NearbySuggestion | null, limited = false, placesCalls
 
 /**
  * The suggestion for the trip to one stop. Saved pick first; otherwise one request finds it
- * (area cache, or one counted Google search) and saves it, while any other request for the
- * same stop waits a few seconds and reads that. Never throws: on a failure the suggestion
- * is null ("Enjoy the extra time"), saved too so no other phone pays for the same failure.
+ * (area caches, or up to two counted Google searches) and saves it, while any other request
+ * for the same stop waits a few seconds and reads that. Never throws: when nothing is usable
+ * (or Google fails) the suggestion is null ("Enjoy the extra time"), saved for 10 min so other
+ * phones don't pay for the same answer, but it's tried again soon.
  */
 export async function nearbyFor(deps: NearbyDeps, req: NearbyRequest, onError: (e: unknown) => void = () => {}): Promise<NearbyReply> {
   const key = nearbyKeys.pick(req.stopId);
@@ -396,16 +446,9 @@ export async function nearbyFor(deps: NearbyDeps, req: NearbyRequest, onError: (
       return reply(null); // the other phone is slow: no suggestion this time
     }
     try {
-      let found: Awaited<ReturnType<typeof areaPlaces>>;
-      try {
-        found = await areaPlaces(deps, req);
-      } catch (e) {
-        onError(e);
-        found = { places: null, limited: false, calls: 1 };
-      }
-      const suggestion = found.places ? pickSuggestion(found.places, req) : null;
-      await deps.cacheSet(key, { at: deps.now(), value: suggestion } satisfies Saved<NearbySuggestion | null>);
-      return reply(suggestion, found.limited, found.calls);
+      const found = await findSuggestion(deps, req, onError);
+      await deps.cacheSet(key, { at: deps.now(), value: found.suggestion } satisfies Saved<NearbySuggestion | null>);
+      return reply(found.suggestion, found.limited, found.calls);
     } finally {
       await deps.release(key);
     }

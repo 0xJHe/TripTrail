@@ -6,7 +6,7 @@ import { Txt } from '@/components/ui/Txt';
 import { clockOf, durationText } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { colors, fontFamily, formatMoney, shadow } from '@/lib/theme';
-import type { NearbySuggestion } from '@/supabase/functions/_shared/nearby';
+import { WALK_UNDER_M, type NearbySuggestion } from '@/supabase/functions/_shared/nearby';
 import { aheadOf } from '../early';
 import type { EarlyState } from '../hooks/useEarlyAlert';
 
@@ -25,7 +25,8 @@ export const aheadText = (minutes: number | null) =>
 /** "5 min walk · ~RM 15 · within everyone's budget". */
 export function suggestionMeta(s: NearbySuggestion): string {
   return [
-    `${durationText(s.walkMin)} walk`,
+    // Further than a walk (the wider 2 km search): the time is a ride, as legMinutes works it out.
+    `${durationText(s.walkMin)} ${s.distanceM < WALK_UNDER_M ? 'walk' : 'ride'}`,
     s.price > 0 ? formatMoney(s.price, true) : 'Free',
     s.withinBudget ? "within everyone's budget" : null,
   ]

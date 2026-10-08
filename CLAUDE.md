@@ -206,12 +206,17 @@ Time and location rule (built; follow it in every live-trip feature):
   ahead >= 15 min AND spare >= 30 min AND not "late". No card if there is no next stop today, if the next stop
   has a late card (any status: late always wins, and an open late card hides an early
   one), or if it already had an early card (once per stop, shared in early_alerts).
-  Suggestion: Places Nearby Search (id, name, location, types only) within 1 km,
-  up to 5 places, cached per ~500 m area for 1 h, max 10 searches per trip per day,
-  one phone per stop (pick saved in google_cache). Picked by rules, no AI: skip
-  places in the plan and no-gos; must-have types first, then nearest; meals only at
-  meal times; halal -> "Halal-friendly · not verified"; price from the place type;
-  must leave >= 20 min there. None / Google fails -> "Enjoy the extra time".
+  Suggestion: Places Nearby Search (id, name, location, types only), up to 5 places.
+  Search 1: within 1 km, the must-haves' types. Only if nothing there passes the
+  rules, search 2: within 2 km, the must-haves' types + park, museum, tourist
+  attraction, café (fallback). No search 2 after Google fails or the limit is hit.
+  Cached per ~500 m area (+ radius + types) for 1 h; empty or failed answers only
+  10 min. Max 10 searches per trip per day, one phone per stop (pick saved in
+  google_cache). Picked by rules, no AI: skip places in the plan, no-gos and
+  anything over today's budget left (lowest daily budget − today's stops); must-have
+  types first, then nearest; meals only at meal times; halal -> "Halal-friendly ·
+  not verified"; price from the place type; must leave >= 20 min there. Nothing
+  usable from both searches / Google fails -> "Enjoy the extra time".
   Add this = new stop now, length spare − walk there − walk on (max 60, min 15);
   later stops move only if needed. Go to next stop = offer to move the next stop
   earlier by the spare (5-min steps, never booked stops); decide_early RPC.

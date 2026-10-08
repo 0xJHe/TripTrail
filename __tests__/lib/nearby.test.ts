@@ -261,7 +261,7 @@ describe('nearbyFor', () => {
     const fresh = await nearbyFor(g.deps, request({ stopId: 'c' }));
     expect(fresh).toMatchObject({ placesCalls: 1 });
     expect(fresh.suggestion?.placeId).toBe('p-museum');
-    expect(g.cache.has(nearbyKeys.area(here, typesToSearch(request())))).toBe(true);
+    expect(g.cache.has(nearbyKeys.area(here, 1000, typesToSearch(request())))).toBe(true);
   });
 
   it('waits for the phone already asking about the same stop, then reads its answer', async () => {
@@ -292,9 +292,77 @@ describe('nearbyFor', () => {
     expect(g.locks.size).toBe(0);
   });
 
-  it('gives no suggestion when nothing fits (and saves that too)', async () => {
-    const g = fakeGoogle([{ body: { places: [] } }]);
-    expect((await nearbyFor(g.deps, request())).suggestion).toBeNull();
+  it('only says "Enjoy the extra time" when both searches give nothing usable', async () => {
+    const g = fakeGoogle([{ body: { places: [] } }, { body: googleBody([place('p-atm', 'ATM', ['atm'], 10)]) }]);
+    const reply = await nearbyFor(g.deps, request());
+    expect(reply).toEqual({ suggestion: null, limited: false, placesCalls: 2 });
     expect(g.cache.get(nearbyKeys.pick('stop-chulia'))).toEqual({ at: NOW, value: null });
+  });
+
+  it('keeps an empty answer for 10 minutes only, then asks again', async () => {
+    const g = fakeGoogle([
+      { body: { places: [] } },
+      { body: { places: [] } },
+      { body: googleBody([park]) },
+    ]);
+    expect((await nearbyFor(g.deps, request())).suggestion).toBeNull();
+    g.later(9 * MIN);
+    expect(await nearbyFor(g.deps, request())).toEqual({ suggestion: null, limited: false, placesCalls: 0 });
+    g.later(2 * MIN);
+    const again = await nearbyFor(g.deps, request());
+    expect(again.suggestion?.placeId).toBe('p-park');
+    expect(g.requests).toHaveLength(3);
+  });
+
+  it('keeps a failed answer for 10 minutes only too', async () => {
+    const g = fakeGoogle([{ status: 500, body: {} }, { body: googleBody([park]) }]);
+    expect((await nearbyFor(g.deps, request())).suggestion).toBeNull();
+    g.later(11 * MIN);
+    expect((await nearbyFor(g.deps, request())).suggestion?.placeId).toBe('p-park');
+  });
+});
+
+describe('the wider second search', () => {
+  it('tries once more within 2 km, adding parks, museums, sights and cafés', async () => {
+    const lunch = request({ localMinutes: 12 * 60, next: { ...nextStop, isFood: false } }, { mustHaves: ['Street food'], budgetLeft: 15 });
+    const farPark = place('p-far-park', 'Teluk Kemang Park', ['park'], 1500);
+    const g = fakeGoogle([{ body: googleBody([nasi, seafood]) }, { body: googleBody([nasi, farPark, kettle]) }]);
+    const reply = await nearbyFor(g.deps, lunch);
+    expect(reply.placesCalls).toBe(2);
+    const [first, second] = g.requests.map((r) => JSON.parse(r.init!.body as string));
+    expect(first.locationRestriction.circle.radius).toBe(1000);
+    expect(first.includedTypes).toEqual(['restaurant', 'vegan_restaurant', 'vegetarian_restaurant']);
+    expect(second.locationRestriction.circle.radius).toBe(2000);
+    expect(second.includedTypes).toEqual(
+      ['cafe', 'coffee_shop', 'museum', 'park', 'restaurant', 'tourist_attraction', 'vegan_restaurant', 'vegetarian_restaurant'],
+    );
+    // The restaurants are over the RM 15 left today, so the nearest fallback that fits wins.
+    expect(reply.suggestion).toMatchObject({ placeId: 'p-kettle', reason: 'Café 300 m away · fits your free time', price: 15 });
+  });
+
+  it("isn't needed when the 1 km search already has something usable", async () => {
+    const g = fakeGoogle([{ body: googleBody([museum]) }]);
+    expect((await nearbyFor(g.deps, request({}, { mustHaves: ['Museums'] }))).placesCalls).toBe(1);
+  });
+
+  it('still prefers a must-have place in the wider search', async () => {
+    const farMuseum = place('p-far-museum', 'Penang State Museum', ['museum'], 1800);
+    const g = fakeGoogle([{ body: { places: [] } }, { body: googleBody([park, farMuseum]) }]);
+    const reply = await nearbyFor(g.deps, request({ spareMin: 120 }, { mustHaves: ['Museums'] }));
+    expect(reply.suggestion?.placeId).toBe('p-far-museum');
+    expect(reply.suggestion?.reason).toBe("Museum 1.8 km away · matches your 'museums' must-have");
+  });
+
+  it('is not tried after Google failed or the daily limit was reached', async () => {
+    const failed = fakeGoogle([{ status: 403, body: {} }]);
+    expect((await nearbyFor(failed.deps, request())).placesCalls).toBe(1);
+    expect(failed.requests).toHaveLength(1);
+    const limited = fakeGoogle([], { limit: 0 });
+    expect(await nearbyFor(limited.deps, request())).toEqual({ suggestion: null, limited: true, placesCalls: 0 });
+  });
+
+  it('is skipped by the daily limit (10), saying so', async () => {
+    const g = fakeGoogle([{ body: { places: [] } }], { limit: 1 });
+    expect(await nearbyFor(g.deps, request())).toEqual({ suggestion: null, limited: true, placesCalls: 1 });
   });
 });

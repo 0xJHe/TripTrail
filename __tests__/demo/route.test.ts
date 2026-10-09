@@ -144,6 +144,21 @@ describe('buildDemoRoute', () => {
     expect(one.events.map((e) => e.kind)).toEqual(expect.arrayContaining(['late', 'early', 'rain', 'far']));
   });
 
+  it('leaves a stop with an estimated price, which brings the spend check', () => {
+    const priced = stops.map((s) =>
+      s.name === 'Gurney Drive hawkers'
+        ? { ...s, price: 16, is_estimate: true, category: 'food' as const }
+        : { ...s, price: 0, is_estimate: true },
+    );
+    const r = build(priced);
+    const gurney = priced.find((s) => s.name === 'Gurney Drive hawkers')!;
+    const left = r.events.filter((e) => (e.kind === 'leave' || e.kind === 'early') && e.title.includes('spend check'));
+    expect(left.map((e) => e.stopId)).toEqual([gurney.id]);
+    // The group really goes more than 150 m away afterwards, so the stop is left.
+    const after = sampleRoute(r, left[0].at + 10 * MIN).me!;
+    expect(haversineMeters(after, pos(gurney))).toBeGreaterThan(150);
+  });
+
   it('is null for a day with no placed, timed stops', () => {
     expect(buildDemoRoute({ tripId: 't1', day: 3, stops, members, meId: 'm-me' })).toBeNull();
   });

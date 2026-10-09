@@ -5,6 +5,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 
 import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
+import { SpendCheckCard } from '@/features/money/components/SpendCheckCard';
 import { formatRange } from '@/features/planning/dates';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { tripEntryRoute } from '@/features/trip/routes';
@@ -25,6 +26,7 @@ import type { TodayView } from '../types';
  * Today card (prototype screen 6): Now, Next, Done, first-timer tip and the day's progress.
  * Running late (screen 7): the late card under Now, with the late stop as its Next.
  * Running early (screen 8): the stop just left in the navy block, the early card, then Next.
+ * Spend check (screen 9): under the navy block (or under the late / early card), until answered.
  */
 export function TodayScreen() {
   const today = useToday();
@@ -62,7 +64,9 @@ export function TodayScreen() {
   }
 
   const { now, done } = view;
-  const { heading, leftStop, upNext } = today;
+  const { heading, leftStop, upNext, spend } = today;
+  // The stop the spend check asks about moves to Done once answered.
+  const doneList = spend.stop ? done.filter((s) => s.id !== spend.stop!.id) : done;
   const tip = now?.tip && hiddenTip !== now.id ? now.tip : null;
   // The card is for view.next: the Next stop when at a stop, the navy block's stop when on the way.
   const lateFor = today.late.alert ? view.next : null;
@@ -101,6 +105,7 @@ export function TodayScreen() {
           <LateCard late={today.late} stop={lateFor} time={today.time} next={now ? { weather: today.weather.next } : null} />
         ) : null}
         {earlyFor ? <EarlyCard early={today.early} stop={earlyFor} left={leftStop} /> : null}
+        {spend.stop ? <SpendCheckCard check={spend} named={spend.stop.id !== (now ?? leftStop)?.id} /> : null}
 
         {upNext && !(lateFor && now) ? (
           <>
@@ -109,11 +114,11 @@ export function TodayScreen() {
           </>
         ) : null}
 
-        {done.length > 0 ? (
+        {doneList.length > 0 ? (
           <>
             <Txt variant="lbl">Done</Txt>
-            {done.map((s) => (
-              <DoneRow key={s.id} stop={s} />
+            {doneList.map((s) => (
+              <DoneRow key={s.id} stop={s} cost={spend.costOf(s)} soFar={spend.soFarOf(s)} />
             ))}
           </>
         ) : null}

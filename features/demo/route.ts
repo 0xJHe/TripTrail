@@ -1,3 +1,4 @@
+import { needsSpendCheck } from '@/features/money/spend';
 import { durationText, sortStops } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { haversineMeters, offsetMeters, type LatLng } from '@/lib/distance';
@@ -15,7 +16,7 @@ export type RouteStop = Pick<
   Stop,
   'id' | 'name' | 'day_number' | 'position' | 'lat' | 'lng' | 'planned_time' | 'planned_end' | 'is_outdoor' | 'status'
 > &
-  Partial<Pick<Stop, 'is_booked'>>;
+  Partial<Pick<Stop, 'is_booked' | 'price' | 'is_estimate' | 'category'>>;
 
 export interface RouteMember {
   id: string;
@@ -126,6 +127,10 @@ function leadInStart(at: LatLng[]): LatLng {
   }
   return best.p;
 }
+
+/** A stop the spend check asks about when the group leaves it (estimated price above RM 0, not booked). */
+const isSpendStop = (s: RouteStop) =>
+  s.price != null && needsSpendCheck({ price: s.price, is_estimate: !!s.is_estimate, is_booked: !!s.is_booked, category: s.category ?? null });
 
 /** Index of the stop with the longest stay among `candidates` (first one wins ties). */
 function longest(candidates: number[], stay: (i: number) => number): number | undefined {
@@ -358,15 +363,18 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
     const earlyMin = Math.round((end[i] - leave[i]) / MIN);
     // Spare time before the next stop when they leave (shared rule, free estimate).
     const spare = i < n - 1 ? Math.floor(spareMinutes(leave[i], estimateMinutes(at[i], at[i + 1]), start[i + 1])) : 0;
+    // Leaving a stop with an estimated price brings the spend check (screen 9).
+    const spend = isSpendStop(x) ? ' · spend check' : '';
     events.push(
       i === early && earlyMin >= 10
         ? {
             at: leave[i],
             kind: 'early',
             stopId: x.id,
-            title: `Left ${x.name} ${durationText(earlyMin)} early` + (spare >= EARLY_SPARE_MIN ? ` (${durationText(spare)} to spare)` : ''),
+            title:
+              `Left ${x.name} ${durationText(earlyMin)} early` + (spare >= EARLY_SPARE_MIN ? ` (${durationText(spare)} to spare)` : '') + spend,
           }
-        : { at: leave[i], kind: 'leave', stopId: x.id, title: `Left ${x.name}` },
+        : { at: leave[i], kind: 'leave', stopId: x.id, title: `Left ${x.name}${spend}` },
     );
   });
   const outdoorNote = s[rain].is_outdoor ? ' (outdoor stop)' : '';

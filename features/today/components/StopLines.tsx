@@ -49,18 +49,20 @@ export function NextLine({ stop, weather }: { stop: Stop; weather: WeatherText |
   );
 }
 
-/** A finished stop: "09:30 Penang Hill funicular · arrived 09:34 · left 10:50" with a tick. */
-export function DoneRow({ stop }: { stop: Stop }) {
-  const parts = [
-    `${clockOf(stop.planned_time)} ${stop.name}`.trim(),
-    stop.arrived_at && `arrived ${clockOf(stop.arrived_at)}`,
-    stop.left_at && `left ${clockOf(stop.left_at)}`,
-  ];
+/**
+ * A finished stop: "09:30 Penang Hill funicular · RM 15" with a tick (prototype screen 9).
+ * `cost` is the final cost once the spend check is answered ("RM 18"), else the estimate;
+ * `soFar` the group's "Spent so far RM 52 · 3 of 4".
+ */
+export function DoneRow({ stop, cost, soFar }: { stop: Stop; cost: string; soFar?: string | null }) {
   return (
     <Card style={[styles.between, styles.done]}>
-      <Txt variant="b12" color={colors.textMuted} style={{ flex: 1 }}>
-        {parts.filter(Boolean).join(' · ')}
-      </Txt>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Txt variant="b12" color={colors.textMuted}>
+          {`${clockOf(stop.planned_time)} ${stop.name}`.trim()} · {cost}
+        </Txt>
+        {soFar ? <Txt variant="s11">{soFar}</Txt> : null}
+      </View>
       <Ionicons name="checkmark" size={18} color={colors.green} accessibilityLabel="Done" />
     </Card>
   );

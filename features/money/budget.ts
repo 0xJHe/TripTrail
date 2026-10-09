@@ -1,9 +1,11 @@
 import type { Preferences, Stop } from '@/features/planning/types';
+import { isBookedStop, knownCost, needsSpendCheck } from './spend';
+import type { Spend } from './types';
 
 export interface BudgetSummary {
-  /** Booked stops (already paid) plus stops the group has been to. Per person, RM. */
+  /** Booked stops (already paid), amounts confirmed in the spend check, and visited fixed-price stops. Per person, RM. */
   spent: number;
-  /** Every stop still in the plan, including what's spent. */
+  /** Every stop still in the plan, at the confirmed amount where known, else the estimate. */
   planned: number;
   /** Group budget per person for the whole trip; null when nobody gave a daily budget. */
   budget: number | null;
@@ -14,13 +16,16 @@ export interface BudgetSummary {
   over: number;
 }
 
-type BudgetStop = Pick<Stop, 'price' | 'actual_cost' | 'is_booked' | 'status'>;
+type BudgetStop = Pick<Stop, 'id' | 'price' | 'actual_cost' | 'is_booked' | 'is_estimate' | 'category' | 'status'>;
 
-/** What a stop cost: the amount entered after leaving it, else its price. */
-const cost = (s: BudgetStop) => Number(s.actual_cost ?? s.price) || 0;
-
-export function isSpent(s: BudgetStop): boolean {
-  return s.is_booked || s.status === 'arrived' || s.status === 'done';
+/**
+ * Whether a stop's cost counts as spent: booked stops (hotel, flights), stops with a known
+ * amount (confirmed in the spend check), and visited stops with a fixed price (nothing to
+ * check). A visited stop with only an estimate (not answered yet, or skipped) is planned, not spent.
+ */
+export function isSpent(s: BudgetStop, known: number | null = null): boolean {
+  if (isBookedStop(s) || known != null) return true;
+  return (s.status === 'arrived' || s.status === 'done') && !needsSpendCheck(s);
 }
 
 /**
@@ -33,10 +38,19 @@ export function groupBudget(prefs: Pick<Preferences, 'daily_budget'>[], days: nu
   return Math.min(...daily) * days;
 }
 
-export function budgetSummary(stops: BudgetStop[], budget: number | null): BudgetSummary {
-  const inPlan = stops.filter((s) => s.status !== 'dropped');
-  const spent = round(inPlan.filter(isSpent).reduce((sum, s) => sum + cost(s), 0));
-  const planned = round(inPlan.reduce((sum, s) => sum + cost(s), 0));
+/** The budget bar for this person: `mine` = their spend-check answers by stop id. */
+export function budgetSummary(stops: BudgetStop[], budget: number | null, mine: Map<string, Spend> = new Map()): BudgetSummary {
+  let spent = 0;
+  let planned = 0;
+  for (const s of stops) {
+    if (s.status === 'dropped') continue;
+    const known = knownCost(s, mine.get(s.id));
+    const cost = known ?? (Number(s.price) || 0);
+    planned += cost;
+    if (isSpent(s, known)) spent += cost;
+  }
+  spent = round(spent);
+  planned = round(planned);
   const scale = Math.max(budget ?? 0, planned);
   return {
     spent,

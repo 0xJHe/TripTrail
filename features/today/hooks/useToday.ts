@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 
+import { useSpendCheck } from '@/features/money/hooks/useSpends';
 import { useDayPlan } from '@/features/planning/hooks/useDayPlan';
 import type { Stop } from '@/features/planning/types';
 import { useCurrentTrip } from '@/features/trip/store';
@@ -33,8 +34,16 @@ export function useToday() {
   const dayStops = useMemo(() => (day ? stops.filter((s) => s.day_number === day.day) : []), [stops, day?.day]);
   const late = useLateAlert(tripId, day?.next ?? null);
   const early = useEarlyAlert(tripId, day?.next ?? null, dayStops);
+  const spend = useSpendCheck(tripId, dayStops, plan.members.length);
   // Running early (screen 8): the navy block shows the stop they just left, Next the one they're heading to.
-  const leftStop = day && !day.now && early.alert ? (dayStops.find((s) => s.id === early.alert!.left_stop_id) ?? null) : null;
+  // Spend check (screen 9) the same, for the stop it asks about, unless a running-late card is up.
+  const leftStop = day && !day.now
+    ? early.alert
+      ? (dayStops.find((s) => s.id === early.alert!.left_stop_id) ?? null)
+      : !late.alert
+        ? spend.stop
+        : null
+    : null;
   // Otherwise, between stops the navy block shows where they're heading, so Next is the one after it.
   const heading = day && !day.now && !leftStop ? day.next : null;
   const upNext = day ? (day.now || leftStop ? day.next : day.after) : null;
@@ -71,6 +80,7 @@ export function useToday() {
     weather,
     late,
     early,
+    spend,
     time,
     members: plan.members,
     loading: plan.loading,

@@ -27,7 +27,8 @@ Planning:
 6. AI day-by-day itinerary with time + price per stop; flights/hotel entered
    manually as booked stops (screen 5)
 7. Edit any stop, add a stop (screen 5)
-8. Budget bar: spent / planned / budget (screen 5)
+8. Budget bar: spent / planned / budget, "+ Add spend" (amount + optional note)
+   and that day's extra spends under it (screen 5)
 
 During the trip:
 9. Auto-arrive: stop ticks itself off within ~100 m; real journey time shifts
@@ -44,8 +45,8 @@ During the trip:
 15. "We're done here" button (screens 6–9)
 16. Rain backup: rain at current location in next hour -> 3 nearby indoor
     options within budget and food needs (screen 10)
-17. Spend check on leaving a food stop: "About RM 16 spent?" tick or enter
-    amount (screen 9)
+17. Spend check on leaving any stop: "About RM 16 spent?" ✓ / Enter amount /
+    Skip; bookings: "Spent anything extra at [stop]?" (screen 9)
 18. First-timer tip on arrival (screen 6)
 19. Done for today: planned vs actual, edit tomorrow, location off for the night,
     back on 1 h before tomorrow's first stop (screen 14)
@@ -224,6 +225,21 @@ Time and location rule (built; follow it in every live-trip feature):
   or next stop is outdoor -> show rain card.
 - Far from group: any member > 500 m from the group centroid -> amber alert.
 - Low battery: < 15% -> amber alert + write last known location to group.
-- Spend check: when leaving a stop with is_estimate = true -> prompt.
+- Spend check (features/money/spend.ts, `spends` table, one row per person per stop
+  per day): when the group leaves a stop (or taps "We're done here") -> each person is
+  asked once, for themselves, about the stop left last today. Every stop, RM 0 and
+  fixed prices too: "About RM X spent?" with the stop's price as the guess. Booked stops
+  (hotel, flights): "Spent anything extra at [stop]?", guess RM 0, the amount goes on top
+  of the booking price. ✓ = the guess, Enter amount = RM typed (numbers only), Skip keeps
+  the guess. Answered -> the stop moves to Done with its final cost ("RM 18"), plus
+  "Spent so far RM 52 · 3 of 4" in a group trip. Shown below a late / early card if one is up.
+  Demo mode: every leave event says "· spend check"; answers after the fake time are ignored
+  (so Reset brings the prompt back).
+- Budget bar (per person, this phone's answers): spent = booked stops (+ extras) + amounts
+  answered + visited fixed-price stops not answered + extra spends; planned = every stop at
+  the answered amount where known, else its price, + extra spends. Visited estimate stops not
+  answered or skipped stay planned, not spent. Extra spends ("+ Add spend" on the Plan tab,
+  stop_id null, day_number = the selected day, optional note) are each person's own; they
+  can delete them.
 - Location on: from 60 min before the day's first stop until the member taps
   Done for today.

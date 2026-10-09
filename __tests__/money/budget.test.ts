@@ -19,13 +19,15 @@ const answer = (s: S, amount: number, extra: Partial<Spend> = {}): Spend => ({
   trip_id: 't1',
   stop_id: s.id,
   member_id: 'me',
+  day_number: 1,
   amount,
   confirmed: true,
   skipped: false,
+  note: null,
   answered_at: '2026-10-12T08:00:00.000Z',
   ...extra,
 });
-const mine = (...spends: Spend[]) => new Map(spends.map((s) => [s.stop_id, s]));
+const mine = (...spends: Spend[]) => new Map(spends.map((s) => [s.stop_id!, s]));
 
 describe('groupBudget', () => {
   it('uses the lowest daily budget times the days, so it fits everyone', () => {
@@ -120,5 +122,33 @@ describe('budgetSummary with spend-check answers', () => {
 
   it('a booked stop is spent at its price even if marked as an estimate', () => {
     expect(isSpent(stop(89, { is_booked: true, is_estimate: true }))).toBe(true);
+  });
+
+  it('a visited fixed-price stop not answered yet counts its price as spent; an answer replaces it', () => {
+    expect(budgetSummary([funicular], null).spent).toBe(15);
+    const s = budgetSummary([funicular], null, mine(answer(funicular, 30, { confirmed: false })));
+    expect(s.spent).toBe(30);
+    expect(s.planned).toBe(30);
+  });
+
+  it('an RM 0 stop answered with an amount counts it', () => {
+    const temple = stop(0, { status: 'done', is_estimate: false });
+    expect(budgetSummary([temple], null, mine(answer(temple, 5, { confirmed: false }))).spent).toBe(5);
+  });
+
+  it('booking extras go on top of the booking price, which stays spent', () => {
+    const hotel = stop(95, { is_booked: true, category: 'hotel', status: 'done' });
+    expect(budgetSummary([hotel], null, mine(answer(hotel, 0))).spent).toBe(95);
+    const s = budgetSummary([hotel], null, mine(answer(hotel, 20, { confirmed: false })));
+    expect(s.spent).toBe(115);
+    expect(s.planned).toBe(115);
+    expect(budgetSummary([hotel], null, mine(answer(hotel, 0, { skipped: true }))).spent).toBe(95);
+  });
+
+  it('extra spends ("+ Add spend") count as spent and planned', () => {
+    const s = budgetSummary([booked, market], 300, new Map(), [{ amount: 12 }, { amount: 8.5 }]);
+    expect(s.spent).toBe(95 + 12 + 8.5);
+    expect(s.planned).toBe(95 + 20 + 12 + 8.5);
+    expect(s.spentFill).toBeCloseTo(115.5 / 300);
   });
 });

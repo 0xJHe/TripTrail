@@ -7,6 +7,7 @@ import { Chip, Chips } from '@/components/ui/Chip';
 import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
 import { BudgetBar } from '@/features/money/components/BudgetBar';
+import { ExtraSpends } from '@/features/money/components/ExtraSpends';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { memberCountLabel } from '@/features/trip/members';
 import { tripEntryRoute } from '@/features/trip/routes';
@@ -69,7 +70,9 @@ export function DayPlanScreen() {
           ))}
         </Chips>
         {note ? <NoteLine text={note} /> : null}
-        <BudgetBar summary={plan.budget} />
+        <BudgetBar summary={plan.budget}>
+          <ExtraSpends tripId={trip.id} day={day} />
+        </BudgetBar>
         <View>
           {dayStops.length === 0 ? (
             <Txt variant="s11" style={styles.note}>

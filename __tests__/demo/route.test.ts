@@ -144,19 +144,16 @@ describe('buildDemoRoute', () => {
     expect(one.events.map((e) => e.kind)).toEqual(expect.arrayContaining(['late', 'early', 'rain', 'far']));
   });
 
-  it('leaves a stop with an estimated price, which brings the spend check', () => {
-    const priced = stops.map((s) =>
-      s.name === 'Gurney Drive hawkers'
-        ? { ...s, price: 16, is_estimate: true, category: 'food' as const }
-        : { ...s, price: 0, is_estimate: true },
-    );
-    const r = build(priced);
-    const gurney = priced.find((s) => s.name === 'Gurney Drive hawkers')!;
-    const left = r.events.filter((e) => (e.kind === 'leave' || e.kind === 'early') && e.title.includes('spend check'));
-    expect(left.map((e) => e.stopId)).toEqual([gurney.id]);
-    // The group really goes more than 150 m away afterwards, so the stop is left.
-    const after = sampleRoute(r, left[0].at + 10 * MIN).me!;
-    expect(haversineMeters(after, pos(gurney))).toBeGreaterThan(150);
+  it('marks every leave as a spend check, and really leaves each stop', () => {
+    const left = route.events.filter((e) => e.kind === 'leave' || e.kind === 'early');
+    expect(left.map((e) => e.stopId)).toEqual(day1.map((s) => s.id));
+    for (const e of left) {
+      expect(e.title).toMatch(/ · spend check$/);
+      // The group goes more than 150 m away afterwards (except after the last stop), so the stop is left.
+      if (e.stopId === day1[day1.length - 1].id) continue;
+      const after = sampleRoute(route, e.at + 10 * MIN).me!;
+      expect(haversineMeters(after, pos(stopOf(e.stopId)))).toBeGreaterThan(150);
+    }
   });
 
   it('is null for a day with no placed, timed stops', () => {

@@ -106,21 +106,25 @@ create table locations (
 );
 create index on locations (trip_id, recorded_at desc);
 
--- Spend check: one answer per person per stop to "About RM 16 spent?". ✓ = confirmed with
--- the estimate; an amount typed in = confirmed false; skipped keeps the estimate.
+-- Spend check: one answer per person per stop per day to "About RM 16 spent?" (booked
+-- stops: "Spent anything extra?", the amount on top of the booking). ✓ = confirmed with the
+-- guess; an amount typed in = confirmed false; skipped keeps the guess.
+-- Extra spends ("+ Add spend" on the Plan tab): no stop, a day and an optional note.
 create table spends (
   id uuid primary key default gen_random_uuid(),
   trip_id uuid references trips(id) on delete cascade, -- for Realtime filters
-  stop_id uuid references stops(id) on delete cascade,
+  stop_id uuid references stops(id) on delete cascade, -- null = extra spend
   member_id uuid references members(id) on delete cascade,
+  day_number int not null, -- the trip day it counts on
   amount numeric not null,
   confirmed boolean default true,
   skipped boolean not null default false,
+  note text, -- extra spends: "Grab to hotel"
   answered_at timestamptz not null default now(), -- the phone's now() (the fake time in Demo mode)
-  created_at timestamptz default now(),
-  unique (stop_id, member_id)
+  created_at timestamptz default now()
 );
 create index spends_trip_idx on spends (trip_id);
+create unique index spends_stop_member_day_key on spends (stop_id, member_id, day_number);
 
 create table pins (
   id uuid primary key default gen_random_uuid(),
@@ -193,13 +197,13 @@ create policy "stops all" on stops for all using (is_member(trip_id));
 create policy "locations all" on locations for all using (is_member(trip_id));
 create policy "spends read" on spends for select using (is_member(trip_id));
 create policy "spends insert own" on spends for insert with check (
-  exists (select 1 from members m join stops s on s.trip_id = m.trip_id
-           where m.id = member_id and m.user_id = auth.uid() and s.id = stop_id and s.trip_id = spends.trip_id));
+  exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid() and m.trip_id = spends.trip_id)
+  and (stop_id is null or exists (select 1 from stops s where s.id = stop_id and s.trip_id = spends.trip_id)));
 create policy "spends update own" on spends for update
   using (exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid()))
   with check (
-    exists (select 1 from members m join stops s on s.trip_id = m.trip_id
-             where m.id = member_id and m.user_id = auth.uid() and s.id = stop_id and s.trip_id = spends.trip_id));
+    exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid() and m.trip_id = spends.trip_id)
+    and (stop_id is null or exists (select 1 from stops s where s.id = stop_id and s.trip_id = spends.trip_id)));
 create policy "spends delete own" on spends for delete
   using (exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid()));
 create policy "pins all" on pins for all using (is_member(trip_id));

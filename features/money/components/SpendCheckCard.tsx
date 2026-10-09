@@ -7,7 +7,7 @@ import { Field } from '@/components/ui/Field';
 import { Txt } from '@/components/ui/Txt';
 import { colors, currency, formatMoney, shadow } from '@/lib/theme';
 import type { SpendCheckState } from '../hooks/useSpends';
-import { cleanAmountInput, parseAmount } from '../spend';
+import { cleanAmountInput, parseAmount, spendGuess, spendQuestion } from '../spend';
 
 interface SpendCheckCardProps {
   check: SpendCheckState;
@@ -16,8 +16,9 @@ interface SpendCheckCardProps {
 }
 
 /**
- * "About RM 16 spent?" (prototype screen 9): ✓ keeps the estimate, Enter amount types what
- * this person paid. Skip leaves the estimate. Each person answers once per stop.
+ * "About RM 16 spent?" (prototype screen 9): ✓ keeps the guess (the stop's price), Enter amount
+ * types what this person paid. Skip leaves the guess. Each person answers once per stop.
+ * Bookings (hotel, flights): "Spent anything extra at Hotel?", ✓ = nothing extra.
  */
 export function SpendCheckCard({ check, named }: SpendCheckCardProps) {
   const { stop } = check;
@@ -32,26 +33,27 @@ export function SpendCheckCard({ check, named }: SpendCheckCardProps) {
 
   const busy = check.saving != null;
   const amount = parseAmount(text);
-  const hint = named
-    ? `At ${stop.name}. Tap ✓ if that's right, or enter what you paid`
-    : "Tap ✓ if that's right, or enter what you paid";
+  const guess = spendGuess(stop);
+  const hint = check.booked
+    ? 'Tap ✓ for nothing extra, or enter what you paid on top'
+    : `${named ? `At ${stop.name}. ` : ''}Tap ✓ if that's right, or enter what you paid`;
 
   return (
     <View style={styles.card} testID="spend-check">
       <View style={styles.head}>
         <View style={{ flex: 1 }}>
           <Txt variant="h14" style={styles.title} accessibilityRole="header">
-            About {formatMoney(Number(stop.price))} spent?
+            {spendQuestion(stop)}
           </Txt>
           <Txt variant="s11" style={{ marginTop: 3 }}>
-            {typing ? `What did you pay at ${stop.name}?` : hint}
+            {typing ? (check.booked ? `Extra spent at ${stop.name}` : `What did you pay at ${stop.name}?`) : hint}
           </Txt>
         </View>
         <Pressable
           onPress={busy ? undefined : () => check.answer({ kind: 'skip' })}
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel="Skip, keep the estimate"
+          accessibilityLabel="Skip"
           style={({ pressed }) => pressed && { opacity: 0.6 }}>
           <Txt variant="s11" weight="semibold">
             Skip
@@ -66,7 +68,7 @@ export function SpendCheckCard({ check, named }: SpendCheckCardProps) {
             value={text}
             onChangeText={(t) => setText(cleanAmountInput(t))}
             keyboardType="decimal-pad"
-            placeholder={String(Math.round(Number(stop.price)))}
+            placeholder={String(Math.round(guess))}
             autoFocus
             maxLength={9}
             returnKeyType="done"
@@ -88,7 +90,7 @@ export function SpendCheckCard({ check, named }: SpendCheckCardProps) {
           <Pressable
             onPress={busy ? undefined : () => check.answer({ kind: 'confirm' })}
             accessibilityRole="button"
-            accessibilityLabel={`Yes, about ${formatMoney(Number(stop.price))}`}
+            accessibilityLabel={check.booked ? 'Nothing extra' : `Yes, about ${formatMoney(guess)}`}
             accessibilityState={{ disabled: busy }}
             testID="spend-confirm"
             style={({ pressed }) => [styles.button, styles.tick, pressed && !busy && { opacity: 0.85 }]}>

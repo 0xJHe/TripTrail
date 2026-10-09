@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
+import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
@@ -10,8 +11,9 @@ import type { BudgetSummary } from '../budget';
 /**
  * "RM 215 spent · RM 380 planned · budget RM 450" (prototype screen 5).
  * Dark fill = spent, light fill = planned; red line when the plan is over budget.
+ * `children` go at the bottom of the card (the Plan tab's "+ Add spend" and extra spends).
  */
-export function BudgetBar({ summary }: { summary: BudgetSummary }) {
+export function BudgetBar({ summary, children }: { summary: BudgetSummary; children?: ReactNode }) {
   const { spent, planned, budget, spentFill, plannedFill, over } = summary;
   const right = budget != null ? `${formatMoney(planned)} planned · budget ${formatMoney(budget)}` : `${formatMoney(planned)} planned · no budget set`;
   return (
@@ -46,6 +48,7 @@ export function BudgetBar({ summary }: { summary: BudgetSummary }) {
           </Txt>
         </View>
       ) : null}
+      {children}
     </Card>
   );
 }

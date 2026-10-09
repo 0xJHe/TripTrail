@@ -15,8 +15,8 @@ export function useDayPlan(tripId: string | undefined) {
   const prefs = usePreferences(tripId);
   const options = useOptions(tripId);
   const stops = useStops(tripId);
-  // This person's spend-check answers: confirmed amounts replace the estimates (live).
-  const { mine } = useSpends(tripId);
+  // This person's spend-check answers (confirmed amounts replace the guesses) and extra spends, live.
+  const { mine, extras } = useSpends(tripId);
   useTripRealtime(tripId, ['trips', 'members', 'preferences', 'stops']);
 
   const option = options.data?.find((o) => o.id === trip.data?.winning_option_id) ?? null;
@@ -25,8 +25,8 @@ export function useDayPlan(tripId: string | undefined) {
   const days = dayCount(sorted, tripDays);
   const start = planStart(trip.data?.start_date ?? null, sorted);
   const budget = useMemo(
-    () => budgetSummary(sorted, groupBudget(answered(prefs.data ?? []), days), mine),
-    [sorted, prefs.data, days, mine],
+    () => budgetSummary(sorted, groupBudget(answered(prefs.data ?? []), days), mine, extras),
+    [sorted, prefs.data, days, mine, extras],
   );
 
   return {

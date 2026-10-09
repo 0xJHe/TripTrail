@@ -3,6 +3,8 @@ import {
   areaOf,
   DAILY_WEATHER_LIMIT,
   hourAt,
+  hoursBetween,
+  rainWithin,
   toWeather,
   weatherFor,
   weatherKeys,
@@ -160,7 +162,7 @@ describe('weatherFor', () => {
     const g = fakeWeather([{ body: sunny }], { limit: 1 });
     await weatherFor(g.deps, { now: kekLokSi, next: null });
     const reply = await weatherFor(g.deps, { now: chulia, next: { ...chulia, inMinutes: 0 } });
-    expect(reply).toEqual({ now: null, next: null, limited: true, weatherCalls: 0 });
+    expect(reply).toEqual({ now: null, next: null, soon: [], limited: true, weatherCalls: 0 });
     expect(g.requests).toHaveLength(1);
   });
 
@@ -241,5 +243,38 @@ describe('helpers', () => {
     expect(windWords(25)).toBe('breezy');
     expect(windWords(50)).toBe('windy');
     expect(windWords(null)).toBeNull();
+  });
+});
+
+describe('rain within the hour (rain backup, no extra weather call)', () => {
+  const cloudy = toWeather({ ...sunny, weatherCondition: { type: 'CLOUDY' } })!;
+  const raining = toWeather({ ...sunny, weatherCondition: { type: 'LIGHT_RAIN' } })!;
+  const hours = forecast.forecastHours.map((h) => ({ ...toWeather(h)!, start: h.interval.startTime, end: h.interval.endTime }));
+
+  it('the weather reply carries the next 2 hours of the forecast it already fetched', async () => {
+    const g = fakeWeather([{ body: sunny }, { body: forecast }]);
+    const reply = await weatherFor(g.deps, { now: kekLokSi, next: { ...chulia, inMinutes: 120 } });
+    expect(reply.soon?.map((h) => h.start)).toEqual(['2026-10-12T04:00:00Z', '2026-10-12T05:00:00Z']);
+    expect(reply.weatherCalls).toBe(2);
+  });
+
+  it('raining now = 0 min; else the start of the first wet hour within 60 min', () => {
+    expect(rainWithin(raining, [], NOON)).toBe(0);
+    // 06:20 Penang time (UTC 06:20): light rain from 07:00 UTC hour = in 40 min.
+    expect(rainWithin(cloudy, hours, Date.parse('2026-10-12T06:20:00Z'))).toBe(40);
+    // 05:30: the rain hour starts in 90 min, too far.
+    expect(rainWithin(cloudy, hours, Date.parse('2026-10-12T05:30:00Z'))).toBeNull();
+  });
+
+  it('a 50%+ chance of rain counts; 40% does not', () => {
+    const t = Date.parse('2026-10-12T04:30:00Z');
+    expect(rainWithin(cloudy, hours.slice(0, 2), t)).toBeNull();
+    const wetter = hours.map((h, i) => (i === 1 ? { ...h, rainChance: 60 } : h));
+    expect(rainWithin(cloudy, wetter, t)).toBe(30);
+  });
+
+  it('hoursBetween keeps the hours overlapping the window', () => {
+    const t = Date.parse('2026-10-12T04:30:00Z');
+    expect(hoursBetween(hours, t, t + 60 * MIN).map((h) => h.start)).toEqual(['2026-10-12T04:00:00Z', '2026-10-12T05:00:00Z']);
   });
 });

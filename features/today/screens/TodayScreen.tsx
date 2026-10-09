@@ -16,6 +16,7 @@ import { LateCard } from '../components/LateCard';
 import { LocationPill, PermissionCard } from '../components/LocationStatus';
 import { NoPlan } from '../components/NoPlan';
 import { NowCard } from '../components/NowCard';
+import { RainCard } from '../components/RainCard';
 import { DoneRow, NextCard } from '../components/StopLines';
 import { TipCard } from '../components/TipCard';
 import { useToday } from '../hooks/useToday';
@@ -27,6 +28,8 @@ import type { TodayView } from '../types';
  * Running late (screen 7): the late card under Now, with the late stop as its Next.
  * Running early (screen 8): the stop just left in the navy block, the early card, then Next.
  * Spend check (screen 9): under the navy block (or under the late / early card), until answered.
+ * Rain backup (screen 10): for the outdoor stop the group is at or heading to.
+ * Cards stack in this order: late, rain, early, spend.
  */
 export function TodayScreen() {
   const today = useToday();
@@ -104,6 +107,7 @@ export function TodayScreen() {
         {lateFor ? (
           <LateCard late={today.late} stop={lateFor} time={today.time} next={now ? { weather: today.weather.next } : null} />
         ) : null}
+        <RainCard rain={today.rain} />
         {earlyFor ? <EarlyCard early={today.early} stop={earlyFor} left={leftStop} /> : null}
         {spend.stop ? <SpendCheckCard check={spend} named={spend.stop.id !== (now ?? leftStop)?.id} /> : null}
 

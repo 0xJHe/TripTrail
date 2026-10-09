@@ -101,7 +101,7 @@ supabase/
   schema.sql          tables + RLS
 supabase/functions/   Supabase Edge Functions (Deno), one folder each with index.ts:
   generate-trip-options  generate-itinerary  eta
-  nearby-suggestion      rain-check          halal-check
+  nearby-suggestion (running early + rain backup)  weather  halal-check
   _shared/            shared: gemini client, google client, auth check, zod schemas,
                       tripOptions.ts (types + sample options, also imported by lib/ai.ts;
                       files here must stay plain TS with no imports so React Native
@@ -151,8 +151,11 @@ Time and location rule (built; follow it in every live-trip feature):
   30-min-before check while the group is still at the stop before (screen 7). The
   "early" moment is a later stop left 30+ min before its planned end with 45+ min to
   spare before the next (screen 8);
-  the moments are picked from the plan before any running-early change, and the replay
-  follows added / moved stops. Reset undoes early cards, then late ones. The bar at the
+  the "rain" moment is rain over an outdoor stop (after the early one) starting 10 min
+  after the group gets there, so the rain card shows before they arrive;
+  the moments are picked from the plan before any running-early change or rain swap,
+  and the replay follows added / moved / swapped stops. Reset undoes rain cards, then
+  early, then late ones. The bar at the
   top (+15 min, Next event, Reset) is features/demo/components/DemoBar.tsx.
 
 ## Behaviour rules for you (the agent)
@@ -221,8 +224,30 @@ Time and location rule (built; follow it in every live-trip feature):
   Add this = new stop now, length spare − walk there − walk on (max 60, min 15);
   later stops move only if needed. Go to next stop = offer to move the next stop
   earlier by the spare (5-min steps, never booked stops); decide_early RPC.
-- Rain: rain-check says rain at current position within 60 min and the current
-  or next stop is outdoor -> show rain card.
+- Rain backup (features/today/rain.ts, useRainCheck in the tabs layout, useRainAlert,
+  RainCard, screen 10): rain at the group's position within 60 min. Demo mode: the
+  route's rain moment (lib/location centre, now()). Otherwise only the weather already
+  fetched for the Today card (weather function: current conditions + its `soon`
+  forecast hours, read from the React Query cache; never an extra weather call):
+  raining now, or a forecast hour within 60 min with rain or a 50%+ chance. Card for
+  the stop the group is at if outdoor and it lasts until the rain comes, else the next
+  stop if outdoor, still planned and starting within 60 min of the rain. Never booked
+  stops. Once per stop (rain_alerts, shared, Realtime). Headline "Rain at [stop] in
+  40 min" (blue stripe + umbrella icon), "Nearby, indoor, within budget", up to 3
+  options nearest first (name, walk/ride time, ~price, Go) and a Keep plan link.
+  Nothing found -> "Rain coming at [stop] — consider moving it" + Keep plan only.
+  Options: nearby-suggestion function with kind 'rain' (_shared/nearby.ts
+  rainOptionsFor), the running-early search code and rules: indoor types only
+  (museum, art gallery, mall, aquarium, cinema, café; restaurants only near a meal
+  time at the slot's start); 1 km, then 2 km only if fewer than 3 fit; up to 10
+  places per search; same area cache (1 h, empty 10 min), the same 10 nearby
+  searches per trip per day, one phone per stop (options saved in google_cache as
+  rain-pick:<stop>); skip planned places, no-gos, food needs, over budget (today's
+  budget left + the replaced stop's price); must-haves first; halal note on food.
+  Go = decide_rain RPC for the group: a stop still to come becomes the place in its
+  time slot; at the stop already, it ends now and the place is added for the rest of
+  its slot (min 15 min). Keep plan = decide_rain 'keep'.
+  Cards stack on Today in this order: late, rain, early, spend.
 - Far from group: any member > 500 m from the group centroid -> amber alert.
 - Low battery: < 15% -> amber alert + write last known location to group.
 - Spend check (features/money/spend.ts, `spends` table, one row per person per stop

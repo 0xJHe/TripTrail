@@ -1,9 +1,18 @@
 import type { NewStop } from '@/features/planning/types';
 import { supabase } from '@/lib/supabase';
 import type { CheckKind, EtaReply } from '@/supabase/functions/_shared/eta';
-import type { NearbyReply } from '@/supabase/functions/_shared/nearby';
+import type { NearbyReply, RainReply } from '@/supabase/functions/_shared/nearby';
 import type { WeatherReply } from '@/supabase/functions/_shared/weather';
-import type { EarlyAlert, LateAlert, NewEarlyAlert, NewLateAlert, StopTimes, VisitChange } from './types';
+import type {
+  EarlyAlert,
+  LateAlert,
+  NewEarlyAlert,
+  NewLateAlert,
+  NewRainAlert,
+  RainAlert,
+  StopTimes,
+  VisitChange,
+} from './types';
 
 export interface WeatherRequest {
   /** Where the group is (current weather). */
@@ -107,12 +116,64 @@ export async function decideEarly(
   return data === true;
 }
 
+export async function fetchRainAlerts(tripId: string): Promise<RainAlert[]> {
+  const { data, error } = await supabase.from('rain_alerts').select('*').eq('trip_id', tripId);
+  if (error) throw error;
+  return (data ?? []) as RainAlert[];
+}
+
+/** Save the rain card for an outdoor stop. If another phone already did, theirs stays (one card per stop). */
+export async function raiseRainAlert(alert: NewRainAlert): Promise<void> {
+  const { error } = await supabase.from('rain_alerts').upsert(alert, { onConflict: 'stop_id', ignoreDuplicates: true });
+  if (error) throw error;
+}
+
+export interface RainAsk {
+  /** The outdoor stop. */
+  stopId: string;
+  from: { lat: number; lng: number };
+  /** Minutes since midnight when the new place would start (the fake time in Demo mode). */
+  localMinutes: number;
+}
+
+/** Up to 3 indoor places for an outdoor stop (nearby-suggestion Edge Function, kind 'rain'). */
+export async function fetchRainOptions(tripId: string, ask: RainAsk): Promise<RainReply> {
+  const { data, error } = await supabase.functions.invoke<RainReply>('nearby-suggestion', {
+    body: { tripId, kind: 'rain', ...ask },
+  });
+  if (error) throw error;
+  return data ?? { options: [], limited: false, placesCalls: 0 };
+}
+
 /**
- * Demo mode Reset: forget the running-early and running-late cards checked after `after`,
- * putting back the stop times they changed. Early first: in a demo day it comes after late,
- * so the late card's saved times are the older ones and must be put back last.
+ * Answer the rain card for the whole group (decide_rain): 'go' swaps the place in for the
+ * outdoor stop, 'keep' keeps the plan. False if someone already did.
+ */
+export async function decideRain(
+  stopId: string,
+  choice: 'go' | 'keep',
+  go: { placeId: string; now: string; start: string | null; end: string | null } | null = null,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc('decide_rain', {
+    p_stop: stopId,
+    p_choice: choice,
+    p_place: go?.placeId ?? null,
+    p_now: go?.now ?? null,
+    p_start: go?.start ?? null,
+    p_end: go?.end ?? null,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+/**
+ * Demo mode Reset: forget the rain, running-early and running-late cards checked after
+ * `after`, putting back the stops they changed. Latest kind first: in a demo day rain comes
+ * after early, early after late, so the oldest saved times are put back last.
  */
 export async function undoDemoMoments(tripId: string, after: Date): Promise<void> {
+  const rain = await supabase.rpc('undo_rain_alerts', { p_trip: tripId, p_after: after.toISOString() });
+  if (rain.error) throw rain.error;
   const early = await supabase.rpc('undo_early_alerts', { p_trip: tripId, p_after: after.toISOString() });
   if (early.error) throw early.error;
   const late = await supabase.rpc('undo_late_alerts', { p_trip: tripId, p_after: after.toISOString() });

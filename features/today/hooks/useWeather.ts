@@ -13,6 +13,11 @@ const HOUR = 60 * MIN;
 
 const placeOf = (s: Stop | null) => (s && s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null);
 
+export const weatherKeys = {
+  /** Every weather query of a trip (the rain check reads the latest one). */
+  trip: (tripId: string | undefined) => ['weather', tripId] as const,
+};
+
 /**
  * Weather for the Now block (current, at `here`) and the Next card (forecast for `next`
  * at its start time). Refreshed every 30 min; any failure just hides the line.
@@ -32,8 +37,7 @@ export function useWeather(
   const query = useQuery({
     // Demo: the fake clock jumps, so "minutes until the next stop" changes; refetch per fake hour.
     queryKey: [
-      'weather',
-      tripId,
+      ...weatherKeys.trip(tripId),
       herePt && areaOf(herePt),
       nextPt && areaOf(nextPt),
       next?.planned_time ?? null,

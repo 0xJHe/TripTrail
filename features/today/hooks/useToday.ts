@@ -10,6 +10,7 @@ import { useLocationAccess } from '../permission';
 import { todayView } from '../todayPlan';
 import { useEarlyAlert } from './useEarlyAlert';
 import { useLateAlert } from './useLateAlert';
+import { useRainAlert } from './useRainAlert';
 import { useSaveVisits } from './useSaveVisits';
 import { useWeather } from './useWeather';
 
@@ -34,6 +35,7 @@ export function useToday() {
   const dayStops = useMemo(() => (day ? stops.filter((s) => s.day_number === day.day) : []), [stops, day?.day]);
   const late = useLateAlert(tripId, day?.next ?? null);
   const early = useEarlyAlert(tripId, day?.next ?? null, dayStops);
+  const rain = useRainAlert(tripId, day?.now ?? null, day?.next ?? null);
   const spend = useSpendCheck(tripId, dayStops, plan.members.length);
   // Running early (screen 8): the navy block shows the stop they just left, Next the one they're heading to.
   // Spend check (screen 9) the same, for the stop it asks about, unless a running-late card is up.
@@ -80,6 +82,7 @@ export function useToday() {
     weather,
     late,
     early,
+    rain,
     spend,
     time,
     members: plan.members,

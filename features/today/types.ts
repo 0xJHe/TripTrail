@@ -1,5 +1,5 @@
 import type { Stop, StopStatus } from '@/features/planning/types';
-import type { NearbySuggestion } from '@/supabase/functions/_shared/nearby';
+import type { NearbySuggestion, RainOption } from '@/supabase/functions/_shared/nearby';
 import type { NewDay } from '@/supabase/functions/_shared/newDay';
 
 /** The parts of a stop the arrive / leave rules read. */
@@ -91,3 +91,47 @@ export type NewEarlyAlert = Pick<
   EarlyAlert,
   'stop_id' | 'trip_id' | 'day_number' | 'left_stop_id' | 'left_at' | 'checked_at' | 'spare_min' | 'travel_min' | 'suggestion'
 >;
+
+/** Row in `rain_alerts`: the group's one rain card for an outdoor stop. */
+export interface RainAlert {
+  /** The outdoor stop. */
+  stop_id: string;
+  trip_id: string;
+  day_number: number;
+  /** now() when the check found rain coming (the fake time in Demo mode). */
+  checked_at: string;
+  /** Minutes from checked_at until the rain. */
+  rain_in_min: number;
+  /** Up to 3 indoor places, nearest first; empty = "consider moving it". */
+  options: RainOption[];
+  status: 'open' | 'swapped' | 'kept';
+  picked: RainOption | null;
+  /** The stop added when the group was already at the outdoor stop. */
+  added_stop_id: string | null;
+  /** The outdoor stop before the swap (Demo mode's replay and Reset use it). */
+  original: RainOriginal | null;
+  decided_by: string | null;
+  decided_at: string | null;
+}
+
+/** What a swap changed on the outdoor stop. */
+export type RainOriginal = Pick<
+  Stop,
+  | 'name'
+  | 'address'
+  | 'lat'
+  | 'lng'
+  | 'place_id'
+  | 'price'
+  | 'is_estimate'
+  | 'is_outdoor'
+  | 'category'
+  | 'tip'
+  | 'note'
+  | 'status'
+  | 'left_at'
+  | 'planned_end'
+>;
+
+/** What a phone saves when rain is coming at an outdoor stop. */
+export type NewRainAlert = Pick<RainAlert, 'stop_id' | 'trip_id' | 'day_number' | 'checked_at' | 'rain_in_min' | 'options'>;

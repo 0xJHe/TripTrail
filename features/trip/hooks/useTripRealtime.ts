@@ -14,6 +14,7 @@ const TABLE_KEYS = {
   pins: 'pins',
   late_alerts: 'lateAlerts',
   early_alerts: 'earlyAlerts',
+  rain_alerts: 'rainAlerts',
   spends: 'spends',
 } as const;
 

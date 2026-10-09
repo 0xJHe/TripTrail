@@ -16,6 +16,7 @@ import { checkable } from '../late';
 import { useLocationAccess } from '../permission';
 import { todayView } from '../todayPlan';
 import { lateKeys, useLateAlerts } from './useLateCheck';
+import { rainKeys } from './useRainCheck';
 
 export const earlyKeys = {
   alerts: (tripId: string) => ['earlyAlerts', tripId] as const,
@@ -62,17 +63,18 @@ export function useEarlyCheck() {
     lastTime.current = null;
   }, [tripId, demo]);
 
-  // Demo mode, the fake clock went back (Reset): forget the checks after it, and the
-  // running-early and running-late cards checked after it (putting back the stop times
-  // they changed). Both kinds are undone here, early first, so the oldest times win.
+  // Demo mode, the fake clock went back (Reset): forget the checks after it, and the rain,
+  // running-early and running-late cards checked after it (putting back the stops they
+  // changed). All kinds are undone here, latest kind first, so the oldest times win.
   useEffect(() => {
     const last = lastTime.current;
     lastTime.current = time;
     if (!demo || !tripId || last == null || time >= last) return;
     for (const [key, at] of done.current) if (at > time) done.current.delete(key);
     undoDemoMoments(tripId, new Date(time))
-      .catch((e) => console.warn('Undoing running-early / late cards failed:', e instanceof Error ? e.message : e))
+      .catch((e) => console.warn('Undoing rain / running-early / late cards failed:', e instanceof Error ? e.message : e))
       .finally(() => {
+        queryClient.invalidateQueries({ queryKey: rainKeys.alerts(tripId) });
         queryClient.invalidateQueries({ queryKey: earlyKeys.alerts(tripId) });
         queryClient.invalidateQueries({ queryKey: lateKeys.alerts(tripId) });
         queryClient.invalidateQueries({ queryKey: planningKeys.stops(tripId) });

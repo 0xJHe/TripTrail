@@ -12,6 +12,9 @@
 // - Max 10 nearby searches per trip per day (its own counter).
 // - One pick per stop, saved for the whole group: one phone asks, the others wait a
 //   moment and read what it saved.
+//
+// Rain backup (prototype screen 10) uses the same search, caches, lock and daily counter
+// (rainOptionsFor): up to 3 indoor places for an outdoor stop, with indoor types only.
 
 export const NEARBY_URL = 'https://places.googleapis.com/v1/places:searchNearby';
 export const NEARBY_FIELDS = 'places.id,places.displayName,places.location,places.types';
@@ -158,6 +161,9 @@ export const KINDS: Kind[] = [
     food: 'meal',
     mustHaves: ['Street food'],
   },
+  // Only searched for the rain backup (no must-have maps to them, so running early never asks for them).
+  { types: ['aquarium'], label: 'Aquarium', price: 30, category: 'sight', mustHaves: [] },
+  { types: ['movie_theater'], label: 'Cinema', price: 15, category: 'sight', mustHaves: [] },
 ];
 
 /**
@@ -328,8 +334,11 @@ export function areaOf(p: LatLng): { key: string; centre: LatLng } {
 }
 
 export const nearbyKeys = {
-  area: (p: LatLng, radiusM: number, types: string[]) => `nearby:${areaOf(p).key}:${radiusM}:${types.join(',')}`,
+  /** A search with more than the usual 5 results (the rain backup's) is its own row. */
+  area: (p: LatLng, radiusM: number, types: string[], max = NEARBY_MAX_RESULTS) =>
+    `nearby:${areaOf(p).key}:${radiusM}:${types.join(',')}${max === NEARBY_MAX_RESULTS ? '' : `:n${max}`}`,
   pick: (stopId: string) => `nearby-pick:${stopId}`,
+  rain: (stopId: string) => `rain-pick:${stopId}`,
 };
 
 type Saved<T> = { at: number; value: T };
@@ -362,13 +371,19 @@ export function toPlaces(body: unknown): NearbyPlace[] {
 }
 
 /** One Nearby Search around the area's centre (1 call). */
-export async function searchNearby(deps: NearbyDeps, centre: LatLng, types: string[], radiusM = NEARBY_RADIUS_M): Promise<NearbyPlace[]> {
+export async function searchNearby(
+  deps: NearbyDeps,
+  centre: LatLng,
+  types: string[],
+  radiusM = NEARBY_RADIUS_M,
+  maxResults = NEARBY_MAX_RESULTS,
+): Promise<NearbyPlace[]> {
   const res = await deps.fetch(NEARBY_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': deps.apiKey, 'X-Goog-FieldMask': NEARBY_FIELDS },
     body: JSON.stringify({
       includedTypes: types,
-      maxResultCount: NEARBY_MAX_RESULTS,
+      maxResultCount: maxResults,
       rankPreference: 'DISTANCE',
       locationRestriction: { circle: { center: { latitude: centre.lat, longitude: centre.lng }, radius: radiusM } },
     }),
@@ -380,18 +395,23 @@ export async function searchNearby(deps: NearbyDeps, centre: LatLng, types: stri
 type Found = { places: NearbyPlace[] | null; limited: boolean; calls: number };
 
 /**
- * Places around the group: cached area first, else one counted search (saved for an hour,
+ * Places around `from`: cached area first, else one counted search (saved for an hour,
  * an empty answer for 10 min). A failed search gives null places (reported, not thrown).
  */
-async function areaPlaces(deps: NearbyDeps, req: NearbyRequest, wider: boolean, onError: (e: unknown) => void): Promise<Found> {
-  const radiusM = wider ? WIDER_RADIUS_M : NEARBY_RADIUS_M;
-  const types = typesToSearch(req, wider);
-  const key = nearbyKeys.area(req.from, radiusM, types);
+async function areaPlaces(
+  deps: NearbyDeps,
+  from: LatLng,
+  radiusM: number,
+  types: string[],
+  onError: (e: unknown) => void,
+  max = NEARBY_MAX_RESULTS,
+): Promise<Found> {
+  const key = nearbyKeys.area(from, radiusM, types, max);
   const hit = await deps.cacheGet(key);
   if (fresh<NearbyPlace[]>(deps, hit)) return { places: hit.value, limited: false, calls: 0 };
   if (!(await deps.takeCall())) return { places: null, limited: true, calls: 0 };
   try {
-    const places = await searchNearby(deps, areaOf(req.from).centre, types, radiusM);
+    const places = await searchNearby(deps, areaOf(from).centre, types, radiusM, max);
     await deps.cacheSet(key, { at: deps.now(), value: places } satisfies Saved<NearbyPlace[]>);
     return { places, limited: false, calls: 1 };
   } catch (e) {
@@ -407,10 +427,10 @@ async function areaPlaces(deps: NearbyDeps, req: NearbyRequest, wider: boolean, 
  * search after Google failed or the daily limit was reached: it would end the same way.
  */
 async function findSuggestion(deps: NearbyDeps, req: NearbyRequest, onError: (e: unknown) => void) {
-  const near = await areaPlaces(deps, req, false, onError);
+  const near = await areaPlaces(deps, req.from, NEARBY_RADIUS_M, typesToSearch(req), onError);
   const first = near.places ? pickSuggestion(near.places, req) : null;
   if (first || !near.places) return { suggestion: first, limited: near.limited, calls: near.calls };
-  const wide = await areaPlaces(deps, req, true, onError);
+  const wide = await areaPlaces(deps, req.from, WIDER_RADIUS_M, typesToSearch(req, true), onError);
   return {
     suggestion: wide.places ? pickSuggestion(wide.places, req) : null,
     limited: wide.limited,
@@ -432,30 +452,214 @@ const reply = (suggestion: NearbySuggestion | null, limited = false, placesCalls
  * phones don't pay for the same answer, but it's tried again soon.
  */
 export async function nearbyFor(deps: NearbyDeps, req: NearbyRequest, onError: (e: unknown) => void = () => {}): Promise<NearbyReply> {
-  const key = nearbyKeys.pick(req.stopId);
+  const found = await onePerStop<NearbySuggestion | null>(
+    deps,
+    nearbyKeys.pick(req.stopId),
+    null,
+    async () => {
+      const f = await findSuggestion(deps, req, onError);
+      return { value: f.suggestion, limited: f.limited, calls: f.calls };
+    },
+    onError,
+  );
+  return reply(found.value, found.limited, found.calls);
+}
+
+type Answer<T> = { value: T; limited: boolean; calls: number };
+
+/**
+ * One answer per stop for the whole group: the saved one if fresh; otherwise this request
+ * finds it and saves it, while any other request for the same key waits a few seconds and
+ * reads that (or gives up with `none`: the other phone is slow). Never throws: any failure
+ * gives `none`.
+ */
+async function onePerStop<T>(
+  deps: NearbyDeps,
+  key: string,
+  none: T,
+  find: () => Promise<Answer<T>>,
+  onError: (e: unknown) => void,
+): Promise<Answer<T>> {
+  const saved = (value: T): Answer<T> => ({ value, limited: false, calls: 0 });
   try {
     const hit = await deps.cacheGet(key);
-    if (fresh<NearbySuggestion | null>(deps, hit)) return reply(hit.value);
+    if (fresh<T>(deps, hit)) return saved(hit.value);
 
     if (!(await deps.claim(key))) {
       for (let waited = 0; waited < WAIT_FOR_OTHER_MS; waited += WAIT_STEP_MS) {
         await deps.wait(WAIT_STEP_MS);
-        const saved = await deps.cacheGet(key);
-        if (fresh<NearbySuggestion | null>(deps, saved)) return reply(saved.value);
+        const other = await deps.cacheGet(key);
+        if (fresh<T>(deps, other)) return saved(other.value);
       }
-      return reply(null); // the other phone is slow: no suggestion this time
+      return saved(none);
     }
     try {
-      const found = await findSuggestion(deps, req, onError);
-      await deps.cacheSet(key, { at: deps.now(), value: found.suggestion } satisfies Saved<NearbySuggestion | null>);
-      return reply(found.suggestion, found.limited, found.calls);
+      const found = await find();
+      await deps.cacheSet(key, { at: deps.now(), value: found.value } satisfies Saved<T>);
+      return found;
     } finally {
       await deps.release(key);
     }
   } catch (e) {
     onError(e);
-    return reply(null);
+    return saved(none);
   }
+}
+
+// ---------- Rain backup ----------
+
+/** Options on the rain card... */
+export const RAIN_OPTIONS = 3;
+/** ...from searches asking for this many places (Google charges per search, not per place). */
+export const RAIN_MAX_RESULTS = 10;
+/** Indoor kinds searched for the rain backup; restaurants are added near a meal time. */
+const RAIN_KINDS = ['Café', 'Museum', 'Gallery', 'Mall', 'Aquarium', 'Cinema'];
+/** A place with any of these types is (partly) outside: never a rain option. */
+const OUTDOOR_TYPES = [
+  'park',
+  'beach',
+  'hiking_area',
+  'national_park',
+  'campground',
+  'zoo',
+  'amusement_park',
+  'water_park',
+  'botanical_garden',
+  'garden',
+  'playground',
+  'marina',
+];
+
+/** One indoor place on the rain card. */
+export interface RainOption extends LatLng {
+  placeId: string;
+  name: string;
+  /** "Museum", "Mall", "Café"... */
+  kind: string;
+  category: NearbySuggestion['category'];
+  /** Straight line from the group, metres. */
+  distanceM: number;
+  /** Minutes to get there: a walk up to 1.2 km, else a ride at 25 km/h. */
+  walkMin: number;
+  ride: boolean;
+  /** Rough price per person, RM (an estimate from the place type). */
+  price: number;
+  /** Food place and someone needs halal: show "Halal-friendly · not verified". */
+  halalNote: boolean;
+  /** The group's must-have it matches, if any. */
+  mustHave: string | null;
+}
+
+export interface RainRequest {
+  /** The outdoor stop the options would replace (one set of options per stop). */
+  stopId: string;
+  /** Where the group is. */
+  from: LatLng;
+  /** Time of day the new place would start (minutes since midnight): restaurants only near a meal time. */
+  localMinutes: number;
+  /** Already in the plan: never offered. */
+  planned: NearbyRequest['planned'];
+  /** budgetLeft = today's budget left, not counting the outdoor stop's own price when it's replaced. */
+  prefs: GroupPrefs;
+}
+
+export interface RainReply {
+  /** Up to 3 indoor places, nearest first; empty = "consider moving it". */
+  options: RainOption[];
+  /** True if a search was skipped because today's 10 nearby searches are used up. */
+  limited: boolean;
+  /** Real Google requests made for this reply. */
+  placesCalls: number;
+}
+
+/** The includedTypes of the rain searches (sorted, so the same list hits the same cache row). */
+const isRainKind = (k: Kind) => RAIN_KINDS.includes(k.label) || k.food === 'meal';
+
+export function rainTypes(localMinutes: number): string[] {
+  const kinds = KINDS.filter((k) => isRainKind(k) && (k.food !== 'meal' || isMealTime(localMinutes)));
+  return [...new Set(kinds.flatMap((k) => k.types))].sort();
+}
+
+/**
+ * Up to 3 indoor options, with the running-early rules (no AI): skip places already in the
+ * plan, anything outdoor, matching a no-go, breaking someone's food needs or over today's
+ * budget, and meals away from meal times. Must-have places first, then the nearest; shown
+ * nearest first.
+ */
+export function pickRainOptions(places: NearbyPlace[], req: RainRequest): RainOption[] {
+  const { prefs } = req;
+  const plannedIds = new Set(req.planned.placeIds);
+  const plannedNames = new Set(req.planned.names.map(normal));
+  const vegetarian = has(prefs.foodNeeds, 'Vegetarian');
+  const noSeafood = has(prefs.foodNeeds, 'No seafood');
+  const halal = has(prefs.foodNeeds, 'Halal');
+  const seen = new Set<string>();
+
+  const fits = places.flatMap((p) => {
+    if (seen.has(p.placeId)) return [];
+    seen.add(p.placeId);
+    if (plannedIds.has(p.placeId) || plannedNames.has(normal(p.name))) return [];
+    if (p.types.some((t) => OUTDOOR_TYPES.includes(t))) return [];
+    // The first indoor kind it has (an aquarium is often a "tourist_attraction" too).
+    const kind = KINDS.find((k) => isRainKind(k) && k.types.some((t) => p.types.includes(t)));
+    if (!kind) return [];
+    const meal = kind.food === 'meal';
+    if (meal) {
+      if (!isMealTime(req.localMinutes)) return [];
+      if (vegetarian && !p.types.some((t) => t === 'vegetarian_restaurant' || t === 'vegan_restaurant')) return [];
+    }
+    if (kind.food && noSeafood && p.types.includes('seafood_restaurant')) return [];
+    if (matchesNoGo(p, prefs.noGos)) return [];
+    if (prefs.budgetLeft != null && kind.price > 0 && kind.price > prefs.budgetLeft) return [];
+    const rank = prefs.mustHaves.findIndex((m) => kind.mustHaves.some((k) => normal(k) === normal(m)));
+    return [{ p, kind, rank: rank < 0 ? Infinity : rank, distanceM: metersBetween(req.from, p) }];
+  });
+  return fits
+    .sort((a, b) => a.rank - b.rank || a.distanceM - b.distanceM)
+    .slice(0, RAIN_OPTIONS)
+    .sort((a, b) => a.distanceM - b.distanceM)
+    .map(({ p, kind, rank, distanceM }) => ({
+      placeId: p.placeId,
+      name: p.name,
+      lat: p.lat,
+      lng: p.lng,
+      kind: kind.label,
+      category: kind.category,
+      distanceM: Math.round(distanceM),
+      walkMin: legMinutes(req.from, p),
+      ride: distanceM >= WALK_UNDER_M,
+      price: kind.price,
+      halalNote: !!kind.food && halal,
+      mustHave: rank === Infinity ? null : prefs.mustHaves[rank],
+    }));
+}
+
+/**
+ * 1 km first; only if fewer than 3 fit, 2 km too (the places of both picked again). No
+ * second search after Google failed or the daily limit was reached.
+ */
+async function findRainOptions(deps: NearbyDeps, req: RainRequest, onError: (e: unknown) => void): Promise<Answer<RainOption[]>> {
+  const types = rainTypes(req.localMinutes);
+  const near = await areaPlaces(deps, req.from, NEARBY_RADIUS_M, types, onError, RAIN_MAX_RESULTS);
+  const first = near.places ? pickRainOptions(near.places, req) : [];
+  if (!near.places || first.length >= RAIN_OPTIONS) return { value: first, limited: near.limited, calls: near.calls };
+  const wide = await areaPlaces(deps, req.from, WIDER_RADIUS_M, types, onError, RAIN_MAX_RESULTS);
+  return {
+    value: wide.places ? pickRainOptions([...near.places, ...wide.places], req) : first,
+    limited: wide.limited,
+    calls: near.calls + wide.calls,
+  };
+}
+
+/**
+ * The rain card's options for one outdoor stop. The saved set first (one per stop, for the
+ * group); otherwise one request searches (area caches, or up to two counted Google searches)
+ * and saves them while the others wait and read that. Never throws: nothing usable = [],
+ * saved for 10 min like any empty answer.
+ */
+export async function rainOptionsFor(deps: NearbyDeps, req: RainRequest, onError: (e: unknown) => void = () => {}): Promise<RainReply> {
+  const found = await onePerStop<RainOption[]>(deps, nearbyKeys.rain(req.stopId), [], () => findRainOptions(deps, req, onError), onError);
+  return { options: found.value, limited: found.limited, placesCalls: found.calls };
 }
 
 // ---------- The group's preferences ----------

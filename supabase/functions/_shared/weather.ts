@@ -43,6 +43,11 @@ export interface HourWeather extends Weather {
 export interface WeatherReply {
   now: Weather | null;
   next: HourWeather | null;
+  /**
+   * The forecast hours from now to 2 hours ahead (from the same forecast as `next`, no extra
+   * call), so the app can tell whether rain is coming within the hour (rainWithin).
+   */
+  soon?: HourWeather[];
   /** True if anything was left out because the trip's 30 weather calls today are used up. */
   limited: boolean;
   /** Real Google requests made for this reply. */
@@ -202,6 +207,34 @@ export function hourAt(hours: HourWeather[], t: number): HourWeather | null {
   return hours.find((h) => Date.parse(h.start) <= t && t < Date.parse(h.end)) ?? null;
 }
 
+/** Forecast hours in the reply's `soon`: now to this many hours ahead. */
+export const SOON_HOURS = 2;
+/** A forecast hour with at least this chance of rain counts as rain. */
+export const RAIN_CHANCE_MIN = 50;
+const MIN_MS = 60_000;
+
+/** Forecast hours that overlap [from, to), earliest first. */
+export function hoursBetween(hours: HourWeather[], from: number, to: number): HourWeather[] {
+  return hours
+    .filter((h) => Date.parse(h.end) > from && Date.parse(h.start) < to)
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+}
+
+const wet = (w: Weather) => w.kind === 'rain' || w.kind === 'storm';
+
+/**
+ * Minutes until rain within the next `withinMin` (default 60) at time t, or null if none:
+ * 0 if it is raining now (current conditions, or the forecast for this hour), else the
+ * start of the first forecast hour with rain or a 50%+ chance of it.
+ */
+export function rainWithin(current: Weather | null, hours: HourWeather[], t: number, withinMin = 60): number | null {
+  if (current && wet(current)) return 0;
+  for (const h of hoursBetween(hours, t, t + withinMin * MIN_MS)) {
+    if (wet(h) || (h.rainChance ?? 0) >= RAIN_CHANCE_MIN) return Math.max(0, Math.ceil((Date.parse(h.start) - t) / MIN_MS));
+  }
+  return null;
+}
+
 /**
  * Current weather at `now`, and the forecast at `next` in `inMinutes` (0 if its time has passed).
  * A failed part comes back null (the app hides that line); the other part still shows.
@@ -220,10 +253,12 @@ export async function weatherFor(
     req.now ? safe(currentWeather(deps, req.now)) : null,
     req.next ? safe(hourlyForecast(deps, req.next)) : null,
   ]);
-  const at = deps.now() + Math.max(0, req.next?.inMinutes ?? 0) * 60_000;
+  const t = deps.now();
+  const at = t + Math.max(0, req.next?.inMinutes ?? 0) * 60_000;
   return {
     now: cur?.value ?? null,
     next: hours?.value ? hourAt(hours.value, at) : null,
+    soon: hours?.value ? hoursBetween(hours.value, t, t + SOON_HOURS * 60 * 60_000) : [],
     limited: !!(cur?.limited || hours?.limited),
     weatherCalls: (cur?.calls ?? 0) + (hours?.calls ?? 0),
   };

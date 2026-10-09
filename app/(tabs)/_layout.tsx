@@ -6,6 +6,7 @@ import type { ColorValue } from 'react-native';
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
 import { useEarlyCheck } from '@/features/today/hooks/useEarlyCheck';
 import { useLateCheck } from '@/features/today/hooks/useLateCheck';
+import { useRainCheck } from '@/features/today/hooks/useRainCheck';
 import { useVisitTracker } from '@/features/today/hooks/useVisitTracker';
 import { colors, fontSize } from '@/lib/theme';
 
@@ -24,6 +25,8 @@ export default function TabsLayout() {
   useLateCheck();
   // Checks for 30+ min to spare when the group leaves a stop (running-early card).
   useEarlyCheck();
+  // Checks for rain within the hour at an outdoor stop (rain backup card).
+  useRainCheck();
   return (
     <Tabs
       screenOptions={{

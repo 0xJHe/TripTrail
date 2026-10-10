@@ -159,6 +159,19 @@ export function GroupMapScreen() {
             />
           ) : (
             <>
+              {chosen && g.low.length > 0 ? (
+                // Low battery still shows during a meet point / split: just those lines, no far warning or buttons.
+                <GroupAlertCard
+                  far={[]}
+                  low={g.low}
+                  sharingCount={g.members.length}
+                  groupSize={g.groupSize}
+                  notice={g.notice}
+                  onAllow={g.allowLocation}
+                  onMeet={() => {}}
+                  onSplit={() => {}}
+                />
+              ) : null}
               <SplitBanner />
               {showMeet ? (
                 <MeetPointCard

@@ -25,7 +25,7 @@ interface GroupAlertCardProps {
  * The card under the map (prototype screen 11): amber stripe when someone is far from the
  * group or their battery is low, else how many are sharing. Set meet point and Split & rejoin
  * only while someone is more than 500 m from the group (the far-from-group rule).
- * The map hides this card while a meet point or split is going.
+ * While a meet point or split is going the map shows it with only the low-battery lines.
  */
 export function GroupAlertCard({
   far,

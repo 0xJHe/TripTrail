@@ -1,5 +1,6 @@
 import { buildDemoRoute } from '@/features/demo/route';
 import {
+  cameraPoints,
   distanceText,
   farMembers,
   farText,
@@ -9,6 +10,7 @@ import {
   lowBatteryMembers,
   lowBatteryText,
   memberLabel,
+  nextStop,
   sharingWindow,
   showLastSeen,
   type MapMember,
@@ -187,5 +189,27 @@ describe('demo route', () => {
     expect(far.map((f) => f.member.id)).toEqual([farEvent.memberId]);
     expect(farText(far[0])).toMatch(/ is 900 m from the group$/);
     expect(lowBatteryMembers(members).map((m) => m.id)).toEqual([farEvent.memberId]);
+  });
+});
+
+describe('camera', () => {
+  const stop = (status: Stop['status'], east: number) => ({ status, ...offsetMeters(base, east, 0) });
+
+  it('fits every member, the far one too, and the next stop still to come', () => {
+    const members = [member('a', 'A', 0, 0), member('d', 'D', 636, 636)];
+    const stops = [stop('done', 100), stop('arrived', 200), stop('dropped', 250), stop('planned', 300), stop('planned', 400)];
+    expect(nextStop(stops)).toBe(stops[3]);
+    const pts = cameraPoints(members, stops);
+    expect(pts).toHaveLength(3);
+    expect(pts[1]).toEqual({ lat: members[1].lat, lng: members[1].lng });
+    expect(pts[2]).toEqual({ lat: stops[3].lat, lng: stops[3].lng });
+  });
+
+  it('just the members when no stop is left today', () => {
+    expect(cameraPoints([member('a', 'A', 0, 0)], [stop('done', 100)])).toHaveLength(1);
+  });
+
+  it('the stops when nobody is on the map (dropped ones left out)', () => {
+    expect(cameraPoints([], [stop('done', 100), stop('dropped', 200), stop('planned', 300)])).toHaveLength(2);
   });
 });

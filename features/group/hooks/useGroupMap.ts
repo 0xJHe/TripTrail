@@ -10,7 +10,15 @@ import { useCurrentTrip } from '@/features/trip/store';
 import { useGroupLocation } from '@/lib/location';
 import type { LatLng } from '@/lib/distance';
 import { fetchPins } from '../api';
-import { farMembers, groupCentre, lowBatteryMembers, regionAround, type MapMember } from '../groupMap';
+import {
+  cameraPoints,
+  farMembers,
+  groupCentre,
+  lowBatteryMembers,
+  nextStop,
+  regionAround,
+  type MapMember,
+} from '../groupMap';
 import { pinsToday } from '../pins';
 import { useGroupPositions } from './useGroupPositions';
 import { pinKeys } from './usePinSpot';
@@ -74,15 +82,20 @@ export function useGroupMap() {
   const low = useMemo(() => lowBatteryMembers(mapMembers), [mapMembers]);
   const centre = useMemo(() => groupCentre(mapMembers), [mapMembers]);
 
-  // Centre on the group; with nobody on the map, on the day's stops (or the trip's).
-  const stopPoints = (dayStops.length > 0 ? dayStops : allStops)
-    .filter((s) => s.lat != null && s.lng != null)
-    .map((s) => ({ lat: s.lat!, lng: s.lng! }));
-  const points: LatLng[] = mapMembers.length > 0 ? mapMembers : stopPoints;
-  const focus = centre ?? (points.length > 0 ? { lat: points[0].lat, lng: points[0].lng } : null);
-  const region = focus ? regionAround(focus, points) : null;
-  // Re-centre when who is on the map, or who is far away, changes (not on every small move).
-  const regionKey = [tripId, mapMembers.map((m) => m.id).join(','), far.map((f) => f.member.id).join(','), points.length > 0].join('|');
+  // The camera fits every member (the far one too) and the next stop; with nobody on the
+  // map, the day's stops (or the trip's). region = the same area, for the first frame.
+  const fitStops = dayStops.length > 0 ? dayStops : allStops;
+  const fitPoints: LatLng[] = useMemo(() => cameraPoints(mapMembers, fitStops), [mapMembers, fitStops]);
+  const focus = centre ?? fitPoints[0] ?? null;
+  const region = focus ? regionAround(focus, fitPoints) : null;
+  // Fit again when who is on the map, who is far away, or the next stop changes (not on every small move).
+  const fitKey = [
+    tripId,
+    mapMembers.map((m) => m.id).join(','),
+    far.map((f) => f.member.id).join(','),
+    nextStop(fitStops)?.id ?? '',
+    fitPoints.length > 0,
+  ].join('|');
 
   let notice: MapNotice = { kind: 'live' };
   if (!demo) {
@@ -107,7 +120,8 @@ export function useGroupMap() {
     low,
     centre,
     region,
-    regionKey,
+    fitPoints,
+    fitKey,
     dayStops,
     pins: pinsToday(pins.data ?? [], time),
     memberName,

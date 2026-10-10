@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import MapView, { PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import MapView, { PROVIDER_GOOGLE, type EdgePadding, type Region } from 'react-native-maps';
 
 import { Button } from '@/components/ui/Button';
 import { NavyHeader } from '@/components/ui/NavyHeader';
@@ -14,7 +14,12 @@ import { FarLine, MemberMarker, PinMarker, StopMarker } from '../components/MapM
 import { PinSheet } from '../components/PinSheet';
 import { ZoomControls } from '../components/ZoomControls';
 import { useGroupMap } from '../hooks/useGroupMap';
+import { MIN_DELTA } from '../groupMap';
+import { GROUP_MAP_STYLE } from '../mapStyle';
 import { pinDistance } from '../pins';
+
+/** Room around the fitted area (dp): labels under the circles, the zoom buttons on the right. */
+const FIT_PADDING: EdgePadding = { top: 48, right: 72, bottom: 56, left: 48 };
 
 /**
  * Group map (prototype screen 11): everyone's latest position and battery, today's stops,
@@ -24,7 +29,7 @@ export function GroupMapScreen() {
   const g = useGroupMap();
   const map = useRef<MapView>(null);
   const shown = useRef<Region | null>(null);
-  const centred = useRef<string | null>(null);
+  const fitted = useRef<string | null>(null);
   const [pinId, setPinId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const place = g.trip?.destination ?? g.trip?.name ?? '';
@@ -33,17 +38,27 @@ export function GroupMapScreen() {
   const farIds = new Set(g.far.map((f) => f.member.id));
   const time = g.time.getTime();
 
-  // Centre on the group when the map first has something to show, and when who is on it changes.
-  const { region, regionKey } = g;
-  useEffect(() => {
-    if (!ready || !region || centred.current === regionKey) return;
-    centred.current = regionKey;
-    map.current?.animateToRegion(region, 400);
-  }, [ready, region, regionKey]);
-
-  const centre = () => {
-    if (g.region) map.current?.animateToRegion(g.region, 300);
+  /** Fit everyone (the far member too) and the next stop on screen, with room for labels and buttons. */
+  const fit = () => {
+    const pts = g.fitPoints;
+    if (!map.current || !g.region || pts.length === 0) return;
+    // All in one spot: fitting would zoom right in, so show the minimum area around them.
+    const tiny = g.region.latitudeDelta <= MIN_DELTA && g.region.longitudeDelta <= MIN_DELTA;
+    if (pts.length === 1 || tiny) map.current.animateToRegion(g.region, 400);
+    else map.current.fitToCoordinates(pts.map((p) => ({ latitude: p.lat, longitude: p.lng })), { edgePadding: FIT_PADDING, animated: true });
   };
+
+  // On open, and when someone wanders off / comes back, joins, or the next stop changes.
+  const { fitKey } = g;
+  const hasRegion = g.region != null;
+  const fitRef = useRef(fit);
+  fitRef.current = fit;
+  useEffect(() => {
+    if (!ready || !hasRegion || fitted.current === fitKey) return;
+    fitted.current = fitKey;
+    fitRef.current();
+  }, [ready, hasRegion, fitKey]);
+
   const zoom = (dir: 1 | -1) => {
     const r = shown.current ?? g.region;
     if (!r) return;
@@ -81,7 +96,9 @@ export function GroupMapScreen() {
           toolbarEnabled={false}
           showsCompass={false}
           moveOnMarkerPress={false}
-          showsPointsOfInterests={false}>
+          showsPointsOfInterests={false}
+          customMapStyle={GROUP_MAP_STYLE}
+          userInterfaceStyle="light">
           {g.dayStops.map((s, i) => (
             <StopMarker key={s.id} stop={s} number={i + 1} />
           ))}
@@ -94,7 +111,7 @@ export function GroupMapScreen() {
           ))}
         </MapView>
         {g.loading ? <ActivityIndicator style={styles.loading} color={colors.teal} /> : null}
-        <ZoomControls onCentre={centre} onZoom={zoom} />
+        <ZoomControls onCentre={fit} onZoom={zoom} />
       </View>
 
       <View style={styles.panel}>

@@ -21,22 +21,38 @@ import {
 import { pinTitle } from '../pins';
 import type { Pin } from '../types';
 
+// Fixed marker boxes: Android draws a custom marker as a picture of its view, and clips
+// anything outside the view's own size (the known half-circle bug), so every marker has an
+// exact width and height that its content fits inside, with no shadows or overflow.
 const AVATAR = 34;
 const LABEL_GAP = 3;
 const LINE = 16;
+const SEEN_LINE = 13;
+const MEMBER_W = 100;
+const STOP_BOX = 24;
+const PIN_BOX = 36;
+const DISTANCE_W = 64;
+const DISTANCE_H = 22;
 
 /**
- * Android draws custom marker views as a picture: let it redraw for a moment after the
- * content changes, then stop (redrawing all the time is slow).
+ * Android redraws a custom marker only while tracksViewChanges is on (and that is slow if left
+ * on). On until the marker's view has been laid out, plus a frame or two, after every content
+ * change (name, battery, colour), then off. A fallback turns it off if layout never fires.
  */
-function useTracks(key: string): boolean {
+function useMarkerTracks(key: string): { tracks: boolean; onLayout: () => void } {
   const [tracks, setTracks] = useState(true);
+  const [laidOut, setLaidOut] = useState(0);
   useEffect(() => {
     setTracks(true);
-    const id = setTimeout(() => setTracks(false), 600);
+    const id = setTimeout(() => setTracks(false), 2000);
     return () => clearTimeout(id);
   }, [key]);
-  return tracks;
+  useEffect(() => {
+    if (laidOut === 0) return;
+    const id = setTimeout(() => setTracks(false), 250);
+    return () => clearTimeout(id);
+  }, [laidOut, key]);
+  return { tracks, onLayout: () => setLaidOut((n) => n + 1) };
 }
 
 const at = (p: LatLng) => ({ latitude: p.lat, longitude: p.lng });
@@ -57,8 +73,8 @@ export function MemberMarker({ member, far, time }: { member: MapMember; far: bo
   const tone: Tone = low ? 'low' : far ? 'far' : lastSeen ? 'stale' : member.isMe ? 'me' : 'ok';
   const label = memberLabel(member);
   const seen = lastSeen ? lastSeenText(member) : null;
-  const tracks = useTracks(`${tone}|${label}|${seen}`);
-  const height = AVATAR + LABEL_GAP + LINE + (seen ? 13 : 0);
+  const { tracks, onLayout } = useMarkerTracks(`${tone}|${label}|${seen}`);
+  const height = AVATAR + LABEL_GAP + LINE + (seen ? SEEN_LINE : 0);
   return (
     <Marker
       coordinate={at(member)}
@@ -68,7 +84,7 @@ export function MemberMarker({ member, far, time }: { member: MapMember; far: bo
       title={member.isMe ? 'You' : member.name}
       description={[member.battery != null ? `Battery ${member.battery}%` : null, seen].filter(Boolean).join(' · ') || undefined}
       accessibilityLabel={[label, seen].filter(Boolean).join(', ')}>
-      <View style={styles.member}>
+      <View style={[styles.member, { height }]} collapsable={false} onLayout={onLayout}>
         <View style={styles.ring}>
           <View style={[styles.avatar, { backgroundColor: TONE[tone] }]}>
             <Txt style={styles.initial} color={colors.white}>
@@ -76,7 +92,7 @@ export function MemberMarker({ member, far, time }: { member: MapMember; far: bo
             </Txt>
           </View>
         </View>
-        <View style={styles.label}>
+        <View style={[styles.label, { height: LINE + (seen ? SEEN_LINE : 0) }]}>
           <Txt style={styles.labelText} color={low ? colors.red : colors.text} numberOfLines={1}>
             {label}
           </Txt>
@@ -94,7 +110,7 @@ export function MemberMarker({ member, far, time }: { member: MapMember; far: bo
 /** A small numbered dot for each of the day's stops; done ones are ticked and grey. */
 export function StopMarker({ stop, number }: { stop: Stop; number: number }) {
   const done = stop.status === 'done';
-  const tracks = useTracks(`${stop.status}|${number}`);
+  const { tracks, onLayout } = useMarkerTracks(`${stop.status}|${number}`);
   if (stop.lat == null || stop.lng == null) return null;
   return (
     <Marker
@@ -104,14 +120,16 @@ export function StopMarker({ stop, number }: { stop: Stop; number: number }) {
       zIndex={5}
       title={stop.name}
       description={timeLabel(stop)}>
-      <View style={[styles.stop, done && styles.stopDone]}>
-        {done ? (
-          <Ionicons name="checkmark" size={11} color={colors.white} />
-        ) : (
-          <Txt style={styles.stopText} color={colors.white}>
-            {number}
-          </Txt>
-        )}
+      <View style={styles.stopBox} collapsable={false} onLayout={onLayout}>
+        <View style={[styles.stop, done && styles.stopDone]}>
+          {done ? (
+            <Ionicons name="checkmark" size={11} color={colors.white} />
+          ) : (
+            <Txt style={styles.stopText} color={colors.white}>
+              {number}
+            </Txt>
+          )}
+        </View>
       </View>
     </Marker>
   );
@@ -120,7 +138,7 @@ export function StopMarker({ stop, number }: { stop: Stop; number: number }) {
 /** A pin from Pin spot: 📍 for a spot, 🚗 for a vehicle. Tapping opens its card. */
 export function PinMarker({ pin, selected, onPress }: { pin: Pin; selected: boolean; onPress: () => void }) {
   const spot = pin.type === 'spot';
-  const tracks = useTracks(`${selected}`);
+  const { tracks, onLayout } = useMarkerTracks(`${selected}|${pin.type}`);
   return (
     <Marker
       coordinate={at(pin)}
@@ -132,8 +150,10 @@ export function PinMarker({ pin, selected, onPress }: { pin: Pin; selected: bool
         onPress();
       }}
       accessibilityLabel={`${spot ? 'Pinned spot' : 'Vehicle'}: ${pinTitle(pin)}`}>
-      <View style={[styles.pin, { borderColor: selected ? colors.teal : spot ? colors.red : colors.blue }]}>
-        <Txt style={{ fontSize: 15, lineHeight: 19 }}>{spot ? '📍' : '🚗'}</Txt>
+      <View style={styles.pinBox} collapsable={false} onLayout={onLayout}>
+        <View style={[styles.pin, { borderColor: selected ? colors.teal : spot ? colors.red : colors.blue }]}>
+          <Txt style={styles.pinEmoji}>{spot ? '📍' : '🚗'}</Txt>
+        </View>
       </View>
     </Marker>
   );
@@ -143,7 +163,7 @@ export function PinMarker({ pin, selected, onPress }: { pin: Pin; selected: bool
 export function FarLine({ far, centre }: { far: FarMember; centre: LatLng }) {
   const mid = { lat: (far.member.lat + centre.lat) / 2, lng: (far.member.lng + centre.lng) / 2 };
   const text = distanceText(far.distanceM);
-  const tracks = useTracks(text);
+  const { tracks, onLayout } = useMarkerTracks(text);
   return (
     <>
       <Polyline
@@ -154,47 +174,47 @@ export function FarLine({ far, centre }: { far: FarMember; centre: LatLng }) {
         zIndex={4}
       />
       <Marker coordinate={at(mid)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={tracks} zIndex={15} tappable={false}>
-        <View style={styles.distance}>
-          <Txt style={styles.distanceText} color={colors.amberText}>
-            {text}
-          </Txt>
+        <View style={styles.distanceBox} collapsable={false} onLayout={onLayout}>
+          <View style={styles.distance}>
+            <Txt style={styles.distanceText} color={colors.amberText} numberOfLines={1}>
+              {text}
+            </Txt>
+          </View>
         </View>
       </Marker>
     </>
   );
 }
 
-const pillShadow = {
-  shadowColor: colors.navy,
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.25,
-  shadowRadius: 3,
-  elevation: 3,
-} as const;
-
+// No shadows inside markers (Android clips them and they can stop the picture redrawing):
+// thin borders give the same lift.
 const styles = StyleSheet.create({
-  member: { alignItems: 'center', gap: LABEL_GAP },
+  member: { width: MEMBER_W, alignItems: 'center', gap: LABEL_GAP, overflow: 'hidden' },
   ring: {
     width: AVATAR,
     height: AVATAR,
     borderRadius: AVATAR / 2,
     backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    ...pillShadow,
   },
   avatar: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   initial: { fontFamily: fontFamily.bold, fontSize: 12, lineHeight: 15 },
   label: {
-    minHeight: LINE,
-    paddingHorizontal: 7,
+    maxWidth: MEMBER_W,
+    paddingHorizontal: 6,
     borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.94)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   labelText: { fontFamily: fontFamily.bold, fontSize: 10, lineHeight: 14 },
-  seenText: { fontFamily: fontFamily.semibold, fontSize: 9, lineHeight: 12, marginBottom: 1 },
+  seenText: { fontFamily: fontFamily.semibold, fontSize: 9, lineHeight: 12 },
+  stopBox: { width: STOP_BOX, height: STOP_BOX, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   stop: {
     width: 20,
     height: 20,
@@ -207,6 +227,7 @@ const styles = StyleSheet.create({
   },
   stopDone: { backgroundColor: colors.disabled },
   stopText: { fontFamily: fontFamily.bold, fontSize: 10, lineHeight: 13 },
+  pinBox: { width: PIN_BOX, height: PIN_BOX, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   pin: {
     width: 32,
     height: 32,
@@ -215,8 +236,24 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    ...pillShadow,
   },
-  distance: { paddingHorizontal: 9, paddingVertical: 2, borderRadius: 9, backgroundColor: colors.white, ...pillShadow },
+  pinEmoji: { fontSize: 15, lineHeight: 19 },
+  distanceBox: {
+    width: DISTANCE_W,
+    height: DISTANCE_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  distance: {
+    height: 18,
+    paddingHorizontal: 8,
+    borderRadius: 9,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.amber,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   distanceText: { fontFamily: fontFamily.bold, fontSize: 10, lineHeight: 14 },
 });

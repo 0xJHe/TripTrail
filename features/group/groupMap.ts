@@ -153,7 +153,7 @@ export interface MapRegion {
 }
 
 /** Smallest span shown (about 700 m), so one person isn't zoomed in to the street. */
-const MIN_DELTA = 0.0065;
+export const MIN_DELTA = 0.0065;
 
 /** A map region around `centre` that fits every point, with some room at the edges. */
 export function regionAround(centre: LatLng, points: LatLng[]): MapRegion {
@@ -169,4 +169,21 @@ export function regionAround(centre: LatLng, points: LatLng[]): MapRegion {
     latitudeDelta: Math.max(MIN_DELTA, dLat * 2 * 1.35),
     longitudeDelta: Math.max(MIN_DELTA, dLng * 2 * 1.35),
   };
+}
+
+/** The next stop still to come today: the first one not yet arrived at, done or dropped. */
+export function nextStop<T extends Pick<Stop, 'status' | 'lat' | 'lng'>>(dayStops: T[]): T | null {
+  return dayStops.find((s) => s.status === 'planned' && s.lat != null && s.lng != null) ?? null;
+}
+
+/**
+ * What the camera fits: every member (the far one too) and the next stop. With nobody on
+ * the map, the given stops instead (today's, or the trip's when it isn't a trip day).
+ */
+export function cameraPoints(members: LatLng[], stops: Pick<Stop, 'status' | 'lat' | 'lng'>[]): LatLng[] {
+  const placed = stops.filter((s) => s.status !== 'dropped' && s.lat != null && s.lng != null);
+  if (members.length === 0) return placed.map((s) => ({ lat: s.lat!, lng: s.lng! }));
+  const next = nextStop(placed);
+  const points = members.map((m) => ({ lat: m.lat, lng: m.lng }));
+  return next ? [...points, { lat: next.lat!, lng: next.lng! }] : points;
 }

@@ -28,7 +28,8 @@ const FIT_PADDING: EdgePadding = { top: 48, right: 72, bottom: 56, left: 48 };
 /**
  * Group map (prototype screen 11): everyone's latest position and battery, today's stops,
  * pins from Pin spot, and amber alerts when someone is far from the group or low on battery.
- * Set meet point (tap the map or pick a stop / pin) and Split & rejoin (screen 12) from the card.
+ * Set meet point (tap the map or pick a stop / pin) and Split & rejoin (screen 12) from the card,
+ * only while someone is far from the group; once one is chosen, only its card shows until it ends.
  */
 export function GroupMapScreen() {
   const g = useGroupMap();
@@ -41,6 +42,8 @@ export function GroupMapScreen() {
   const pick = useMeetPick(g.dayStops, g.pins, g.gather);
   const { meet, split } = g.gather;
   const showMeet = meet && !(meet.state === 'together' && closedMeet === meet.row.id) ? meet : null;
+  // Once the group has chosen a meet point or a split, only its card shows until it ends.
+  const chosen = meet?.state === 'active' || split?.state === 'active';
   const place = g.trip?.destination ?? g.trip?.name ?? '';
   const meAt = g.members.find((m) => m.isMe) ?? null;
   const selected = g.pins.find((p) => p.id === pinId) ?? null;
@@ -166,21 +169,21 @@ export function GroupMapScreen() {
                   onClose={() => setClosedMeet(showMeet.row.id)}
                 />
               ) : null}
-              <GroupAlertCard
-                far={g.far}
-                low={g.low}
-                sharingCount={g.members.length}
-                groupSize={g.groupSize}
-                notice={g.notice}
-                onAllow={g.allowLocation}
-                onMeet={() => {
-                  setPinId(null);
-                  pick.start();
-                }}
-                onSplit={() => router.push('/split')}
-                meetSet={meet?.state === 'active'}
-                splitActive={split?.state === 'active'}
-              />
+              {chosen ? null : (
+                <GroupAlertCard
+                  far={g.far}
+                  low={g.low}
+                  sharingCount={g.members.length}
+                  groupSize={g.groupSize}
+                  notice={g.notice}
+                  onAllow={g.allowLocation}
+                  onMeet={() => {
+                    setPinId(null);
+                    pick.start();
+                  }}
+                  onSplit={() => router.push('/split')}
+                />
+              )}
             </>
           )}
         </ScrollView>

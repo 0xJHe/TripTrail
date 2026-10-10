@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 
 import { useCurrentTrip } from '@/features/trip/store';
 import { farMembers } from '../groupMap';
-import { groupAPlan, pickRejoin } from '../meetPoint';
+import { groupAPlan, pickRejoin, saveErrorText } from '../meetPoint';
 import { useMapMembers } from './useMapMembers';
 import { useMeetPoints } from './useMeetPoints';
 
@@ -47,8 +47,8 @@ export function useSplitPlan() {
         group_b: b.map((p) => ({ id: p.id, name: p.name })),
       });
       return true;
-    } catch {
-      setError("Couldn't start the split. Check your connection and try again.");
+    } catch (e) {
+      setError(saveErrorText(e, 'start the split'));
       return false;
     } finally {
       setSaving(false);

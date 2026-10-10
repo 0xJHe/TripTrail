@@ -66,6 +66,7 @@ export async function fetchMeetPoints(tripId: string): Promise<MeetPointRow[]> {
     .select('*')
     .eq('trip_id', tripId)
     .order('set_at', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(30);
   if (error) throw error;
   return ((data ?? []) as MeetPointRow[]).map((r) => ({ ...r, group_b: r.group_b ?? [] }));

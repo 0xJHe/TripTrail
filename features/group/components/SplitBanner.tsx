@@ -11,7 +11,7 @@ import { useGroupLocation } from '@/lib/location';
 import { colors, fontFamily, shadow } from '@/lib/theme';
 import { firstName } from '../groupMap';
 import { useMeetPoints } from '../hooks/useMeetPoints';
-import { countdownText, etaTo, meetDirectionsUrl, splitTitle } from '../meetPoint';
+import { countdownText, etaTo, meetDirectionsUrl, saveErrorText, splitTitle } from '../meetPoint';
 
 /**
  * While the group is split (Split & rejoin, prototype screen 12): "Split · rejoin at [place]
@@ -25,6 +25,7 @@ export function SplitBanner() {
   const { split, time, end } = useMeetPoints(tripId, me?.id ?? null);
   const [closed, setClosed] = useState<string | null>(null);
   const [ending, setEnding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   if (!split) return null;
   const { row } = split;
   const name = row.name ?? 'the meet point';
@@ -62,7 +63,8 @@ export function SplitBanner() {
   const directions = () => Linking.openURL(meetDirectionsUrl(row, mode)).catch(() => {});
   const stop = async () => {
     setEnding(true);
-    await end(row.id, 'cleared').catch(() => {});
+    setError(null);
+    await end(row.id, 'cleared').catch((e) => setError(saveErrorText(e, 'end the split')));
     setEnding(false);
   };
 
@@ -89,6 +91,11 @@ export function SplitBanner() {
           ? `You're in group B: head to ${name}${at != null ? `, arrive by ${clockOf(row.rejoin_at)}` : ''}.`
           : `Group A keeps the plan. Group B (${bNames}) meets you there.`}
       </Txt>
+      {error ? (
+        <Txt variant="b12" color={colors.red}>
+          {error}
+        </Txt>
+      ) : null}
       <View style={styles.row}>
         {inB ? (
           <Button

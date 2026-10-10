@@ -15,13 +15,15 @@ interface MeetPointCardProps {
   setBy: string;
   onClear: () => void;
   onClose: () => void;
+  /** Clearing failed. */
+  error?: string | null;
 }
 
 /**
  * The meet point under the map: each member's free estimate to get there, Directions
  * (Google Maps, walking) and Clear. "Everyone's here" once all are within 50 m.
  */
-export function MeetPointCard({ meet, members, setBy, onClear, onClose }: MeetPointCardProps) {
+export function MeetPointCard({ meet, members, setBy, onClear, onClose, error }: MeetPointCardProps) {
   const { row } = meet;
   const name = row.name ?? SPOT_NAME;
 
@@ -85,6 +87,11 @@ export function MeetPointCard({ meet, members, setBy, onClear, onClose }: MeetPo
         );
       })}
       <Txt variant="s11">Straight-line estimate · clears when everyone is within 50 m</Txt>
+      {error ? (
+        <Txt variant="b12" color={colors.red}>
+          {error}
+        </Txt>
+      ) : null}
       <View style={styles.row}>
         <Button
           label="Directions"

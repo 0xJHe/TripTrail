@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import type { Stop } from '@/features/planning/types';
 import type { LatLng } from '@/lib/distance';
 import type { MeetSpot } from '../components/MeetPickCard';
-import { nameForSpot } from '../meetPoint';
+import { nameForSpot, saveErrorText } from '../meetPoint';
 import { pinTitle } from '../pins';
 import type { Pin } from '../types';
 import type { useMeetPoints } from './useMeetPoints';
@@ -49,8 +49,8 @@ export function useMeetPick(dayStops: Stop[], pins: Pin[], gather: ReturnType<ty
       await gather.add({ kind: 'meet', name: draft.name, lat: draft.lat, lng: draft.lng, stop_id: stopId, rejoin_at: null, group_b: [] });
       setPicking(false);
       setDraft(null);
-    } catch {
-      setError("Couldn't save the meet point. Check your connection and try again.");
+    } catch (e) {
+      setError(saveErrorText(e, 'save the meet point'));
     } finally {
       setSaving(false);
     }

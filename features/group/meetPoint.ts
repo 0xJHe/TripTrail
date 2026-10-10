@@ -112,6 +112,11 @@ export interface Gathering {
 }
 
 const setAt = (r: MeetPointRow) => Date.parse(r.set_at ?? r.created_at);
+/**
+ * Newest first: by set_at, then by when the server saved it. In Demo mode the clock often
+ * doesn't move between tries, so several rows share one set_at; the last one saved wins.
+ */
+const newestFirst = (a: MeetPointRow, b: MeetPointRow) => setAt(b) - setAt(a) || Date.parse(b.created_at) - Date.parse(a.created_at);
 
 /**
  * The current meet point (or split) at time t: the newest one set today, at or before t.
@@ -122,7 +127,7 @@ export function currentGathering(rows: MeetPointRow[], kind: GatherKind, t: numb
   const today = todayISO(new Date(t));
   const row = rows
     .filter((r) => r.kind === kind && setAt(r) <= t && todayISO(new Date(setAt(r))) === today)
-    .sort((a, b) => setAt(b) - setAt(a))[0];
+    .sort(newestFirst)[0];
   if (!row) return null;
   const endedAt = row.ended_at ? Date.parse(row.ended_at) : NaN;
   if (row.status === 'active' || Number.isNaN(endedAt) || endedAt > t) return { row, state: 'active' };
@@ -162,6 +167,23 @@ export function nameForSpot(
 }
 
 export const SPOT_NAME = 'Spot on the map';
+
+/** A Supabase / network error as a sentence for the screen, e.g. when saving a meet point fails. */
+export function saveErrorText(e: unknown, doing = 'save it'): string {
+  const err = (e ?? {}) as { code?: string; message?: string };
+  const msg = err.message ?? String(e ?? '');
+  if (err.code === 'PGRST204' || /column .* (does not exist|schema cache)/i.test(msg)) {
+    return `Couldn't ${doing}: the database is missing the meet point columns. Run 011_meet_and_split.sql in Supabase.`;
+  }
+  if (err.code === '42501' || /row-level security/i.test(msg)) {
+    return `Couldn't ${doing}: the server doesn't see you as a member of this trip. Open the trip again and retry.`;
+  }
+  if (err.code === '23503') return `Couldn't ${doing}: that stop or member no longer exists. Pick again.`;
+  if (/network request failed|failed to fetch|fetch failed|timeout/i.test(msg)) {
+    return `Couldn't ${doing}: no connection. Check your internet and try again.`;
+  }
+  return msg ? `Couldn't ${doing}: ${msg}` : `Couldn't ${doing}. Try again.`;
+}
 
 /** Google Maps directions to the point: walking, or driving when it's a ride (over 2 km). */
 export function meetDirectionsUrl(to: LatLng, mode: 'walk' | 'ride' = 'walk'): string {

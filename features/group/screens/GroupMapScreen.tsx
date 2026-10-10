@@ -20,6 +20,7 @@ import { ZoomControls } from '../components/ZoomControls';
 import { useGroupMap } from '../hooks/useGroupMap';
 import { useMeetPick } from '../hooks/useMeetPick';
 import { MIN_DELTA } from '../groupMap';
+import { saveErrorText } from '../meetPoint';
 import { pinDistance } from '../pins';
 
 /** Room around the fitted area (dp): labels under the circles, the zoom buttons on the right. */
@@ -39,6 +40,7 @@ export function GroupMapScreen() {
   const [pinId, setPinId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [closedMeet, setClosedMeet] = useState<string | null>(null);
+  const [clearError, setClearError] = useState<string | null>(null);
   const pick = useMeetPick(g.dayStops, g.pins, g.gather);
   const { meet, split } = g.gather;
   const showMeet = meet && !(meet.state === 'together' && closedMeet === meet.row.id) ? meet : null;
@@ -178,7 +180,11 @@ export function GroupMapScreen() {
                   meet={showMeet}
                   members={g.members}
                   setBy={g.memberName(showMeet.row.set_by)}
-                  onClear={() => g.gather.end(showMeet.row.id, 'cleared').catch(() => {})}
+                  onClear={() => {
+                    setClearError(null);
+                    g.gather.end(showMeet.row.id, 'cleared').catch((e) => setClearError(saveErrorText(e, 'clear the meet point')));
+                  }}
+                  error={clearError}
                   onClose={() => setClosedMeet(showMeet.row.id)}
                 />
               ) : null}

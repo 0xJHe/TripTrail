@@ -11,6 +11,7 @@ import {
   meetDirectionsUrl,
   nameForSpot,
   pickRejoin,
+  saveErrorText,
   splitTitle,
 } from '@/features/group/meetPoint';
 import type { MeetPointRow } from '@/features/group/types';
@@ -200,6 +201,34 @@ describe('current meet point / split', () => {
     expect(currentGathering([done], 'meet', T + 31 * MIN)).toBeNull();
     expect(currentGathering([done], 'meet', T + 10 * MIN)?.state).toBe('active');
     expect(currentGathering([row({ status: 'cleared', ended_at: iso(T + 5 * MIN) })], 'meet', T + 6 * MIN)).toBeNull();
+  });
+
+  it('picks the last one saved when several share one set_at (Demo clock not moved)', () => {
+    // As the database returns them: oldest first. The old one was cleared at that same time.
+    const rows = [
+      row({ id: 'old', status: 'cleared', ended_at: iso(T), created_at: '2026-10-10T19:49:14Z' }),
+      row({ id: 'retry', created_at: '2026-10-10T19:59:10Z' }),
+      row({ id: 'latest', created_at: '2026-10-10T20:03:52Z' }),
+    ];
+    expect(currentGathering(rows, 'meet', T)).toEqual({ row: rows[2], state: 'active' });
+    const splits = [
+      row({ id: 's-old', kind: 'split', status: 'cleared', ended_at: iso(T), created_at: '2026-10-10T19:50:04Z' }),
+      row({ id: 's-new', kind: 'split', created_at: '2026-10-10T20:00:52Z' }),
+    ];
+    expect(currentGathering(splits, 'split', T)?.row.id).toBe('s-new');
+  });
+
+  it('turns a save error into a readable line', () => {
+    expect(saveErrorText({ code: 'PGRST204', message: "Could not find the 'group_b' column of 'meet_points' in the schema cache" }, 'save the meet point')).toBe(
+      "Couldn't save the meet point: the database is missing the meet point columns. Run 011_meet_and_split.sql in Supabase.",
+    );
+    expect(saveErrorText({ code: '42501', message: 'new row violates row-level security policy for table "meet_points"' })).toMatch(
+      /doesn't see you as a member of this trip/,
+    );
+    expect(saveErrorText(new TypeError('Network request failed'), 'start the split')).toBe(
+      "Couldn't start the split: no connection. Check your internet and try again.",
+    );
+    expect(saveErrorText({ message: 'something odd' })).toBe("Couldn't save it: something odd");
   });
 
   it('labels the split and counts down', () => {

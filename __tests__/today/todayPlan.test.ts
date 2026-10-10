@@ -119,3 +119,13 @@ describe('helpers', () => {
     );
   });
 });
+
+describe('todayView for a day kept open past midnight', () => {
+  it('shows the open day (its stops and date), not the calendar day', () => {
+    const stops = [stop(1, 'Night market', 19, { status: 'done' }), stop(2, 'Beach', 8)];
+    const v = todayView({ stage: 'decided', start: START, days: 3, stops, now: new Date(2026, 9, 13, 0, 30), day: 1 });
+    expect(v).toMatchObject({ kind: 'day', day: 1, date: '2026-10-12' });
+    // Without an open day it is Day 2 by the calendar.
+    expect(view(stops, new Date(2026, 9, 13, 0, 30))).toMatchObject({ kind: 'day', day: 2 });
+  });
+});

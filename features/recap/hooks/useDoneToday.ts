@@ -5,11 +5,10 @@ import { useSpends } from '@/features/money/hooks/useSpends';
 import { useDayPlan } from '@/features/planning/hooks/useDayPlan';
 import { useStops } from '@/features/planning/hooks/usePlanning';
 import { dayDate } from '@/features/planning/stops';
-import { tripDayOn } from '@/features/today/todayPlan';
 import { useCurrentTrip } from '@/features/trip/store';
-import { useNow } from '@/lib/clock';
 import { dayReview, sharingBackAt } from '../dayEnd';
 import { useDayClosures } from './useDayClosures';
+import { useOpenDay } from './useOpenDay';
 
 /** Everything the Done for today screen shows (prototype screen 14). No Google or Gemini calls. */
 export function useDoneToday() {
@@ -17,9 +16,9 @@ export function useDoneToday() {
   const plan = useDayPlan(tripId);
   // Every stop, dropped ones too: "How today went" crosses them out.
   const allStops = useStops(tripId);
-  const time = useNow();
   const { mine } = useSpends(tripId);
-  const day = plan.trip ? tripDayOn(plan.start, time) : 0;
+  // Kept open past midnight after "Keep going": still that day.
+  const day = useOpenDay(tripId).day;
   const closures = useDayClosures(tripId, day);
   const isTripDay = day >= 1 && day <= plan.days;
 

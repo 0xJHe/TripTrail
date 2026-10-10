@@ -278,13 +278,33 @@ Time and location rule (built; follow it in every live-trip feature):
   can delete them.
 - Location on: from 60 min before the day's first stop until the member taps
   Done for today.
+- Done for today (features/recap, dayEnd.ts, screen 14, `day_closures` table): once the day's
+  last stop is finished (left, "We're done here", or its planned end passed; no end time =
+  60 min after it starts) the Today tab shows "That's every stop for today" with Done for
+  today / Keep going. Keep going (saved on the phone, keepGoing.ts) pins Done for today and
+  + Add more stops to the bottom; an added stop opens the day again until it is finished.
+  Done for today saves the member's row (closed, closed_at = now(); reopen = closed false,
+  an update so Realtime reaches everyone; rows after the fake time don't count, so Reset
+  reopens), stops this phone's sharing and GPS reads, and the Today tab says "Day closed.
+  See you tomorrow" with Reopen today. "2 of 4 have closed their day" is live.
+- Which trip day it is: ALWAYS from useOpenDay (features/recap/hooks/useOpenDay.ts), never
+  tripDayOn() directly in live-trip features. Normally the calendar day. After Keep going the
+  day carries on past midnight (Today, stops, + Add more stops, sharing) until Done for today;
+  never closed, it ends by itself 1 h before the next day's first stop (no timed stops: as if
+  it started at 09:00), so the new day starts normally (dayEnd.ts activeTripDay /
+  openDayEndsAt). Closed past midnight, Today shows "Day closed" until then. Without Keep
+  going the day ends at midnight.
 - Location sharing (features/group/hooks/useShareLocation.ts, `locations` table, one new row
-  per save): only in the sharing window, 60 min before the day's first stop to 60 min after
-  the last stop's end (groupMap.ts sharingWindow). With "Allow all the time" (asked once per
+  per save): only in the sharing window, 60 min before the day's first stop to the end of the
+  day (midnight, or 60 min after the last stop if later; groupMap.ts sharingWindow), extended
+  to the auto end after Keep going (dayEnd.ts keptGoingWindow), and never once the member has
+  closed the day (dayEnd.ts shareNow). With "Allow all the time" (asked once per
   trip by BackgroundAskCard, after a short explanation; a no keeps foreground-only):
   background updates about every 60 s with screen off, Android notification "TripTrail is
   sharing your location with your group" (features/group/backgroundShare.ts; the task stops
-  itself when the window ends). Otherwise every 45 s while the app is open. Battery
+  itself when the window ends); once the last stop is finished it becomes "Still sharing your
+  location" / "Tap Done for today in TripTrail when you're finished" (restarted while the app
+  is open). Otherwise every 45 s while the app is open. Battery
   dropping below 15% saves straight away. Demo mode never writes positions (the map uses
   the demo route's members). Others' positions: newest row per member, live by Realtime.
 - Group map (screen 11, features/group): member circles with initial + battery %, day's

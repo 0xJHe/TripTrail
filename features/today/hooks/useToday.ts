@@ -4,6 +4,7 @@ import { useSpendCheck } from '@/features/money/hooks/useSpends';
 import { useDayPlan } from '@/features/planning/hooks/useDayPlan';
 import type { Stop } from '@/features/planning/types';
 import { useDayEnd } from '@/features/recap/hooks/useDayEnd';
+import { useOpenDay } from '@/features/recap/hooks/useOpenDay';
 import { useCurrentTrip } from '@/features/trip/store';
 import { now as clockNow, useNow } from '@/lib/clock';
 import { useDemoRoute, useGroupLocation } from '@/lib/location';
@@ -25,12 +26,14 @@ export function useToday() {
   const permission = useLocationAccess((s) => s.permission);
   const allowLocation = useLocationAccess((s) => s.allow);
   const save = useSaveVisits(tripId);
+  // After "Keep going" the day stays open past midnight, until Done for today.
+  const openDay = useOpenDay(tripId).day;
   const [leaving, setLeaving] = useState(false);
 
   const { trip, stops, days, start } = plan;
   const view = useMemo(
-    () => (trip ? todayView({ stage: trip.stage, start, days, stops, now: time }) : null),
-    [trip, start, days, stops, time],
+    () => (trip ? todayView({ stage: trip.stage, start, days, stops, now: time, day: openDay }) : null),
+    [trip, start, days, stops, time, openDay],
   );
   const day = view?.kind === 'day' ? view : null;
   const dayStops = useMemo(() => (day ? stops.filter((s) => s.day_number === day.day) : []), [stops, day?.day]);

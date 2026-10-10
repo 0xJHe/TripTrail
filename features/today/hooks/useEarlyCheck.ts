@@ -6,6 +6,7 @@ import { dayCount, planStart, sortStops } from '@/features/planning/stops';
 import { useTrip } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
 import { useCurrentTrip } from '@/features/trip/store';
+import { useOpenDay } from '@/features/recap/hooks/useOpenDay';
 import { now, useNow } from '@/lib/clock';
 import { getGroupLocation, useDemoRoute } from '@/lib/location';
 import { estimateMinutes } from '@/supabase/functions/_shared/eta';
@@ -48,6 +49,8 @@ export function useEarlyCheck() {
   const demo = useDemoRoute((s) => s.route) != null;
   const permission = useLocationAccess((s) => s.permission);
   const time = useNow().getTime();
+  // The trip day, kept open past midnight after "Keep going".
+  const openDay = useOpenDay(tripId).day;
   const queryClient = useQueryClient();
   /** Left stop id -> time of the check (one check per leave). */
   const done = useRef(new Map<string, number>());
@@ -96,6 +99,7 @@ export function useEarlyCheck() {
       days: dayCount(sorted, t.length_days),
       stops: sorted,
       now: new Date(time),
+      day: openDay,
     });
     // Between stops only: once they're at the next one, there's nothing to fill.
     if (view.kind !== 'day' || view.now || !checkable(view.next)) return;
@@ -145,5 +149,5 @@ export function useEarlyCheck() {
           setRound((r) => r + 1);
         }
       });
-  }, [tripId, trip.data, stops.data, lateAlerts.data, earlyAlerts.data, time, demo, permission, queryClient, round]);
+  }, [tripId, trip.data, stops.data, lateAlerts.data, earlyAlerts.data, time, demo, permission, queryClient, round, openDay]);
 }

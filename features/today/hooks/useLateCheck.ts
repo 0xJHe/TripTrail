@@ -8,6 +8,7 @@ import { demoTravelMin } from '@/features/demo/route';
 import { useTrip } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
 import { useCurrentTrip } from '@/features/trip/store';
+import { useOpenDay } from '@/features/recap/hooks/useOpenDay';
 import { now, useNow } from '@/lib/clock';
 import { getGroupLocation, useDemoRoute, type DemoRoute } from '@/lib/location';
 import { estimateMinutes, worthAskingGoogle, type CheckKind } from '@/supabase/functions/_shared/eta';
@@ -48,6 +49,8 @@ export function useLateCheck() {
   const demo = route != null;
   const permission = useLocationAccess((s) => s.permission);
   const time = useNow().getTime();
+  // The trip day, kept open past midnight after "Keep going".
+  const openDay = useOpenDay(tripId).day;
   const queryClient = useQueryClient();
   /** `${stopId}:${kind}` -> time of the check (at most one of each kind per stop). */
   const done = useRef(new Map<string, number>());
@@ -87,6 +90,7 @@ export function useLateCheck() {
       days: dayCount(sorted, t.length_days),
       stops: sorted,
       now: new Date(time),
+      day: openDay,
     });
     if (view.kind !== 'day' || !checkable(view.next)) return;
     const next = view.next;
@@ -122,7 +126,7 @@ export function useLateCheck() {
           setRound((r) => r + 1);
         }
       });
-  }, [tripId, trip.data, stops.data, alerts.data, time, demo, route, permission, queryClient, round]);
+  }, [tripId, trip.data, stops.data, alerts.data, time, demo, route, permission, queryClient, round, openDay]);
 }
 
 /**

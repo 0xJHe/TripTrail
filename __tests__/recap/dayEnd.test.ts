@@ -1,11 +1,15 @@
 import type { Spend } from '@/features/money/types';
 import type { Stop } from '@/features/planning/types';
 import {
+  activeTripDay,
   closedCountLabel,
   closedIds,
   dayEndMode,
   dayFinished,
   dayReview,
+  keptGoingWindow,
+  NO_STOPS_START_HOUR,
+  openDayEndsAt,
   sharingBackAt,
   shareNow,
 } from '@/features/recap/dayEnd';
@@ -180,6 +184,52 @@ describe('location sharing stop / start', () => {
   it('runs past midnight when the last stop does', () => {
     const late = sharingWindow([{ planned_time: at(22), planned_end: at(23, 30), status: 'planned' }]);
     expect(late!.to).toBe(ms(0, 30, 13));
+  });
+});
+
+describe('"Keep going" keeps the day open past midnight', () => {
+  // Day 1 is 12 Oct; Day 2 (13 Oct) starts at 08:00, so its sharing starts at 07:00.
+  const day2 = [{ planned_time: at(8, 0, 13) }, { planned_time: at(11, 0, 13) }];
+  const endsAt = openDayEndsAt(day2, '2026-10-13');
+  const day1Window = sharingWindow([{ planned_time: at(19), planned_end: at(22, 30), status: 'done' }]);
+
+  it("ends by itself 1 hour before the next day's first stop", () => {
+    expect(endsAt).toBe(ms(7, 0, 13));
+    // A next day with nothing timed: as if it started at 09:00.
+    expect(openDayEndsAt([], '2026-10-13')).toBe(ms(NO_STOPS_START_HOUR - 1, 0, 13));
+  });
+
+  it('the Today tab stays on Day 1 after midnight until then, only after Keep going', () => {
+    const on = (t: number, kept: boolean) => activeTripDay({ calendarDay: 2, prevKeptGoing: kept, prevEndsAt: endsAt, t });
+    expect(on(ms(0, 30, 13), true)).toBe(1);
+    expect(on(ms(6, 59, 13), true)).toBe(1);
+    expect(on(ms(7, 0, 13), true)).toBe(2);
+    // Without Keep going: the current behaviour, the day ends at midnight.
+    expect(on(ms(0, 30, 13), false)).toBe(2);
+    // Nothing before Day 1.
+    expect(activeTripDay({ calendarDay: 1, prevKeptGoing: true, prevEndsAt: endsAt, t: ms(0, 30, 12) })).toBe(1);
+  });
+
+  it('works out Keep going for the day before from the saved tap', () => {
+    useKeepGoing.getState().keepGoing('trip-k', 1, ms(22, 45));
+    const kept = keptGoing(useKeepGoing.getState().at, 'trip-k', 1, ms(1, 0, 13));
+    expect(activeTripDay({ calendarDay: 2, prevKeptGoing: kept, prevEndsAt: endsAt, t: ms(1, 0, 13) })).toBe(1);
+  });
+
+  it('location sharing keeps running past midnight until Done for today or the auto end', () => {
+    const kept = keptGoingWindow(day1Window, true, endsAt);
+    expect(shareNow(kept, ms(1, 30, 13), false)).toBe(true);
+    expect(shareNow(kept, ms(6, 59, 13), false)).toBe(true);
+    expect(shareNow(kept, ms(7, 1, 13), false)).toBe(false);
+    // Done for today stops it straight away.
+    expect(shareNow(kept, ms(1, 30, 13), true)).toBe(false);
+  });
+
+  it('without Keep going sharing still stops at midnight', () => {
+    const plain = keptGoingWindow(day1Window, false, endsAt);
+    expect(plain).toEqual(day1Window);
+    expect(shareNow(plain, ms(23, 59), false)).toBe(true);
+    expect(shareNow(plain, ms(0, 1, 13), false)).toBe(false);
   });
 });
 

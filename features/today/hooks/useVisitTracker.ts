@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 
 import { useStops } from '@/features/planning/hooks/usePlanning';
 import { useDayClosures } from '@/features/recap/hooks/useDayClosures';
+import { useOpenDay } from '@/features/recap/hooks/useOpenDay';
 import { planStart, sortStops } from '@/features/planning/stops';
 import { useTrip } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
@@ -50,8 +51,12 @@ export function useVisitTracker() {
   const decided = trip.data?.stage === 'decided';
   const start = planStart(trip.data?.start_date ?? null, sortStops(stops.data ?? []));
   const demo = route != null;
-  // Done for today: no more GPS reads on this phone until the next day.
-  const closed = useDayClosures(tripId, decided ? tripDayOn(start, new Date(time)) : 0).mine;
+  // The trip day (kept open past midnight after "Keep going"). Done for today: no more GPS
+  // reads on this phone until the next day.
+  const openDay = useOpenDay(tripId).day;
+  const closed = useDayClosures(tripId, openDay).mine;
+  const openDayRef = useRef(openDay);
+  openDayRef.current = openDay;
   const tracker = useRef(emptyTracker());
   const stopsRef = useRef(stops.data);
   stopsRef.current = stops.data;
@@ -69,7 +74,8 @@ export function useVisitTracker() {
       const t = readings[readings.length - 1].at;
       const all = stopsRef.current ?? [];
       const undone = undo ? undoFutureVisits(all, t) : [];
-      const day = tripDayOn(start, new Date(t));
+      // The open day; a day kept open past midnight keeps its stops (else the newest reading's day).
+      const day = openDayRef.current > 0 ? openDayRef.current : tripDayOn(start, new Date(t));
       const today = sortStops(applyChanges(all, undone)).filter((s) => s.day_number === day);
       const out = processReadings(tracker.current, today, readings);
       tracker.current = out.state;

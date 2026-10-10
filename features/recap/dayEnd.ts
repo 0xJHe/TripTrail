@@ -1,5 +1,6 @@
 import { knownCost } from '@/features/money/spend';
 import type { Spend } from '@/features/money/types';
+import type { ISODate } from '@/features/planning/dates';
 import { clockOf, durationText } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { formatMoney } from '@/lib/theme';
@@ -69,6 +70,56 @@ export function closedCountLabel(closed: number, groupSize: number): string {
  */
 export function shareNow(window: { from: number; to: number } | null, t: number, closed: boolean): boolean {
   return !closed && !!window && t >= window.from && t <= window.to;
+}
+
+// ---------- Keep going past midnight ----------
+
+/** The next day has no timed stops: the open day ends as if its first stop were at 09:00 (so at 08:00). */
+export const NO_STOPS_START_HOUR = 9;
+/** The next day's sharing starts this long before its first stop; a day kept open ends then. */
+const NEXT_DAY_LEAD_MS = 60 * MIN;
+
+/**
+ * When a day kept open with "Keep going" ends by itself if the person never taps Done for
+ * today: 1 hour before the next day's first stop (when that day's sharing starts), so the
+ * new day starts normally. `nextDayStops` = the next day's stops; `nextDate` = its date.
+ */
+export function openDayEndsAt(nextDayStops: Pick<Stop, 'planned_time'>[], nextDate: ISODate): number {
+  const starts = nextDayStops.map((s) => (s.planned_time ? Date.parse(s.planned_time) : NaN)).filter((t) => !Number.isNaN(t));
+  if (starts.length > 0) return Math.min(...starts) - NEXT_DAY_LEAD_MS;
+  const [y, m, d] = nextDate.split('-').map(Number);
+  return new Date(y, m - 1, d, NO_STOPS_START_HOUR).getTime() - NEXT_DAY_LEAD_MS;
+}
+
+/**
+ * The trip day this person is on. Normally the calendar day; but if they tapped "Keep going"
+ * on the day before, that day carries on past midnight (its stops, + Add more stops, location
+ * sharing) until they tap Done for today. Closed then, the Today tab keeps saying "Day closed.
+ * See you tomorrow" (sharing off) until the next day starts. Never closed, it ends by itself at
+ * openDayEndsAt, 1 hour before the next day's first stop. Without Keep going the day ends at midnight.
+ */
+export function activeTripDay({
+  calendarDay,
+  prevKeptGoing,
+  prevEndsAt,
+  t,
+}: {
+  calendarDay: number;
+  prevKeptGoing: boolean;
+  prevEndsAt: number;
+  t: number;
+}): number {
+  const prev = calendarDay - 1;
+  return prev >= 1 && prevKeptGoing && t < prevEndsAt ? prev : calendarDay;
+}
+
+/** The sharing window for a day kept open with Keep going: on until it ends by itself (or Done for today). */
+export function keptGoingWindow(
+  window: { from: number; to: number } | null,
+  keptGoing: boolean,
+  endsAt: number,
+): { from: number; to: number } | null {
+  return window && keptGoing ? { from: window.from, to: Math.max(window.to, endsAt) } : window;
 }
 
 // ---------- How today went ----------

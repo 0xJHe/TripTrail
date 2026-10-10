@@ -31,11 +31,13 @@ interface TodayInput {
   /** The trip's stops in plan order, dropped ones left out (sortStops). */
   stops: Stop[];
   now: Date;
+  /** The trip day to show when it isn't the calendar day (a day kept open past midnight, useOpenDay). */
+  day?: number;
 }
 
 /** Today's Now / Next / Done from the Day plan, or why there is nothing to show. */
-export function todayView({ stage, start, days, stops, now }: TodayInput): TodayView {
-  const day = tripDayOn(start, now);
+export function todayView({ stage, start, days, stops, now, day: openDay }: TodayInput): TodayView {
+  const day = openDay != null && openDay > 0 ? openDay : tripDayOn(start, now);
   const noPlan = (reason: 'not-built' | 'before' | 'after' | 'empty'): TodayView => ({
     kind: 'no-plan',
     reason,

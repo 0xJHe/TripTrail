@@ -6,6 +6,7 @@ import { dayCount, planStart, sortStops } from '@/features/planning/stops';
 import { useTrip } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
 import { useCurrentTrip } from '@/features/trip/store';
+import { useOpenDay } from '@/features/recap/hooks/useOpenDay';
 import { now, useNow } from '@/lib/clock';
 import { getGroupLocation, useDemoRoute, useGroupLocation } from '@/lib/location';
 import type { RainOption } from '@/supabase/functions/_shared/nearby';
@@ -59,6 +60,8 @@ export function useRainCheck() {
   const permission = useLocationAccess((s) => s.permission);
   const location = useGroupLocation();
   const time = useNow().getTime();
+  // The trip day, kept open past midnight after "Keep going".
+  const openDay = useOpenDay(tripId).day;
   const queryClient = useQueryClient();
   const weather = tripId && !demo ? lastWeather(queryClient, tripId) : null;
   /** Stops already checked (a card is being saved, or was). */
@@ -90,6 +93,7 @@ export function useRainCheck() {
       days: dayCount(sorted, t.length_days),
       stops: sorted,
       now: new Date(time),
+      day: openDay,
     });
     if (view.kind !== 'day') return;
     const rainIn = rainInMinutes({ route, center, time, weather: weather?.reply ?? null });
@@ -126,5 +130,5 @@ export function useRainCheck() {
         busy.current = false;
       });
     // `center` and `weather` are read fresh each run; the clock, the position's time and the data drive it.
-  }, [tripId, trip.data, stops.data, rainAlerts.data, time, demo, permission, weather?.at, location?.at]);
+  }, [tripId, trip.data, stops.data, rainAlerts.data, time, demo, permission, weather?.at, location?.at, openDay]);
 }

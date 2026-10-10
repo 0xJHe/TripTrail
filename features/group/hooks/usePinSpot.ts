@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { addStop } from '@/features/planning/api';
 import { useDayPlan } from '@/features/planning/hooks/useDayPlan';
 import { planningKeys } from '@/features/planning/hooks/usePlanning';
-import { tripDayOn } from '@/features/today/todayPlan';
+import { useOpenDay } from '@/features/recap/hooks/useOpenDay';
 import { useMyMember } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
 import { useCurrentTrip } from '@/features/trip/store';
@@ -42,7 +42,7 @@ export function usePinSpot() {
   const [dropped, setDropped] = useState<string | null>(null);
 
   // "Add to plan" goes on today's trip day, if today is one.
-  const day = plan.trip?.stage === 'decided' ? tripDayOn(plan.start, time) : 0;
+  const day = useOpenDay(tripId).day;
   const planDay = day >= 1 && day <= plan.days ? day : null;
   const dayStops = useMemo(() => plan.stops.filter((s) => s.day_number === planDay), [plan.stops, planDay]);
   const here = location?.me ?? location?.center ?? null;

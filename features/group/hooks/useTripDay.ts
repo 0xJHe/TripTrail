@@ -1,14 +1,17 @@
 import { useMemo } from 'react';
 
 import { useStops } from '@/features/planning/hooks/usePlanning';
-import { planStart, sortStops } from '@/features/planning/stops';
-import { tripDayOn } from '@/features/today/todayPlan';
+import { sortStops } from '@/features/planning/stops';
+import { keptGoingWindow } from '@/features/recap/dayEnd';
+import { useOpenDay } from '@/features/recap/hooks/useOpenDay';
 import { useTrip } from '@/features/trip/hooks/useTrip';
 import { useNow } from '@/lib/clock';
 import { inWindow, sharingWindow } from '../groupMap';
 
 /**
- * Today's trip day (0 = not a trip day), its stops, and whether phones share their position now.
+ * Today's trip day (0 = not a trip day; kept open past midnight after "Keep going"), its stops,
+ * and whether phones share their position now. After Keep going the window runs until the day
+ * ends by itself, 1 hour before the next day's first stop (useOpenDay), unless Done for today.
  * ready = the trip and its stops have loaded (until then `sharing` is false only because nothing is known).
  */
 export function useTripDay(tripId: string | undefined) {
@@ -16,13 +19,16 @@ export function useTripDay(tripId: string | undefined) {
   const stops = useStops(tripId);
   const time = useNow();
   const sorted = useMemo(() => sortStops(stops.data ?? []), [stops.data]);
-  const start = planStart(trip.data?.start_date ?? null, sorted);
-  const day = trip.data?.stage === 'decided' ? tripDayOn(start, time) : 0;
+  const open = useOpenDay(tripId);
+  const day = open.day;
   const dayStops = useMemo(
     () => sorted.filter((s) => s.day_number === day && s.status !== 'dropped'),
     [sorted, day],
   );
-  const window = useMemo(() => sharingWindow(dayStops), [dayStops]);
+  const window = useMemo(
+    () => keptGoingWindow(sharingWindow(dayStops), open.keptGoing, open.endsAt),
+    [dayStops, open.keptGoing, open.endsAt],
+  );
   return {
     trip: trip.data,
     allStops: sorted,
@@ -31,6 +37,6 @@ export function useTripDay(tripId: string | undefined) {
     window,
     sharing: inWindow(window, time.getTime()),
     time,
-    ready: !tripId || (trip.isSuccess && stops.isSuccess),
+    ready: !tripId || (trip.isSuccess && stops.isSuccess && open.ready),
   };
 }

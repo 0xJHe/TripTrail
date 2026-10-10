@@ -148,11 +148,25 @@ describe('buildDemoRoute', () => {
     const left = route.events.filter((e) => e.kind === 'leave' || e.kind === 'early');
     expect(left.map((e) => e.stopId)).toEqual(day1.map((s) => s.id));
     for (const e of left) {
-      expect(e.title).toMatch(/ · spend check$/);
-      // The group goes more than 150 m away afterwards (except after the last stop), so the stop is left.
-      if (e.stopId === day1[day1.length - 1].id) continue;
+      expect(e.title).toMatch(/ · spend check/);
+      // The group goes more than 150 m away afterwards (the last stop too), so the stop is left.
       const after = sampleRoute(route, e.at + 10 * MIN).me!;
       expect(haversineMeters(after, pos(stopOf(e.stopId)))).toBeGreaterThan(150);
+    }
+  });
+
+  it("reaches the end of the day: the group walks off after the last stop, away from the other stops", () => {
+    const last = day1[day1.length - 1];
+    const leave = route.events.filter((e) => e.kind === 'leave').pop()!;
+    expect(leave.stopId).toBe(last.id);
+    expect(leave.title).toBe("Left Armenian Street murals · spend check · that's every stop for today");
+    // Still there at the planned end, gone (and out of range for 3+ min) well before the replay ends.
+    expect(leave.at).toBeGreaterThanOrEqual(Date.parse(last.planned_end!));
+    expect(route.endsAt).toBeGreaterThanOrEqual(leave.at + 30 * MIN);
+    for (const t of [leave.at + 5 * MIN, leave.at + 10 * MIN, route.endsAt]) {
+      const me = sampleRoute(route, t).me!;
+      expect(haversineMeters(me, pos(last))).toBeGreaterThan(150);
+      for (const s of day1) expect(haversineMeters(me, pos(s))).toBeGreaterThan(100);
     }
   });
 

@@ -1,0 +1,263 @@
+import type { Spend } from '@/features/money/types';
+import type { Stop } from '@/features/planning/types';
+import {
+  closedCountLabel,
+  closedIds,
+  dayEndMode,
+  dayFinished,
+  dayReview,
+  sharingBackAt,
+  shareNow,
+} from '@/features/recap/dayEnd';
+import { keptGoing, useKeepGoing } from '@/features/recap/keepGoing';
+import type { DayClosure } from '@/features/recap/types';
+import { sharingWindow } from '@/features/group/groupMap';
+
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);
+
+const at = (h: number, m = 0, day = 12) => new Date(2026, 9, day, h, m).toISOString();
+const ms = (h: number, m = 0, day = 12) => Date.parse(at(h, m, day));
+
+let n = 0;
+function stop(name: string, from: string | null, to: string | null, extra: Partial<Stop> = {}): Stop {
+  n += 1;
+  return {
+    id: `s${n}`,
+    trip_id: 't1',
+    day_number: 1,
+    position: n,
+    name,
+    address: null,
+    lat: 5.4,
+    lng: 100.3,
+    planned_time: from,
+    planned_end: to,
+    price: 0,
+    is_estimate: false,
+    is_booked: false,
+    is_outdoor: false,
+    tip: null,
+    status: 'planned',
+    arrived_at: null,
+    left_at: null,
+    actual_cost: null,
+    category: null,
+    priority: 1,
+    note: null,
+    place_id: null,
+    ...extra,
+  };
+}
+
+const spend = (stopId: string, amount: number, extra: Partial<Spend> = {}): Spend => ({
+  id: `sp-${stopId}`,
+  trip_id: 't1',
+  stop_id: stopId,
+  member_id: 'me',
+  day_number: 1,
+  amount,
+  confirmed: false,
+  skipped: false,
+  note: null,
+  answered_at: at(23),
+  ...extra,
+});
+
+describe('when the end-of-day card shows', () => {
+  const day = [
+    stop('Kek Lok Si', at(11, 30), at(12, 30), { status: 'done' }),
+    stop('Night market', at(19), at(22, 30)),
+  ];
+
+  it('not before the last stop is finished', () => {
+    expect(dayFinished(day, ms(20))).toBe(false);
+    expect(dayEndMode({ finished: false, keptGoing: false, closed: false })).toBe('hidden');
+  });
+
+  it('once the group has left the last stop (or tapped "We\'re done here" there)', () => {
+    const left = [day[0], { ...day[1], status: 'done' as const, arrived_at: at(19), left_at: at(21) }];
+    expect(dayFinished(left, ms(21))).toBe(true);
+  });
+
+  it('once the last stop\'s planned end has passed, even if they are still there or skipped it', () => {
+    expect(dayFinished(day, ms(22, 29))).toBe(false);
+    expect(dayFinished(day, ms(22, 30))).toBe(true);
+    expect(dayFinished([{ ...day[1], status: 'arrived' }], ms(22, 30))).toBe(true);
+  });
+
+  it('a last stop without an end time counts as finished 60 min after it starts', () => {
+    expect(dayFinished([stop('Bar', at(21), null)], ms(21, 59))).toBe(false);
+    expect(dayFinished([stop('Bar', at(21), null)], ms(22))).toBe(true);
+  });
+
+  it('a stop added after it opens the day again until that one is finished', () => {
+    const done = [{ ...day[1], status: 'done' as const }];
+    expect(dayFinished([...done, stop('Late supper', at(23), at(23, 45))], ms(22, 40))).toBe(false);
+  });
+
+  it('no stops: nothing to finish', () => {
+    expect(dayFinished([], ms(23))).toBe(false);
+  });
+
+  it('shows the card, or the pinned buttons after "Keep going", and "Day closed" after Done', () => {
+    expect(dayEndMode({ finished: true, keptGoing: false, closed: false })).toBe('ask');
+    expect(dayEndMode({ finished: true, keptGoing: true, closed: false })).toBe('keep-going');
+    expect(dayEndMode({ finished: true, keptGoing: true, closed: true })).toBe('closed');
+    // Reopened and stops added: back to Now / Next, nothing at the bottom.
+    expect(dayEndMode({ finished: false, keptGoing: true, closed: false })).toBe('hidden');
+  });
+});
+
+describe('Keep going', () => {
+  it('is remembered per trip and day', () => {
+    useKeepGoing.getState().keepGoing('t1', 1, ms(22));
+    const tapped = useKeepGoing.getState().at;
+    expect(keptGoing(tapped, 't1', 1, ms(22, 5))).toBe(true);
+    expect(keptGoing(tapped, 't1', 2, ms(22, 5))).toBe(false);
+    expect(keptGoing(tapped, 't2', 1, ms(22, 5))).toBe(false);
+    expect(keptGoing(tapped, undefined, 1, ms(22, 5))).toBe(false);
+  });
+
+  it('is forgotten when the Demo clock goes back before the tap (Reset)', () => {
+    const tapped = useKeepGoing.getState().at;
+    expect(keptGoing(tapped, 't1', 1, ms(21))).toBe(false);
+  });
+});
+
+describe('who has closed their day', () => {
+  const row = (member: string, day: number, closedAt: string, closed = true): DayClosure => ({
+    trip_id: 't1',
+    member_id: member,
+    day_number: day,
+    closed,
+    closed_at: closedAt,
+  });
+  const rows = [row('a', 1, at(22)), row('b', 1, at(22, 30), false), row('c', 1, at(23, 30)), row('d', 2, at(22))];
+
+  it('counts closed rows for the day, not reopened ones or ones after the (fake) time', () => {
+    expect([...closedIds(rows, 1, ms(23))]).toEqual(['a']);
+    expect([...closedIds(rows, 1, ms(23, 45))].sort()).toEqual(['a', 'c']);
+    expect([...closedIds(rows, 2, ms(23))]).toEqual(['d']);
+  });
+
+  it('labels the count', () => {
+    expect(closedCountLabel(2, 4)).toBe('2 of 4 have closed their day');
+    expect(closedCountLabel(1, 1)).toBe("You've closed your day");
+  });
+});
+
+describe('location sharing stop / start', () => {
+  const day1 = [
+    { planned_time: at(8), planned_end: at(9), status: 'done' as const },
+    { planned_time: at(19), planned_end: at(22, 30), status: 'planned' as const },
+  ];
+  const window = sharingWindow(day1);
+
+  it('starts 60 min before the first stop', () => {
+    expect(shareNow(window, ms(6, 59), false)).toBe(false);
+    expect(shareNow(window, ms(7), false)).toBe(true);
+  });
+
+  it('keeps going after the last stop until Done for today (no cut-off an hour later)', () => {
+    expect(shareNow(window, ms(23, 45), false)).toBe(true);
+    expect(window!.to).toBe(ms(0, 0, 13));
+  });
+
+  it('stops once this person closes the day', () => {
+    expect(shareNow(window, ms(22, 40), true)).toBe(false);
+  });
+
+  it('starts again from 60 min before the next day\'s first stop', () => {
+    const day2 = sharingWindow([{ planned_time: at(8, 0, 13), planned_end: at(10, 0, 13), status: 'planned' }]);
+    expect(shareNow(day2, ms(6, 30, 13), false)).toBe(false);
+    expect(shareNow(day2, ms(7, 0, 13), false)).toBe(true);
+    expect(sharingBackAt([{ planned_time: at(8, 0, 13) }, { planned_time: at(11, 0, 13) }])).toBe('07:00');
+    expect(sharingBackAt([{ planned_time: null }])).toBeNull();
+  });
+
+  it('runs past midnight when the last stop does', () => {
+    const late = sharingWindow([{ planned_time: at(22), planned_end: at(23, 30), status: 'planned' }]);
+    expect(late!.to).toBe(ms(0, 30, 13));
+  });
+});
+
+describe('How today went: planned vs actual', () => {
+  const flight = stop('Flight KUL → PEN', at(6, 50), at(7, 50), {
+    status: 'done',
+    arrived_at: at(6, 52),
+    left_at: at(7, 50),
+    price: 120,
+    is_booked: true,
+    category: 'flight',
+  });
+  const hill = stop('Penang Hill funicular', at(9, 30), at(11), {
+    status: 'done',
+    arrived_at: at(10, 30),
+    left_at: at(11, 20),
+    price: 15,
+  });
+  const temple = stop('Kek Lok Si Temple', at(11, 30), at(12, 30), {
+    status: 'done',
+    arrived_at: at(12, 5),
+    left_at: at(12, 50),
+    price: 16,
+    is_estimate: true,
+  });
+  const food = stop('Chulia Street street food', at(14), at(15), {
+    status: 'done',
+    arrived_at: at(14, 2),
+    left_at: at(16, 10),
+    price: 20,
+    is_estimate: true,
+  });
+  const skipped = stop('Clan Jetties', at(17), at(18), { price: 0 });
+  const dropped = stop('Batik workshop', at(16), at(17), { status: 'dropped', price: 40 });
+  const review = dayReview([food, skipped, dropped, temple, flight, hill], new Map([[temple.id, spend(temple.id, 18)]]));
+  const row = (name: string) => review.rows.find((r) => r.name === name)!;
+
+  it('lists every stop in time order, dropped ones too', () => {
+    expect(review.rows.map((r) => r.name)).toEqual([
+      'Flight KUL → PEN',
+      'Penang Hill funicular',
+      'Kek Lok Si Temple',
+      'Chulia Street street food',
+      'Batik workshop',
+      'Clan Jetties',
+    ]);
+    expect(review.visited).toBe(4);
+    expect(review.total).toBe(6);
+  });
+
+  it('puts the planned time and price next to the arrived time and final spend', () => {
+    expect(row('Kek Lok Si Temple')).toMatchObject({
+      mark: 'late',
+      struck: false,
+      planned: 'Planned 11:30 · ~RM 16',
+      actual: '12:05 – 12:50',
+      late: '35 min late',
+      spent: 'RM 18',
+    });
+    expect(row('Chulia Street street food')).toMatchObject({ mark: 'done', late: null, actual: '14:02 – 16:10', spent: '~RM 20' });
+    expect(row('Penang Hill funicular')).toMatchObject({ mark: 'late', late: '1 h late', spent: 'RM 15' });
+    expect(row('Flight KUL → PEN')).toMatchObject({ mark: 'done', planned: 'Planned 06:50 · RM 120', spent: 'RM 120' });
+  });
+
+  it('crosses out skipped and dropped stops', () => {
+    expect(row('Clan Jetties')).toMatchObject({ mark: 'missed', struck: true, actual: 'Skipped', spent: null });
+    expect(row('Batik workshop')).toMatchObject({ mark: 'missed', struck: true, actual: 'Dropped', spent: null });
+  });
+
+  it('totals the plan (dropped left out) and what was spent at the stops visited', () => {
+    // 120 + 15 + 16 + 20 + 0 planned; 120 + 15 + 18 + ~20 spent.
+    expect(review.planned).toBe('~RM 171');
+    expect(review.spent).toBe('~RM 173');
+  });
+
+  it('a skipped spend check keeps the guess; an answered one is exact', () => {
+    const r = dayReview([temple], new Map([[temple.id, spend(temple.id, 16, { skipped: true })]]));
+    expect(r.rows[0].spent).toBe('~RM 16');
+    expect(dayReview([hill], new Map()).spent).toBe('RM 15');
+  });
+});

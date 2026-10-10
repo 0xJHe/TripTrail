@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
 import { useStops } from '@/features/planning/hooks/usePlanning';
+import { useDayClosures } from '@/features/recap/hooks/useDayClosures';
 import { planStart, sortStops } from '@/features/planning/stops';
 import { useTrip } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
@@ -31,7 +32,7 @@ const toReading = (loc: GroupLocation, at: number): Reading => ({ ...(loc.me ?? 
 /**
  * Ticks stops off as the group arrives and leaves, for the open trip's day. Mounted once
  * in the tabs layout so it runs whichever tab is showing.
- * Real mode: reads GPS every 30 s while the app is in front. Demo mode: replays the
+ * Real mode: reads GPS every 30 s while the app is in front, until Done for today. Demo mode: replays the
  * fake route in 30 s steps up to the fake time, so a "Next event" jump gets the same
  * readings a real phone would have had.
  */
@@ -49,6 +50,8 @@ export function useVisitTracker() {
   const decided = trip.data?.stage === 'decided';
   const start = planStart(trip.data?.start_date ?? null, sortStops(stops.data ?? []));
   const demo = route != null;
+  // Done for today: no more GPS reads on this phone until the next day.
+  const closed = useDayClosures(tripId, decided ? tripDayOn(start, new Date(time)) : 0).mine;
   const tracker = useRef(emptyTracker());
   const stopsRef = useRef(stops.data);
   stopsRef.current = stops.data;
@@ -94,7 +97,7 @@ export function useVisitTracker() {
   // still between taps, so this is the group standing still: a second reading in a row at a
   // stop confirms the arrival a few seconds after "Next event", like a real phone would.
   useEffect(() => {
-    if (!tripId || !decided || (!demo && permission !== 'granted')) return;
+    if (!tripId || !decided || (!demo && (permission !== 'granted' || closed))) return;
     let active = AppState.currentState === 'active';
     let busy = false;
     const tick = async () => {
@@ -120,5 +123,5 @@ export function useVisitTracker() {
       clearInterval(id);
       sub.remove();
     };
-  }, [demo, tripId, decided, permission, handle]);
+  }, [demo, tripId, decided, permission, closed, handle]);
 }

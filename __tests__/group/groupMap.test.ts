@@ -133,14 +133,14 @@ describe('positions', () => {
     expect(latest.get('b')?.lat).toBe(3);
   });
 
-  it('shares from 60 min before the first stop to 60 min after the last', () => {
+  it('shares from 60 min before the first stop to the end of the day (no cut-off after the last stop)', () => {
     const at = (h: number, m = 0) => new Date(2026, 9, 12, h, m).toISOString();
     const w = sharingWindow([
       { planned_time: at(9), planned_end: at(10), status: 'done' },
       { planned_time: at(8, 30), planned_end: at(9), status: 'dropped' },
       { planned_time: at(15), planned_end: at(17), status: 'planned' },
     ]);
-    expect(w).toEqual({ from: Date.parse(at(8)), to: Date.parse(at(18)) });
+    expect(w).toEqual({ from: Date.parse(at(8)), to: new Date(2026, 9, 13).getTime() });
     expect(sharingWindow([])).toBeNull();
   });
 });

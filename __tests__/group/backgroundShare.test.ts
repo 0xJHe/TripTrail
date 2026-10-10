@@ -1,4 +1,4 @@
-import { fixAction, MIN_GAP_MS, type ShareConfig } from '@/features/group/backgroundShare';
+import { fixAction, MIN_GAP_MS, NOTICES, type ShareConfig } from '@/features/group/backgroundShare';
 import { backgroundSupported } from '@/lib/location';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
@@ -25,6 +25,14 @@ describe('background sharing', () => {
   it('skips fixes that come in less than ~50 s after the last save', () => {
     expect(fixAction(config, at(12), at(12) - MIN_GAP_MS + 1000)).toBe('skip');
     expect(fixAction(config, at(12), at(12) - MIN_GAP_MS)).toBe('save');
+  });
+
+  it('turns the notification into a reminder once the last stop is finished', () => {
+    expect(NOTICES.sharing.body).toBe('Until you tap Done for today.');
+    expect(NOTICES.finished).toMatchObject({
+      title: 'Still sharing your location',
+      body: "Tap Done for today in TripTrail when you're finished",
+    });
   });
 
   it("can't run in tests / Expo Go (not an Android build), so nothing is started", () => {

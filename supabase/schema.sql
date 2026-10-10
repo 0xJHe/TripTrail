@@ -165,13 +165,17 @@ create table meet_points (
 );
 create index meet_points_trip_idx on meet_points (trip_id, set_at desc);
 
+-- "Done for today": one row per person per trip day. Reopening sets closed = false (an update,
+-- so Realtime reaches everyone). closed_at = the phone's now() (the fake time in Demo mode).
 create table day_closures (
-  trip_id uuid references trips(id) on delete cascade,
+  trip_id uuid not null references trips(id) on delete cascade,
   member_id uuid references members(id) on delete cascade,
   day_number int not null,
+  closed boolean not null default true,
   closed_at timestamptz default now(),
   primary key (member_id, day_number)
 );
+create index day_closures_trip_idx on day_closures (trip_id);
 
 -- Row Level Security: members of a trip can see and change that trip's rows.
 alter table trips enable row level security;
@@ -232,7 +236,13 @@ create policy "pins update own" on pins for update
 create policy "pins delete own" on pins for delete
   using (exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid()));
 create policy "meet all" on meet_points for all using (is_member(trip_id)) with check (is_member(trip_id));
-create policy "closures all" on day_closures for all using (is_member(trip_id));
+create policy "closures read" on day_closures for select using (is_member(trip_id));
+create policy "closures insert own" on day_closures for insert with check (
+  exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid() and m.trip_id = day_closures.trip_id));
+create policy "closures update own" on day_closures for update
+  using (exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid()))
+  with check (
+    exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid() and m.trip_id = day_closures.trip_id));
 
 -- Join a trip by code (bypasses RLS safely). Codes are typed by hand, so match case-insensitively.
 create or replace function join_trip(code text, name text, color text)
@@ -713,4 +723,4 @@ end $$;
 -- Realtime
 alter publication supabase_realtime add table
   locations, stops, pins, meet_points, spends, members, votes, trips, preferences, trip_options, late_alerts, early_alerts,
-  rain_alerts;
+  rain_alerts, day_closures;

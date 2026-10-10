@@ -12,7 +12,7 @@ export const LOW_BATTERY = 15;
 export const STALE_MS = 3 * MIN;
 /** Positions are shared from this long before the day's first stop... */
 export const SHARE_BEFORE_MS = 60 * MIN;
-/** ...until this long after the day's last stop ends. */
+/** ...until at least this long after the day's last stop ends (and to the end of the day; see sharingWindow). */
 export const SHARE_AFTER_MS = 60 * MIN;
 
 /** One person on the group map. */
@@ -129,7 +129,11 @@ export function latestByMember(rows: LocationRow[]): Map<string, LocationRow> {
   return out;
 }
 
-/** When phones share their position on a trip day: 60 min before the first stop to 60 min after the last. */
+/**
+ * When phones share their position on a trip day: from 60 min before the first stop until the
+ * person taps Done for today (features/recap shareNow), with no cut-off after the last stop:
+ * the window runs to the end of the day (midnight), or 60 min after the last stop if that is later.
+ */
 export function sharingWindow(
   dayStops: Pick<Stop, 'planned_time' | 'planned_end' | 'status'>[],
 ): { from: number; to: number } | null {
@@ -140,7 +144,9 @@ export function sharingWindow(
   if (times.length === 0) return null;
   const first = Math.min(...times.map((s) => s.start));
   const last = Math.max(...times.map((s) => (Number.isNaN(s.end) ? s.start : s.end)));
-  return { from: first - SHARE_BEFORE_MS, to: last + SHARE_AFTER_MS };
+  const midnight = new Date(first);
+  midnight.setHours(24, 0, 0, 0);
+  return { from: first - SHARE_BEFORE_MS, to: Math.max(last + SHARE_AFTER_MS, midnight.getTime()) };
 }
 
 export const inWindow = (w: { from: number; to: number } | null, t: number) => !!w && t >= w.from && t <= w.to;

@@ -17,20 +17,35 @@ import { inWindow } from './groupMap';
 export interface ShareConfig {
   tripId: string;
   memberId: string;
-  /** The sharing window (ms): 60 min before the day's first stop to 60 min after the last. */
+  /** The sharing window (ms): 60 min before the day's first stop to the end of the day (groupMap.ts sharingWindow). */
   from: number;
   to: number;
+  /** Which notification shows: 'finished' once the day's last stop is finished. */
+  notice?: NoticeKind;
 }
+
+/**
+ * Android's notification while sharing. Once the day's last stop is finished it becomes a
+ * reminder, since sharing goes on until the person taps Done for today.
+ */
+export type NoticeKind = 'sharing' | 'finished';
+
+export const NOTICES: Record<NoticeKind, { title: string; body: string; color: string }> = {
+  sharing: {
+    title: 'TripTrail is sharing your location with your group',
+    body: 'Until you tap Done for today.',
+    color: colors.teal,
+  },
+  finished: {
+    title: 'Still sharing your location',
+    body: "Tap Done for today in TripTrail when you're finished",
+    color: colors.teal,
+  },
+};
 
 const CONFIG_KEY = 'triptrail-background-share';
 /** Fixes closer together than this are skipped (Android can deliver a few at once). */
 export const MIN_GAP_MS = 50_000;
-
-const NOTICE = {
-  title: 'TripTrail is sharing your location with your group',
-  body: "Until 1 hour after today's last stop.",
-  color: colors.teal,
-};
 
 /** What to do with a background fix at time t. */
 export function fixAction(config: ShareConfig | null, t: number, lastSavedAt: number | null): 'save' | 'skip' | 'stop' {
@@ -48,13 +63,17 @@ async function readConfig(): Promise<ShareConfig | null> {
   }
 }
 
-/** Start (or update) sharing in the background for this trip day. */
+/** Start (or update) sharing in the background for this trip day. A new notification restarts the updates. */
 export async function startBackgroundSharing(config: ShareConfig): Promise<boolean> {
-  await AsyncStorage.setItem(CONFIG_KEY, JSON.stringify(config)).catch(() => {});
-  return startBackgroundUpdates(NOTICE);
+  const before = await readConfig();
+  const notice = config.notice ?? 'sharing';
+  await AsyncStorage.setItem(CONFIG_KEY, JSON.stringify({ ...config, notice })).catch(() => {});
+  // Android keeps the notification it started with: stop and start again to change it.
+  if (before && (before.notice ?? 'sharing') !== notice) await stopBackgroundUpdates();
+  return startBackgroundUpdates(NOTICES[notice]);
 }
 
-/** Stop sharing in the background (outside the window, Demo mode, permission taken away). */
+/** Stop sharing in the background (outside the window, Done for today, Demo mode, permission taken away). */
 export async function stopBackgroundSharing(): Promise<void> {
   await AsyncStorage.removeItem(CONFIG_KEY).catch(() => {});
   await stopBackgroundUpdates();

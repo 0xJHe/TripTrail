@@ -8,7 +8,9 @@ import { SettingsButton } from '@/features/demo/components/SettingsButton';
 import { BackgroundAskCard } from '@/features/group/components/BackgroundAskCard';
 import { SplitBanner } from '@/features/group/components/SplitBanner';
 import { SpendCheckCard } from '@/features/money/components/SpendCheckCard';
-import { formatRange } from '@/features/planning/dates';
+import { DayClosed } from '@/features/recap/components/DayClosed';
+import { DAY_END_BAR_SPACE, DayEndBar } from '@/features/recap/components/DayEndBar';
+import { DayEndCard } from '@/features/recap/components/DayEndCard';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { tripEntryRoute } from '@/features/trip/routes';
 import { colors } from '@/lib/theme';
@@ -17,13 +19,13 @@ import { EarlyCard } from '../components/EarlyCard';
 import { LateCard } from '../components/LateCard';
 import { LocationPill, PermissionCard } from '../components/LocationStatus';
 import { NoPlan } from '../components/NoPlan';
+import { NoPlanFor } from '../components/NoPlanFor';
 import { NowCard } from '../components/NowCard';
 import { RainCard } from '../components/RainCard';
 import { DoneRow, NextCard } from '../components/StopLines';
 import { TipCard } from '../components/TipCard';
 import { useToday } from '../hooks/useToday';
 import { longDate } from '../todayPlan';
-import type { TodayView } from '../types';
 
 /**
  * Today card (prototype screen 6): Now, Next, Done, first-timer tip and the day's progress.
@@ -33,6 +35,8 @@ import type { TodayView } from '../types';
  * Rain backup (screen 10): for the outdoor stop the group is at or heading to.
  * Split & rejoin: "Split · rejoin at [place] at [time]" with a countdown, under the location line.
  * Cards stack in this order: late, rain, early, spend.
+ * Done for today (screen 14): once the last stop is finished, "That's every stop for today"
+ * (Done for today / Keep going); after Keep going, both pinned to the bottom; after Done, "Day closed".
  */
 export function TodayScreen() {
   const today = useToday();
@@ -70,7 +74,18 @@ export function TodayScreen() {
   }
 
   const { now, done } = view;
-  const { heading, leftStop, upNext, spend } = today;
+  const { heading, leftStop, upNext, spend, dayEnd } = today;
+  const title = `Today · Day ${view.day}`;
+  const subtitle = [longDate(view.date), place].filter(Boolean).join(' · ');
+  if (dayEnd.mode === 'closed') {
+    return (
+      <Frame title={title} subtitle={subtitle}>
+        <DayClosed end={dayEnd} />
+      </Frame>
+    );
+  }
+  const asking = dayEnd.mode === 'ask';
+  const keptGoing = dayEnd.mode === 'keep-going';
   // The stop the spend check asks about moves to Done once answered.
   const doneList = spend.stop ? done.filter((s) => s.id !== spend.stop!.id) : done;
   const tip = now?.tip && hiddenTip !== now.id ? now.tip : null;
@@ -80,9 +95,9 @@ export function TodayScreen() {
   const earlyFor = !lateFor && today.early.alert ? view.next : null;
 
   return (
-    <Frame title={`Today · Day ${view.day}`} subtitle={[longDate(view.date), place].filter(Boolean).join(' · ')}>
+    <Frame title={title} subtitle={subtitle}>
       <ScrollView
-        contentContainerStyle={styles.body}
+        contentContainerStyle={[styles.body, keptGoing && { paddingBottom: DAY_END_BAR_SPACE }]}
         refreshControl={<RefreshControl refreshing={false} onRefresh={today.refetch} tintColor={colors.teal} />}>
         {today.needsPermission ? (
           <PermissionCard permission={today.needsPermission} onAllow={today.allowLocation} />
@@ -105,6 +120,8 @@ export function TodayScreen() {
           <NowCard kind="left" stop={leftStop} weather={today.weather.now} onPin={() => router.push('/pin')} />
         ) : heading ? (
           <NowCard kind="heading" stop={heading} weather={today.weather.now} onPin={() => router.push('/pin')} />
+        ) : asking ? (
+          <DayEndCard end={dayEnd} />
         ) : (
           <NowCard kind="finished" visited={done.length} />
         )}
@@ -115,6 +132,7 @@ export function TodayScreen() {
         <RainCard rain={today.rain} />
         {earlyFor ? <EarlyCard early={today.early} stop={earlyFor} left={leftStop} /> : null}
         {spend.stop ? <SpendCheckCard check={spend} named={spend.stop.id !== (now ?? leftStop)?.id} /> : null}
+        {asking && (now || leftStop || heading) ? <DayEndCard end={dayEnd} /> : null}
 
         {upNext && !(lateFor && now) ? (
           <>
@@ -137,47 +155,9 @@ export function TodayScreen() {
         <DayProgress done={done.length} total={view.total} pace={view.pace} />
         {today.error ? <ErrorLine message="Couldn't refresh. Pull down to try again." /> : null}
       </ScrollView>
+      {keptGoing ? <DayEndBar end={dayEnd} /> : null}
     </Frame>
   );
-}
-
-function NoPlanFor({ view, onPlan }: { view: Extract<TodayView, { kind: 'no-plan' }>; onPlan: () => void }) {
-  switch (view.reason) {
-    case 'not-built':
-      return (
-        <NoPlan
-          icon="people-outline"
-          title="No plan yet"
-          text="Today's stops show here once the group has picked a trip and built the day plan."
-          action={{ label: 'Go to the trip choice', onPress: onPlan }}
-        />
-      );
-    case 'before':
-      return (
-        <NoPlan
-          icon="airplane-outline"
-          title={view.daysToGo === 1 ? 'Your trip starts tomorrow' : `Your trip starts in ${view.daysToGo} days`}
-          text={`Day 1 is ${longDate(view.startsOn)}. Your stops will show here on the day, and tick themselves off as you go.`}
-        />
-      );
-    case 'after':
-      return (
-        <NoPlan
-          icon="heart-outline"
-          title="That's a wrap"
-          text={`This trip ran ${formatRange(view.startsOn, view.endsOn)}. Hope it was a great one!`}
-        />
-      );
-    case 'empty':
-      return (
-        <NoPlan
-          icon="cafe-outline"
-          title={`Nothing planned for Day ${view.day}`}
-          text="A free day! Add stops on the Plan tab if you'd like the app to follow along."
-          action={{ label: 'Open the plan', onPress: () => router.push('/plan') }}
-        />
-      );
-  }
 }
 
 function Frame({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {

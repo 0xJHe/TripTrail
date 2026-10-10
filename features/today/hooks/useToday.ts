@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useSpendCheck } from '@/features/money/hooks/useSpends';
 import { useDayPlan } from '@/features/planning/hooks/useDayPlan';
 import type { Stop } from '@/features/planning/types';
+import { useDayEnd } from '@/features/recap/hooks/useDayEnd';
 import { useCurrentTrip } from '@/features/trip/store';
 import { now as clockNow, useNow } from '@/lib/clock';
 import { useDemoRoute, useGroupLocation } from '@/lib/location';
@@ -33,6 +34,12 @@ export function useToday() {
   );
   const day = view?.kind === 'day' ? view : null;
   const dayStops = useMemo(() => (day ? stops.filter((s) => s.day_number === day.day) : []), [stops, day?.day]);
+  const tomorrow = useMemo(
+    () => (day && day.day < days ? stops.filter((s) => s.day_number === day.day + 1) : null),
+    [stops, days, day?.day],
+  );
+  // The end of the day: "That's every stop for today", Keep going, Day closed (prototype screen 14).
+  const dayEnd = useDayEnd(tripId, day?.day ?? 0, dayStops, tomorrow);
   const late = useLateAlert(tripId, day?.next ?? null);
   const early = useEarlyAlert(tripId, day?.next ?? null, dayStops);
   const rain = useRainAlert(tripId, day?.now ?? null, day?.next ?? null);
@@ -84,6 +91,7 @@ export function useToday() {
     early,
     rain,
     spend,
+    dayEnd,
     time,
     members: plan.members,
     loading: plan.loading,

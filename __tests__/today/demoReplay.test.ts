@@ -48,11 +48,7 @@ describe('Demo mode replay through the arrive / leave rules', () => {
       const leaveEvent = route.events.find((e) => (e.kind === 'leave' || e.kind === 'early') && e.stopId === s.id)!.at;
       // Walking in, the group is inside 100 m a little before reaching the spot itself.
       expect(Math.abs(Date.parse(change.arrived_at!) - arrive)).toBeLessThanOrEqual(3 * MIN);
-      // The demo day ends with the group still at the last stop.
-      if (s === plan[plan.length - 1]) {
-        expect(change.status).toBe('arrived');
-        continue;
-      }
+      // Every stop is left, the last one too: the group walks off and the day ends (Done for today).
       expect(change.status).toBe('done');
       // Leaving is confirmed 3 min after the group is 150 m out.
       expect(Date.parse(change.left_at!) - leaveEvent).toBeGreaterThan(0);

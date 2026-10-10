@@ -8,7 +8,9 @@ import { CHECK_BEFORE_MIN, EARLY_AHEAD_MIN, EARLY_SPARE_MIN, estimateMinutes, sp
  * Builds the fake day that Demo mode replays, from the trip's real Day plan.
  * The group walks stop to stop on the plan's times, with four moments added:
  * arriving late at one stop, leaving one stop early, rain near an outdoor stop,
- * and one member 900 m from the group with low battery.
+ * and one member 900 m from the group with low battery. After the last stop the group walks
+ * off (so the leave and its spend check are noticed) and the day ends: "That's every stop
+ * for today" with Done for today / Keep going.
  */
 
 export type RouteStop = Pick<
@@ -44,6 +46,10 @@ export const EARLY_DEMO_AHEAD_MIN = EARLY_AHEAD_MIN + 15;
 const WALK_OUT_M = 250;
 const WALK_OUT_MIN = 4;
 const LEAD_IN_MIN = 30;
+/** After the last stop the group walks this far away (the leave needs 150 m for 3 min)... */
+export const WALK_OFF_M = 400;
+/** ...in this long, then the replay runs on until the end of the day. */
+const WALK_OFF_MIN = 5;
 const FAKE_NAMES = ['Aisha', 'Ben', 'Mei', 'Raj'];
 const GROUP_SIZE = 4;
 // Small spread so members aren't drawn on top of each other (metres east, north).
@@ -122,6 +128,22 @@ function leadInStart(at: LatLng[]): LatLng {
     const angle = Math.PI * (1.25 + k / 4); // south-west first, then round the compass
     const p = offsetMeters(at[0], LEAD_IN_M * Math.cos(angle), LEAD_IN_M * Math.sin(angle));
     const clear = Math.min(Infinity, ...at.slice(1).map((s) => metersToSegment(s, p, at[0])));
+    if (clear > best.clear + 1) best = { p, clear };
+  }
+  return best.p;
+}
+
+/**
+ * Where the group walks to after the day's last stop: 400 m away, on the side furthest from
+ * the day's other stops (so walking off never counts as arriving somewhere).
+ */
+export function walkOffPoint(at: LatLng[]): LatLng {
+  const last = at[at.length - 1];
+  let best = { p: offsetMeters(last, WALK_OFF_M * Math.SQRT1_2, WALK_OFF_M * Math.SQRT1_2), clear: -1 };
+  for (let k = 0; k < 8; k++) {
+    const angle = Math.PI * (0.25 + k / 4); // north-east first, then round the compass
+    const p = offsetMeters(last, WALK_OFF_M * Math.cos(angle), WALK_OFF_M * Math.sin(angle));
+    const clear = Math.min(Infinity, ...at.slice(0, -1).map((s) => haversineMeters(s, p)));
     if (clear > best.clear + 1) best = { p, clear };
   }
   return best.p;
@@ -284,7 +306,9 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
       group.push({ t: leave[i] + WALK_OUT_MIN * MIN, ...p });
     }
   }
-  group.push({ t: endsAt, ...at[n - 1] });
+  // Walk off after the last stop, so the leave is noticed (3 min out of range) like at the others.
+  const off = walkOffPoint(at);
+  group.push({ t: leave[n - 1] + WALK_OFF_MIN * MIN, ...off }, { t: endsAt, ...off });
 
   // Members: the trip's, padded with made-up friends so there is a group to see.
   const people: (RouteMember & { isMe: boolean; fake: boolean })[] = members.map((m) => ({
@@ -358,8 +382,8 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
     const earlyMin = Math.round((end[i] - leave[i]) / MIN);
     // Spare time before the next stop when they leave (shared rule, free estimate).
     const spare = i < n - 1 ? Math.floor(spareMinutes(leave[i], estimateMinutes(at[i], at[i + 1]), start[i + 1])) : 0;
-    // Leaving any stop brings the spend check (screen 9).
-    const spend = ' · spend check';
+    // Leaving any stop brings the spend check (screen 9); the last one ends the day (screen 14).
+    const spend = i === n - 1 ? " · spend check · that's every stop for today" : ' · spend check';
     events.push(
       i === early && earlyMin >= 10
         ? {

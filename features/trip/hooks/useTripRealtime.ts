@@ -17,6 +17,7 @@ const TABLE_KEYS = {
   early_alerts: 'earlyAlerts',
   rain_alerts: 'rainAlerts',
   spends: 'spends',
+  day_closures: 'dayClosures',
 } as const;
 
 export type RealtimeTable = keyof typeof TABLE_KEYS;

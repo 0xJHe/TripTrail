@@ -138,16 +138,30 @@ create table pins (
   created_at timestamptz default now()
 );
 
+-- Meet point and Split & rejoin: one row each; the newest of each kind set today is the
+-- current one. kind 'meet' = a meet point; 'split' = group_b heads to the rejoin stop
+-- (stop_id) by rejoin_at, everyone else keeps the plan. status: active | together
+-- (everyone got there) | cleared (ended by hand). set_at / ended_at are the phone's now()
+-- (the fake time in Demo mode).
 create table meet_points (
   id uuid primary key default gen_random_uuid(),
   trip_id uuid references trips(id) on delete cascade,
   set_by uuid references members(id),
+  kind text not null default 'meet', -- meet | split
+  name text, -- stop / pin name; null = a spot tapped on the map
   lat double precision not null,
   lng double precision not null,
+  stop_id uuid references stops(id) on delete set null, -- split: the rejoin stop
   rejoin_at timestamptz,
+  group_b jsonb not null default '[]'::jsonb, -- split: [{ "id", "name" }]
+  set_at timestamptz not null default now(),
+  status text not null default 'active',
+  ended_at timestamptz,
+  ended_by uuid references members(id) on delete set null,
   active boolean default true,
   created_at timestamptz default now()
 );
+create index meet_points_trip_idx on meet_points (trip_id, set_at desc);
 
 create table day_closures (
   trip_id uuid references trips(id) on delete cascade,
@@ -207,7 +221,7 @@ create policy "spends update own" on spends for update
 create policy "spends delete own" on spends for delete
   using (exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid()));
 create policy "pins all" on pins for all using (is_member(trip_id));
-create policy "meet all" on meet_points for all using (is_member(trip_id));
+create policy "meet all" on meet_points for all using (is_member(trip_id)) with check (is_member(trip_id));
 create policy "closures all" on day_closures for all using (is_member(trip_id));
 
 -- Join a trip by code (bypasses RLS safely). Codes are typed by hand, so match case-insensitively.

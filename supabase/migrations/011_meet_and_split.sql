@@ -1,6 +1,7 @@
 -- 011 Meet point and Split & rejoin.
 -- Paste into Supabase > SQL Editor > Run (once, after 010). Safe to re-run.
--- meet_points already exists (schema.sql) and is already in the Realtime publication.
+-- Only for databases made before this change: schema.sql already includes all of it.
+-- meet_points itself already exists and is already in the Realtime publication.
 
 -- One row per meet point or split. The newest row of each kind set today is the current one.
 --   kind 'meet'  = a meet point (lat/lng, name).

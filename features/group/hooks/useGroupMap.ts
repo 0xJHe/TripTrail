@@ -24,7 +24,7 @@ export type MapNotice =
 /** Everything the Group map needs (prototype screen 11): members, alerts, pins, the day's stops, meet point, split. */
 export function useGroupMap() {
   const tripId = useCurrentTrip((s) => s.currentTripId) ?? undefined;
-  const { day, members: mapMembers, people, me, memberList, demo, location, loading } = useMapMembers(tripId);
+  const { day, members: mapMembers, people, me, memberList, demo, location, closures, loading } = useMapMembers(tripId);
   const { trip, allStops, dayStops, window, sharing, time } = day;
   const permission = useLocationAccess((s) => s.permission);
   const allowLocation = useLocationAccess((s) => s.allow);
@@ -93,5 +93,7 @@ export function useGroupMap() {
     notice,
     allowLocation,
     gather,
+    /** I closed today (Done for today): the banner with Reopen today. */
+    closedDay: closures.mine ? { reopen: closures.reopen, saving: closures.saving, error: closures.error } : null,
   };
 }

@@ -9,6 +9,7 @@ import { Txt } from '@/components/ui/Txt';
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
 import { colors } from '@/lib/theme';
 import { BackgroundAskCard } from '../components/BackgroundAskCard';
+import { DayClosedBanner } from '../components/DayClosedBanner';
 import { clockOf } from '@/features/planning/stops';
 import { GroupAlertCard } from '../components/GroupAlertCard';
 import { FarLine, MeetMarker, MemberMarker, PinMarker, StopMarker } from '../components/MapMarkers';
@@ -33,6 +34,8 @@ const FIT_PADDING: EdgePadding = { top: 48, right: 72, bottom: 56, left: 48 };
  * pins from Pin spot, and amber alerts when someone is far from the group or low on battery.
  * Set meet point (tap the map or pick a stop / pin) and Split & rejoin (screen 12) from the card,
  * only while someone is far from the group; once one is chosen, only its card shows until it ends.
+ * Done for today: members who closed their day are grey ("Done for today") and left out of the
+ * alerts; after closing my own day, a banner at the top with Reopen today.
  */
 export function GroupMapScreen() {
   const g = useGroupMap();
@@ -141,6 +144,9 @@ export function GroupMapScreen() {
           ))}
         </MapView>
         {g.loading ? <ActivityIndicator style={styles.loading} color={colors.teal} /> : null}
+        {g.closedDay ? (
+          <DayClosedBanner onReopen={g.closedDay.reopen} saving={g.closedDay.saving} error={g.closedDay.error} />
+        ) : null}
         <ZoomControls onCentre={fit} onZoom={zoom} />
       </View>
 

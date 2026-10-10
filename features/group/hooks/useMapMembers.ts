@@ -1,9 +1,10 @@
 import * as Battery from 'expo-battery';
 import { useMemo } from 'react';
 
+import { useDayClosures } from '@/features/recap/hooks/useDayClosures';
 import { useMembers, useMyMember } from '@/features/trip/hooks/useTrip';
 import { useGroupLocation } from '@/lib/location';
-import type { MapMember } from '../groupMap';
+import { markDone, type MapMember } from '../groupMap';
 import { useGroupPositions } from './useGroupPositions';
 import { useTripDay } from './useTripDay';
 
@@ -17,6 +18,7 @@ export interface Person {
 /**
  * Everyone on the group map: in Demo mode the replay's members (lib/location), otherwise
  * each member's newest shared position plus this phone's live GPS, during the sharing window.
+ * Members who closed the day (Done for today, also in Demo mode) are marked `done`.
  */
 export function useMapMembers(tripId: string | undefined) {
   const day = useTripDay(tripId);
@@ -26,6 +28,7 @@ export function useMapMembers(tripId: string | undefined) {
   const location = useGroupLocation();
   const level = Battery.useBatteryLevel();
   const demo = location?.source === 'demo';
+  const closures = useDayClosures(tripId, day.day);
 
   const memberList = useMemo(() => members.data ?? [], [members.data]);
   const memberIds = useMemo(() => memberList.map((m) => m.id), [memberList]);
@@ -33,7 +36,7 @@ export function useMapMembers(tripId: string | undefined) {
   const positions = useGroupPositions(tripId, memberIds, since);
 
   const myBattery = level >= 0 ? Math.round(level * 100) : null;
-  const mapMembers: MapMember[] = useMemo(() => {
+  const placed: MapMember[] = useMemo(() => {
     if (demo && location) return location.members.map((m) => ({ ...m, seenAt: location.at }));
     if (!sharing) return [];
     const others = (positions.data ?? [])
@@ -57,6 +60,7 @@ export function useMapMembers(tripId: string | undefined) {
           : null;
     return self ? [self, ...others] : others;
   }, [demo, location, sharing, positions.data, me, memberList, myBattery]);
+  const mapMembers = useMemo(() => markDone(placed, closures.closed), [placed, closures.closed]);
 
   // The group: the replay's members in Demo mode, else the trip's members.
   const demoPeople =
@@ -66,5 +70,5 @@ export function useMapMembers(tripId: string | undefined) {
     return memberList.map((m) => ({ id: m.id, name: m.display_name, isMe: m.id === me?.id }));
   }, [demoPeople, memberList, me]);
 
-  return { day, members: mapMembers, people, me, memberList, demo, location, loading: members.isLoading };
+  return { day, members: mapMembers, people, me, memberList, demo, location, closures, loading: members.isLoading };
 }

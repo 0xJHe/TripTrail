@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import { useCurrentTrip } from '@/features/trip/store';
 import { bothGroupsHere, everyoneHere } from '../meetPoint';
@@ -12,7 +12,9 @@ import { useMeetPoints } from './useMeetPoints';
  */
 export function useGatherCheck() {
   const tripId = useCurrentTrip((s) => s.currentTripId) ?? undefined;
-  const { members, me } = useMapMembers(tripId);
+  const { members: all, me } = useMapMembers(tripId);
+  // Members who closed their day (Done for today) aren't waited for.
+  const members = useMemo(() => all.filter((m) => !m.done), [all]);
   const { meet, split, end } = useMeetPoints(tripId, me?.id ?? null);
   const tried = useRef(new Set<string>());
   const endRef = useRef(end);

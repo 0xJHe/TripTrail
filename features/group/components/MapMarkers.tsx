@@ -10,6 +10,7 @@ import type { LatLng } from '@/lib/distance';
 import { colors, fontFamily } from '@/lib/theme';
 import {
   distanceText,
+  DONE_TEXT,
   firstName,
   lastSeenText,
   LOW_BATTERY,
@@ -59,22 +60,27 @@ export function useMarkerTracks(key: string): { tracks: boolean; onLayout: () =>
 
 const at = (p: LatLng) => ({ latitude: p.lat, longitude: p.lng });
 
-type Tone = 'me' | 'ok' | 'far' | 'low' | 'stale';
+type Tone = 'me' | 'ok' | 'far' | 'low' | 'stale' | 'done';
 const TONE: Record<Tone, string> = {
   me: colors.navy,
   ok: colors.teal,
   far: colors.amber,
   low: colors.red,
   stale: colors.textMuted,
+  done: colors.disabled,
 };
 
-/** A member: coloured circle with their initial, "Aisha · 84%" under it (prototype screen 11). */
+/**
+ * A member: coloured circle with their initial, "Aisha · 84%" under it (prototype screen 11).
+ * Closed their day: a grey circle with "Done for today" instead of "last seen".
+ */
 export function MemberMarker({ member, far, time }: { member: MapMember; far: boolean; time: number }) {
-  const low = member.battery != null && member.battery < LOW_BATTERY;
+  const done = !!member.done;
+  const low = !done && member.battery != null && member.battery < LOW_BATTERY;
   const lastSeen = showLastSeen(member, time);
-  const tone: Tone = low ? 'low' : far ? 'far' : lastSeen ? 'stale' : member.isMe ? 'me' : 'ok';
+  const tone: Tone = done ? 'done' : low ? 'low' : far ? 'far' : lastSeen ? 'stale' : member.isMe ? 'me' : 'ok';
   const label = memberLabel(member);
-  const seen = lastSeen ? lastSeenText(member) : null;
+  const seen = done ? DONE_TEXT : lastSeen ? lastSeenText(member) : null;
   const { tracks, onLayout } = useMarkerTracks(`${tone}|${label}|${seen}`);
   const height = AVATAR + LABEL_GAP + LINE + (seen ? SEEN_LINE : 0);
   return (
@@ -95,7 +101,7 @@ export function MemberMarker({ member, far, time }: { member: MapMember; far: bo
           </View>
         </View>
         <View style={[styles.label, { height: LINE + (seen ? SEEN_LINE : 0) }]}>
-          <Txt style={styles.labelText} color={low ? colors.red : colors.text} numberOfLines={1}>
+          <Txt style={styles.labelText} color={low ? colors.red : done ? colors.textMuted : colors.text} numberOfLines={1}>
             {label}
           </Txt>
           {seen ? (

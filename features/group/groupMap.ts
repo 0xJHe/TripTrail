@@ -25,7 +25,23 @@ export interface MapMember extends LatLng {
   battery: number | null;
   /** When this position was read (ms). */
   seenAt: number;
+  /**
+   * Closed their day (Done for today): a greyed circle with "Done for today", and left out of
+   * the group's centre and the far-from-group and low-battery alerts.
+   */
+  done?: boolean;
 }
+
+/** Members still out for the day (not closed with Done for today). */
+const outFor = (members: MapMember[]) => members.filter((m) => !m.done);
+
+/** Mark who has closed their day (`closed` = member ids, features/recap closedIds). */
+export function markDone(members: MapMember[], closed: Set<string>): MapMember[] {
+  return members.map((m) => (closed.has(m.id) === !!m.done ? m : { ...m, done: closed.has(m.id) }));
+}
+
+/** The second line under a member who closed their day. */
+export const DONE_TEXT = 'Done for today';
 
 export interface FarMember {
   member: MapMember;
@@ -43,8 +59,11 @@ export function firstName(name: string): string {
  * member, the one with the most people near them; this phone wins a tie). Using the
  * cluster rather than everyone keeps one far-away member from dragging the centre
  * towards them, so "Daniel is 900 m from the group" is measured from the rest.
+ * Members who closed their day don't count (unless everyone has).
  */
-export function groupCentre(members: MapMember[]): LatLng | null {
+export function groupCentre(all: MapMember[]): LatLng | null {
+  const out = outFor(all);
+  const members = out.length > 0 ? out : all;
   if (members.length === 0) return null;
   const near = (a: MapMember) => members.filter((b) => haversineMeters(a, b) <= FAR_FROM_GROUP_M);
   let best = members[0];
@@ -66,8 +85,9 @@ export function groupCentre(members: MapMember[]): LatLng | null {
   return centroid(near(best));
 }
 
-/** Members more than 500 m from the group's centre, furthest first. Needs 2+ people. */
-export function farMembers(members: MapMember[]): FarMember[] {
+/** Members more than 500 m from the group's centre, furthest first. Needs 2+ people still out (not Done for today). */
+export function farMembers(all: MapMember[]): FarMember[] {
+  const members = outFor(all);
   if (members.length < 2) return [];
   const centre = groupCentre(members);
   if (!centre) return [];
@@ -77,9 +97,9 @@ export function farMembers(members: MapMember[]): FarMember[] {
     .sort((a, b) => b.distanceM - a.distanceM);
 }
 
-/** Members whose battery is below 15%, lowest first. */
+/** Members whose battery is below 15%, lowest first (not those who closed their day). */
 export function lowBatteryMembers(members: MapMember[]): MapMember[] {
-  return members
+  return outFor(members)
     .filter((m) => m.battery != null && m.battery < LOW_BATTERY)
     .sort((a, b) => (a.battery ?? 0) - (b.battery ?? 0));
 }
@@ -102,9 +122,9 @@ export function lowBatteryText(m: MapMember): string {
   return `${who} battery is ${m.battery}% — may go dark soon`;
 }
 
-/** Show "last seen [time]" for a member: battery low (may go dark) or no new position for 3 min. */
+/** Show "last seen [time]" for a member: battery low (may go dark) or no new position for 3 min. Not after Done for today. */
 export function showLastSeen(m: MapMember, t: number): boolean {
-  if (m.isMe) return false;
+  if (m.isMe || m.done) return false;
   return (m.battery != null && m.battery < LOW_BATTERY) || t - m.seenAt > STALE_MS;
 }
 

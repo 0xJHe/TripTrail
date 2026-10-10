@@ -2,6 +2,7 @@ import { buildDemoRoute } from '@/features/demo/route';
 import {
   cameraPoints,
   distanceText,
+  DONE_TEXT,
   farMembers,
   farText,
   groupCentre,
@@ -9,6 +10,7 @@ import {
   latestByMember,
   lowBatteryMembers,
   lowBatteryText,
+  markDone,
   memberLabel,
   nextStop,
   sharingWindow,
@@ -32,6 +34,52 @@ const MIN = 60_000;
 function member(id: string, name: string, east: number, north: number, extra: Partial<MapMember> = {}): MapMember {
   return { id, name, isMe: false, battery: 80, seenAt: T, ...offsetMeters(base, east, north), ...extra };
 }
+
+describe('members who closed their day (Done for today)', () => {
+  const group = [
+    member('a', 'Aisha', 0, 0, { isMe: true }),
+    member('r', 'Ravi', 20, -20),
+    member('m', 'Mei', -15, 10),
+    // Gone back to the hotel, 2 km away, phone at 9%.
+    member('d', 'Daniel', 2000, 0, { battery: 9, seenAt: T - 30 * MIN }),
+  ];
+
+  it('marks them done from the closures', () => {
+    const marked = markDone(group, new Set(['d']));
+    expect(marked.filter((m) => m.done).map((m) => m.id)).toEqual(['d']);
+    expect(markDone(marked, new Set(['d']))[3]).toBe(marked[3]);
+    // Reopened: back to normal.
+    expect(markDone(marked, new Set())[3].done).toBe(false);
+  });
+
+  it('leaves them out of the far-from-group and low-battery alerts', () => {
+    expect(farMembers(group).map((f) => f.member.id)).toEqual(['d']);
+    expect(lowBatteryMembers(group).map((m) => m.id)).toEqual(['d']);
+    const marked = markDone(group, new Set(['d']));
+    expect(farMembers(marked)).toEqual([]);
+    expect(lowBatteryMembers(marked)).toEqual([]);
+  });
+
+  it('shows "Done for today" instead of "last seen", and not in the group centre', () => {
+    const marked = markDone(group, new Set(['d']));
+    expect(showLastSeen(group[3], T)).toBe(true);
+    expect(showLastSeen(marked[3], T)).toBe(false);
+    expect(DONE_TEXT).toBe('Done for today');
+    const centre = groupCentre(marked)!;
+    expect(haversineMeters(centre, group[0])).toBeLessThan(50);
+  });
+
+  it('my own closed day greys my circle too (also in Demo mode, by my member id)', () => {
+    const marked = markDone(group, new Set(['a']));
+    expect(marked[0]).toMatchObject({ isMe: true, done: true });
+    // The other three are still checked; Daniel is far and low.
+    expect(farMembers(marked).map((f) => f.member.id)).toEqual(['d']);
+  });
+
+  it('nobody is far when fewer than 2 are still out', () => {
+    expect(farMembers(markDone(group, new Set(['a', 'r', 'm'])))).toEqual([]);
+  });
+});
 
 describe('far from group', () => {
   it('flags a member more than 500 m from the group, measured from the rest', () => {

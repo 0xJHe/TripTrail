@@ -12,6 +12,7 @@ const TABLE_KEYS = {
   votes: 'votes',
   stops: 'stops',
   pins: 'pins',
+  meet_points: 'meetPoints',
   late_alerts: 'lateAlerts',
   early_alerts: 'earlyAlerts',
   rain_alerts: 'rainAlerts',

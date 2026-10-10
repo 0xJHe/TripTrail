@@ -17,14 +17,31 @@ interface GroupAlertCardProps {
   groupSize: number;
   notice: MapNotice;
   onAllow: () => void;
+  onMeet: () => void;
+  onSplit: () => void;
+  /** A meet point is already set (the button moves it). */
+  meetSet: boolean;
+  /** The group is split already. */
+  splitActive: boolean;
 }
 
 /**
  * The card under the map (prototype screen 11): amber stripe when someone is far from the
- * group or their battery is low, else how many are sharing. Meet point and Split & rejoin
- * come in the next step, so they show greyed out.
+ * group or their battery is low, else how many are sharing. Set meet point and Split & rejoin
+ * (offered most when someone is far, but there anytime) under it.
  */
-export function GroupAlertCard({ far, low, sharingCount, groupSize, notice, onAllow }: GroupAlertCardProps) {
+export function GroupAlertCard({
+  far,
+  low,
+  sharingCount,
+  groupSize,
+  notice,
+  onAllow,
+  onMeet,
+  onSplit,
+  meetSet,
+  splitActive,
+}: GroupAlertCardProps) {
   if (notice.kind !== 'live') return <NoticeCard notice={notice} onAllow={onAllow} />;
   const alert = far.length > 0 || low.length > 0;
   // The headline is the first far member, else the lowest battery; the rest go underneath.
@@ -65,12 +82,17 @@ export function GroupAlertCard({ far, low, sharingCount, groupSize, notice, onAl
         </View>
       ))}
       <View style={styles.row}>
-        <Button label="Set meet point" size="sm" disabled style={styles.half} />
-        <Button label="Split & rejoin" size="sm" variant="secondary" disabled style={[styles.half, styles.offSecondary]} />
+        <Button label={meetSet ? 'Move meet point' : 'Set meet point'} size="sm" onPress={onMeet} style={styles.half} testID="set-meet" />
+        <Button
+          label="Split & rejoin"
+          size="sm"
+          variant="secondary"
+          onPress={onSplit}
+          disabled={splitActive}
+          style={[styles.half, splitActive && styles.offSecondary]}
+          testID="split-rejoin"
+        />
       </View>
-      <Txt variant="s11" style={{ textAlign: 'center' }}>
-        Meet point and Split & rejoin are coming soon
-      </Txt>
     </View>
   );
 }

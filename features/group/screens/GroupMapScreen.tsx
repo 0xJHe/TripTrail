@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import MapView, { PROVIDER_GOOGLE, type EdgePadding, type Region } from 'react-native-maps';
 
 import { Button } from '@/components/ui/Button';
@@ -9,11 +9,16 @@ import { Txt } from '@/components/ui/Txt';
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
 import { colors } from '@/lib/theme';
 import { BackgroundAskCard } from '../components/BackgroundAskCard';
+import { clockOf } from '@/features/planning/stops';
 import { GroupAlertCard } from '../components/GroupAlertCard';
-import { FarLine, MemberMarker, PinMarker, StopMarker } from '../components/MapMarkers';
+import { FarLine, MeetMarker, MemberMarker, PinMarker, StopMarker } from '../components/MapMarkers';
+import { MeetPickCard } from '../components/MeetPickCard';
+import { MeetPointCard } from '../components/MeetPointCard';
 import { PinSheet } from '../components/PinSheet';
+import { SplitBanner } from '../components/SplitBanner';
 import { ZoomControls } from '../components/ZoomControls';
 import { useGroupMap } from '../hooks/useGroupMap';
+import { useMeetPick } from '../hooks/useMeetPick';
 import { MIN_DELTA } from '../groupMap';
 import { pinDistance } from '../pins';
 
@@ -23,6 +28,7 @@ const FIT_PADDING: EdgePadding = { top: 48, right: 72, bottom: 56, left: 48 };
 /**
  * Group map (prototype screen 11): everyone's latest position and battery, today's stops,
  * pins from Pin spot, and amber alerts when someone is far from the group or low on battery.
+ * Set meet point (tap the map or pick a stop / pin) and Split & rejoin (screen 12) from the card.
  */
 export function GroupMapScreen() {
   const g = useGroupMap();
@@ -31,6 +37,10 @@ export function GroupMapScreen() {
   const fitted = useRef<string | null>(null);
   const [pinId, setPinId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [closedMeet, setClosedMeet] = useState<string | null>(null);
+  const pick = useMeetPick(g.dayStops, g.pins, g.gather);
+  const { meet, split } = g.gather;
+  const showMeet = meet && !(meet.state === 'together' && closedMeet === meet.row.id) ? meet : null;
   const place = g.trip?.destination ?? g.trip?.name ?? '';
   const meAt = g.members.find((m) => m.isMe) ?? null;
   const selected = g.pins.find((p) => p.id === pinId) ?? null;
@@ -90,19 +100,32 @@ export function GroupMapScreen() {
             shown.current = r;
           }}
           onPress={(e) => {
-            if (e.nativeEvent.action !== 'marker-press') setPinId(null);
+            if (e.nativeEvent.action === 'marker-press') return;
+            const { latitude, longitude } = e.nativeEvent.coordinate;
+            if (pick.picking) pick.tapMap({ lat: latitude, lng: longitude });
+            else setPinId(null);
           }}
           toolbarEnabled={false}
           showsCompass={false}
           moveOnMarkerPress={false}
           userInterfaceStyle="light">
           {g.dayStops.map((s, i) => (
-            <StopMarker key={s.id} stop={s} number={i + 1} />
+            <StopMarker key={s.id} stop={s} number={i + 1} onPress={pick.picking ? () => pick.pickStop(s) : undefined} />
           ))}
           {g.centre ? g.far.map((f) => <FarLine key={`far-${f.member.id}`} far={f} centre={g.centre!} />) : null}
           {g.pins.map((p) => (
-            <PinMarker key={p.id} pin={p} selected={p.id === pinId} onPress={() => setPinId(p.id)} />
+            <PinMarker
+              key={p.id}
+              pin={p}
+              selected={pick.picking ? pick.draft?.key === p.id : p.id === pinId}
+              onPress={() => (pick.picking ? pick.pickPin(p) : setPinId(p.id))}
+            />
           ))}
+          {split?.state === 'active' ? (
+            <MeetMarker point={split.row} label={`Rejoin${split.row.rejoin_at ? ` · ${clockOf(split.row.rejoin_at)}` : ''}`} />
+          ) : null}
+          {pick.picking && pick.draft ? <MeetMarker point={pick.draft} label="Meet here?" draft /> : null}
+          {!pick.picking && meet?.state === 'active' ? <MeetMarker point={meet.row} label="Meet point" /> : null}
           {g.members.map((m) => (
             <MemberMarker key={m.id} member={m} far={farIds.has(m.id)} time={time} />
           ))}
@@ -112,25 +135,56 @@ export function GroupMapScreen() {
       </View>
 
       <View style={styles.panel}>
-        <BackgroundAskCard />
-        {selected ? (
-          <PinSheet
-            pin={selected}
-            by={g.memberName(selected.member_id)}
-            distance={pinDistance(selected, meAt)}
-            onClose={() => setPinId(null)}
-          />
-        ) : (
-          <GroupAlertCard
-            far={g.far}
-            low={g.low}
-            sharingCount={g.members.length}
-            groupSize={g.groupSize}
-            notice={g.notice}
-            onAllow={g.allowLocation}
-          />
-        )}
-        <Button label="📍 Pin spot" onPress={() => router.push('/pin')} />
+        <ScrollView style={styles.cards} contentContainerStyle={styles.cardsBody} keyboardShouldPersistTaps="handled">
+          <BackgroundAskCard />
+          {pick.picking ? (
+            <MeetPickCard
+              draft={pick.draft}
+              options={pick.options}
+              onPick={pick.pick}
+              onConfirm={pick.confirm}
+              onCancel={pick.cancel}
+              saving={pick.saving}
+              error={pick.error}
+            />
+          ) : selected ? (
+            <PinSheet
+              pin={selected}
+              by={g.memberName(selected.member_id)}
+              distance={pinDistance(selected, meAt)}
+              onClose={() => setPinId(null)}
+            />
+          ) : (
+            <>
+              <SplitBanner />
+              {showMeet ? (
+                <MeetPointCard
+                  meet={showMeet}
+                  members={g.members}
+                  setBy={g.memberName(showMeet.row.set_by)}
+                  onClear={() => g.gather.end(showMeet.row.id, 'cleared').catch(() => {})}
+                  onClose={() => setClosedMeet(showMeet.row.id)}
+                />
+              ) : null}
+              <GroupAlertCard
+                far={g.far}
+                low={g.low}
+                sharingCount={g.members.length}
+                groupSize={g.groupSize}
+                notice={g.notice}
+                onAllow={g.allowLocation}
+                onMeet={() => {
+                  setPinId(null);
+                  pick.start();
+                }}
+                onSplit={() => router.push('/split')}
+                meetSet={meet?.state === 'active'}
+                splitActive={split?.state === 'active'}
+              />
+            </>
+          )}
+        </ScrollView>
+        {pick.picking ? null : <Button label="📍 Pin spot" onPress={() => router.push('/pin')} />}
       </View>
     </Frame>
   );
@@ -151,4 +205,6 @@ const styles = StyleSheet.create({
   mapBox: { flex: 1, backgroundColor: colors.backdrop },
   loading: { position: 'absolute', top: 16, alignSelf: 'center' },
   panel: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14, gap: 10, backgroundColor: colors.background },
+  cards: { maxHeight: 340, flexGrow: 0, marginHorizontal: -16 },
+  cardsBody: { gap: 10, paddingHorizontal: 16, paddingBottom: 2 },
 });

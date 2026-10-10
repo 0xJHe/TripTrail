@@ -6,6 +6,7 @@ import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
 import { BackgroundAskCard } from '@/features/group/components/BackgroundAskCard';
+import { SplitBanner } from '@/features/group/components/SplitBanner';
 import { SpendCheckCard } from '@/features/money/components/SpendCheckCard';
 import { formatRange } from '@/features/planning/dates';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
@@ -30,6 +31,7 @@ import type { TodayView } from '../types';
  * Running early (screen 8): the stop just left in the navy block, the early card, then Next.
  * Spend check (screen 9): under the navy block (or under the late / early card), until answered.
  * Rain backup (screen 10): for the outdoor stop the group is at or heading to.
+ * Split & rejoin: "Split · rejoin at [place] at [time]" with a countdown, under the location line.
  * Cards stack in this order: late, rain, early, spend.
  */
 export function TodayScreen() {
@@ -88,6 +90,7 @@ export function TodayScreen() {
           <LocationPill location={today.location} groupSize={today.members.length} />
         )}
         <BackgroundAskCard />
+        <SplitBanner />
 
         {now ? (
           <NowCard

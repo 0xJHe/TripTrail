@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { LocationRow, NewPin, Pin, PinWithPhoto } from './types';
+import type { LocationRow, MeetPointRow, NewMeetPoint, NewPin, Pin, PinWithPhoto } from './types';
 
 export const PIN_PHOTOS = 'pin-photos';
 /** Photo links last this long (seconds); the list is refetched well before. */
@@ -57,4 +57,33 @@ export async function fetchLatestLocations(tripId: string, memberIds: string[], 
     }),
   );
   return rows.filter((r): r is LocationRow => r != null);
+}
+
+/** The trip's latest meet points and splits (the current ones are picked by meetPoint.ts). */
+export async function fetchMeetPoints(tripId: string): Promise<MeetPointRow[]> {
+  const { data, error } = await supabase
+    .from('meet_points')
+    .select('*')
+    .eq('trip_id', tripId)
+    .order('set_at', { ascending: false })
+    .limit(30);
+  if (error) throw error;
+  return ((data ?? []) as MeetPointRow[]).map((r) => ({ ...r, group_b: r.group_b ?? [] }));
+}
+
+/** Set a meet point or start a split; everyone sees it through Realtime on `meet_points`. */
+export async function addMeetPoint(tripId: string, memberId: string | null, row: NewMeetPoint): Promise<void> {
+  const { error } = await supabase
+    .from('meet_points')
+    .insert({ ...row, trip_id: tripId, set_by: memberId, status: 'active', active: true });
+  if (error) throw error;
+}
+
+/** End a meet point / split: 'together' when everyone got there, 'cleared' by hand. `at` = now(). */
+export async function endMeetPoint(id: string, status: 'together' | 'cleared', at: string, by: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('meet_points')
+    .update({ status, active: false, ended_at: at, ended_by: by })
+    .eq('id', id);
+  if (error) throw error;
 }

@@ -33,6 +33,8 @@ const STOP_BOX = 24;
 const PIN_BOX = 36;
 const DISTANCE_W = 64;
 const DISTANCE_H = 22;
+const MEET_W = 120;
+const MEET_H = 42;
 
 /**
  * Android redraws a custom marker only while tracksViewChanges is on (and that is slow if left
@@ -108,7 +110,7 @@ export function MemberMarker({ member, far, time }: { member: MapMember; far: bo
 }
 
 /** A small numbered dot for each of the day's stops; done ones are ticked and grey. */
-export function StopMarker({ stop, number }: { stop: Stop; number: number }) {
+export function StopMarker({ stop, number, onPress }: { stop: Stop; number: number; onPress?: () => void }) {
   const done = stop.status === 'done';
   const { tracks, onLayout } = useMarkerTracks(`${stop.status}|${number}`);
   if (stop.lat == null || stop.lng == null) return null;
@@ -118,8 +120,16 @@ export function StopMarker({ stop, number }: { stop: Stop; number: number }) {
       anchor={{ x: 0.5, y: 0.5 }}
       tracksViewChanges={tracks}
       zIndex={5}
-      title={stop.name}
-      description={timeLabel(stop)}>
+      title={onPress ? undefined : stop.name}
+      description={onPress ? undefined : timeLabel(stop)}
+      onPress={
+        onPress
+          ? (e) => {
+              e.stopPropagation?.();
+              onPress();
+            }
+          : undefined
+      }>
       <View style={styles.stopBox} collapsable={false} onLayout={onLayout}>
         <View style={[styles.stop, done && styles.stopDone]}>
           {done ? (
@@ -183,6 +193,35 @@ export function FarLine({ far, centre }: { far: FarMember; centre: LatLng }) {
         </View>
       </Marker>
     </>
+  );
+}
+
+
+/**
+ * The meet point (or a split's rejoin point): a navy "Meet point" tag with a stem down to the
+ * spot. `draft` while it's being picked (dashed, not saved yet).
+ */
+export function MeetMarker({ point, label, draft = false }: { point: LatLng; label: string; draft?: boolean }) {
+  const { tracks, onLayout } = useMarkerTracks(`${label}|${draft}`);
+  return (
+    <Marker
+      coordinate={at(point)}
+      anchor={{ x: 0.5, y: (MEET_H - 4) / MEET_H }}
+      tracksViewChanges={tracks}
+      zIndex={40}
+      tappable={false}
+      accessibilityLabel={label}>
+      <View style={styles.meetBox} collapsable={false} onLayout={onLayout}>
+        <View style={[styles.meetTag, draft && styles.meetDraft]}>
+          <Ionicons name="flag" size={11} color={draft ? colors.navy : colors.white} />
+          <Txt style={styles.meetText} color={draft ? colors.navy : colors.white} numberOfLines={1}>
+            {label}
+          </Txt>
+        </View>
+        <View style={[styles.meetStem, draft && { backgroundColor: colors.navy }]} />
+        <View style={styles.meetDot} />
+      </View>
+    </Marker>
   );
 }
 
@@ -256,4 +295,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   distanceText: { fontFamily: fontFamily.bold, fontSize: 10, lineHeight: 14 },
+  meetBox: { width: MEET_W, height: MEET_H, alignItems: 'center', overflow: 'hidden' },
+  meetTag: {
+    height: 24,
+    maxWidth: MEET_W,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    borderRadius: 12,
+    backgroundColor: colors.navy,
+    borderWidth: 1.5,
+    borderColor: colors.white,
+  },
+  meetDraft: { backgroundColor: colors.white, borderColor: colors.navy, borderStyle: 'dashed' },
+  meetText: { fontFamily: fontFamily.bold, fontSize: 11, lineHeight: 14 },
+  meetStem: { width: 2, height: 10, backgroundColor: colors.navy },
+  meetDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.navy, borderWidth: 1.5, borderColor: colors.white },
 });

@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
 
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
+import { useGatherCheck } from '@/features/group/hooks/useGatherCheck';
 import { useShareLocation } from '@/features/group/hooks/useShareLocation';
 import { useEarlyCheck } from '@/features/today/hooks/useEarlyCheck';
 import { useLateCheck } from '@/features/today/hooks/useLateCheck';
@@ -30,6 +31,8 @@ export default function TabsLayout() {
   useRainCheck();
   // Shares this phone's position and battery with the group on a trip day (group map).
   useShareLocation();
+  // Ends the meet point / split once everyone is there (group map).
+  useGatherCheck();
   return (
     <Tabs
       screenOptions={{

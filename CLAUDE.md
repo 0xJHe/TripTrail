@@ -72,8 +72,18 @@ During the trip:
   Deploy: `npx supabase functions deploy <name> --project-ref <ref> --no-verify-jwt`
   (the project uses the new sb_publishable keys, so the function checks the JWT
   itself). Logs: Supabase dashboard > Edge Functions > <name> > Logs.
-- expo-location + expo-task-manager for background location.
-- react-native-maps for maps.
+- expo-location + expo-task-manager for background location (the task lives in
+  lib/location.ts; it can't run in Expo Go, so it is skipped there).
+- react-native-maps for maps, `provider={PROVIDER_GOOGLE}`. The Android Maps key is the EAS
+  env var GOOGLE_MAPS_ANDROID_KEY (preview environment; restricted to com.triptrail.app +
+  the EAS keystore SHA-1, Maps SDK for Android only). app.config.ts keeps app.json and
+  adds it to the react-native-maps plugin. Never put the key in git. Expo Go needs no key.
+- expo-battery for battery %.
+- Development build (expo-dev-client): `npx eas-cli build -p android --profile development`
+  (APK, internal, preview env vars, same package + keystore as the preview APK). With
+  expo-dev-client installed, `expo start` / `npm run start:tunnel` open the development
+  build by default; add `--go` for Expo Go. Background location and our Maps key only
+  work in the development build / APK.
 - Zustand for client state. React Query (TanStack) for Supabase reads.
 - Jest + @testing-library/react-native for tests.
 
@@ -268,3 +278,16 @@ Time and location rule (built; follow it in every live-trip feature):
   can delete them.
 - Location on: from 60 min before the day's first stop until the member taps
   Done for today.
+- Location sharing (features/group/hooks/useShareLocation.ts, `locations` table, one new row
+  per save): only in the sharing window, 60 min before the day's first stop to 60 min after
+  the last stop's end (groupMap.ts sharingWindow). With "Allow all the time" (asked once per
+  trip by BackgroundAskCard, after a short explanation; a no keeps foreground-only):
+  background updates about every 60 s with screen off, Android notification "TripTrail is
+  sharing your location with your group" (features/group/backgroundShare.ts; the task stops
+  itself when the window ends). Otherwise every 45 s while the app is open. Battery
+  dropping below 15% saves straight away. Demo mode never writes positions (the map uses
+  the demo route's members). Others' positions: newest row per member, live by Realtime.
+- Group map (screen 11, features/group): member circles with initial + battery %, day's
+  stops, today's pins (tap: name, who pinned, Directions). Far from group is measured from
+  the main cluster's centre (groupMap.ts groupCentre). Low battery: keep the last position,
+  marked "last seen [time]" (also any position older than 3 min).

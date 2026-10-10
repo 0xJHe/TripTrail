@@ -1,13 +1,14 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import MapView, { type Region } from 'react-native-maps';
+import MapView, { PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
 import { Button } from '@/components/ui/Button';
 import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
 import { colors } from '@/lib/theme';
+import { BackgroundAskCard } from '../components/BackgroundAskCard';
 import { GroupAlertCard } from '../components/GroupAlertCard';
 import { FarLine, MemberMarker, PinMarker, StopMarker } from '../components/MapMarkers';
 import { PinSheet } from '../components/PinSheet';
@@ -67,6 +68,7 @@ export function GroupMapScreen() {
       <View style={styles.mapBox}>
         <MapView
           ref={map}
+          provider={PROVIDER_GOOGLE}
           style={StyleSheet.absoluteFill}
           initialRegion={g.region ?? undefined}
           onMapReady={() => setReady(true)}
@@ -96,6 +98,7 @@ export function GroupMapScreen() {
       </View>
 
       <View style={styles.panel}>
+        <BackgroundAskCard />
         {selected ? (
           <PinSheet
             pin={selected}

@@ -14,6 +14,8 @@ import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { DemoFrame } from '@/features/demo/components/DemoFrame';
+// Registers the background location handler (sharing with the screen off) before any screen.
+import '@/features/group/backgroundShare';
 import { useAuth, useAuthListener } from '@/features/trip/authStore';
 import { colors } from '@/lib/theme';
 

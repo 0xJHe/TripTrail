@@ -1,5 +1,8 @@
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Location from 'expo-location';
+import * as TaskManager from 'expo-task-manager';
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 
 import { useNow } from './clock';
@@ -234,4 +237,118 @@ function useGpsWatch(on: boolean): GroupLocation | null {
     };
   }, [on]);
   return on ? loc : null;
+}
+
+/** 'demo' while Demo mode is on (positions are the fake route; never share them), else 'gps'. */
+export function useLocationSource(): 'demo' | 'gps' {
+  return useDemo((s) => s.enabled) ? 'demo' : 'gps';
+}
+
+// ---------- Background updates (screen off, Android) ----------
+
+/** Task name for expo-task-manager. */
+export const BACKGROUND_TASK = 'triptrail-background-location';
+
+export interface BackgroundFix extends LatLng {
+  /** Time of the fix (ms). */
+  at: number;
+}
+
+let backgroundHandler: ((fix: BackgroundFix) => Promise<void>) | null = null;
+
+/** Background updates need an Android build of the app (a development build or the APK), not Expo Go. */
+export function backgroundSupported(): boolean {
+  return Platform.OS === 'android' && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
+}
+
+/** What to do with each background fix (features/group/backgroundShare.ts registers it at app start). */
+export function onBackgroundLocation(handler: (fix: BackgroundFix) => Promise<void>) {
+  backgroundHandler = handler;
+}
+
+/** Demo mode is saved on the phone; when the app wakes up in the background it may not be loaded yet. */
+async function demoModeOnceLoaded(): Promise<boolean> {
+  if (!useDemo.persist.hasHydrated()) {
+    await new Promise<void>((resolve) => {
+      const unsub = useDemo.persist.onFinishHydration(() => {
+        unsub();
+        resolve();
+      });
+      if (useDemo.persist.hasHydrated()) {
+        unsub();
+        resolve();
+      }
+    });
+  }
+  return isDemoMode();
+}
+
+// Defined at load (the task can wake the app with no screen open). Skipped in Expo Go.
+if (backgroundSupported()) {
+  TaskManager.defineTask<{ locations?: Location.LocationObject[] }>(BACKGROUND_TASK, async ({ data, error }) => {
+    if (error) return;
+    const last = data?.locations?.[data.locations.length - 1];
+    if (!last || !backgroundHandler) return;
+    // Demo mode never shares positions.
+    if (await demoModeOnceLoaded()) {
+      await stopBackgroundUpdates();
+      return;
+    }
+    await backgroundHandler({ lat: last.coords.latitude, lng: last.coords.longitude, at: last.timestamp });
+  });
+}
+
+/** "Allow all the time" location, without showing a prompt. 'blocked' where it can't run (Expo Go). */
+export async function backgroundLocationPermission(): Promise<LocationPermission> {
+  if (!backgroundSupported()) return 'blocked';
+  try {
+    return toPermission(await Location.getBackgroundPermissionsAsync());
+  } catch {
+    return 'ask';
+  }
+}
+
+/** Ask for "Allow all the time" (Android opens the app's location settings). Needs location while in use first. */
+export async function requestBackgroundLocationPermission(): Promise<LocationPermission> {
+  if (!backgroundSupported()) return 'blocked';
+  try {
+    const fg = await Location.getForegroundPermissionsAsync();
+    if (fg.status !== 'granted') return toPermission(fg);
+    return toPermission(await Location.requestBackgroundPermissionsAsync());
+  } catch {
+    return 'ask';
+  }
+}
+
+/** Start background updates about every 60 s, with Android's notification. true if running. */
+export async function startBackgroundUpdates(notice: { title: string; body: string; color: string }): Promise<boolean> {
+  if (!backgroundSupported()) return false;
+  try {
+    if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TASK)) return true;
+    await Location.startLocationUpdatesAsync(BACKGROUND_TASK, {
+      accuracy: Location.Accuracy.Balanced,
+      timeInterval: 60_000,
+      distanceInterval: 0,
+      deferredUpdatesInterval: 60_000,
+      pausesUpdatesAutomatically: false,
+      foregroundService: {
+        notificationTitle: notice.title,
+        notificationBody: notice.body,
+        notificationColor: notice.color,
+        killServiceOnDestroy: false,
+      },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function stopBackgroundUpdates(): Promise<void> {
+  if (!backgroundSupported()) return;
+  try {
+    if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_TASK)) await Location.stopLocationUpdatesAsync(BACKGROUND_TASK);
+  } catch {
+    // not running
+  }
 }

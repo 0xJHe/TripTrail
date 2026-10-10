@@ -30,7 +30,9 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "TripTrail uses your location during a trip to tick off stops and keep the day's plan on time."
+          "locationWhenInUsePermission": "TripTrail uses your location during a trip to tick off stops and keep the day's plan on time.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       [

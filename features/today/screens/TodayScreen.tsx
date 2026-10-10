@@ -5,6 +5,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 
 import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
+import { BackgroundAskCard } from '@/features/group/components/BackgroundAskCard';
 import { SpendCheckCard } from '@/features/money/components/SpendCheckCard';
 import { formatRange } from '@/features/planning/dates';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
@@ -86,6 +87,7 @@ export function TodayScreen() {
         ) : (
           <LocationPill location={today.location} groupSize={today.members.length} />
         )}
+        <BackgroundAskCard />
 
         {now ? (
           <NowCard

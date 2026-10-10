@@ -3,42 +3,67 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
 import { useLocationAccess } from '@/features/today/permission';
-import { useMyMember } from '@/features/trip/hooks/useTrip';
+import { useMembers, useMyMember } from '@/features/trip/hooks/useTrip';
 import { useCurrentTrip } from '@/features/trip/store';
 import { now } from '@/lib/clock';
-import { getGroupLocation } from '@/lib/location';
+import { backgroundSupported, getGroupLocation, useLocationSource } from '@/lib/location';
 import { saveLocation } from '../api';
+import { useBackgroundAccess } from '../backgroundAccess';
+import { startBackgroundSharing, stopBackgroundSharing } from '../backgroundShare';
+import { readBattery } from '../battery';
 import { LOW_BATTERY } from '../groupMap';
 import { useTripDay } from './useTripDay';
 
-/** How often this phone saves its position + battery while the app is open. */
+/** How often this phone saves its position + battery while the app is open (foreground-only sharing). */
 export const SHARE_EVERY_MS = 45_000;
 
-/** Battery %, null when the phone can't tell. */
-async function readBattery(): Promise<number | null> {
-  try {
-    const level = await Battery.getBatteryLevelAsync();
-    return level >= 0 ? Math.round(level * 100) : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Saves this phone's position (lib/location.ts) and battery to `locations` every 45 s while
- * the app is open on a trip day, from 60 min before the first stop to 60 min after the last.
+ * Shares this phone's position (lib/location.ts) and battery to `locations` on a trip day,
+ * from 60 min before the first stop to 60 min after the last. Mounted once in the tabs layout.
+ * - "Allow all the time" given (development build / APK on Android): background updates
+ *   about every 60 s, screen off too, with Android's notification (features/group/backgroundShare.ts).
+ *   They stop by themselves when the window ends.
+ * - Otherwise (Expo Go, or the person said no): every 45 s while the app is open.
  * Also saves straight away when the battery drops below 15%, so the group has the last
- * known position before the phone goes dark. Mounted once in the tabs layout.
- * Demo mode saves nothing: the map shows the demo route's members instead.
+ * known position before the phone goes dark. Demo mode never saves anything.
  */
 export function useShareLocation() {
   const tripId = useCurrentTrip((s) => s.currentTripId) ?? undefined;
+  const members = useMembers(tripId);
   const me = useMyMember(tripId);
-  const { sharing } = useTripDay(tripId);
+  const { sharing, window, ready } = useTripDay(tripId);
   const permission = useLocationAccess((s) => s.permission);
+  const bgPermission = useBackgroundAccess((s) => s.permission);
+  const demo = useLocationSource() === 'demo';
   const memberId = me?.id;
-  const on = !!tripId && !!memberId && sharing && permission === 'granted';
+  const on = !demo && !!tripId && !!memberId && sharing && permission === 'granted';
+  const background = on && backgroundSupported() && bgPermission === 'granted';
+  // Only start / stop the background service once everything is known (not while loading).
+  const known = ready && (!tripId || members.isSuccess) && permission !== null && (!backgroundSupported() || bgPermission !== null);
 
+  // Check "Allow all the time" now and whenever the app comes back (e.g. from the settings page).
+  useEffect(() => {
+    const { refresh } = useBackgroundAccess.getState();
+    refresh();
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') refresh();
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Background sharing on for this window, or off.
+  const from = window?.from;
+  const to = window?.to;
+  useEffect(() => {
+    if (!known || !backgroundSupported()) return;
+    if (background && tripId && memberId && from != null && to != null) {
+      startBackgroundSharing({ tripId, memberId, from, to });
+    } else {
+      stopBackgroundSharing();
+    }
+  }, [known, background, tripId, memberId, from, to]);
+
+  // Foreground sharing (the background task does it when it runs), plus the low-battery save.
   useEffect(() => {
     if (!on || !tripId || !memberId) return;
     let active = AppState.currentState === 'active';
@@ -65,12 +90,16 @@ export function useShareLocation() {
         busy = false;
       }
     };
-    share();
-    const id = setInterval(share, SHARE_EVERY_MS);
-    const appSub = AppState.addEventListener('change', (s) => {
-      active = s === 'active';
-      if (active) share();
-    });
+    let id: ReturnType<typeof setInterval> | null = null;
+    let appSub: { remove: () => void } | null = null;
+    if (!background) {
+      share();
+      id = setInterval(share, SHARE_EVERY_MS);
+      appSub = AppState.addEventListener('change', (s) => {
+        active = s === 'active';
+        if (active) share();
+      });
+    }
     let batterySub: { remove: () => void } | null = null;
     try {
       batterySub = Battery.addBatteryLevelListener(({ batteryLevel }) => {
@@ -83,9 +112,9 @@ export function useShareLocation() {
       batterySub = null;
     }
     return () => {
-      clearInterval(id);
-      appSub.remove();
+      if (id) clearInterval(id);
+      appSub?.remove();
       batterySub?.remove();
     };
-  }, [on, tripId, memberId]);
+  }, [on, background, tripId, memberId]);
 }

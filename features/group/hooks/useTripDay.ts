@@ -7,7 +7,10 @@ import { useTrip } from '@/features/trip/hooks/useTrip';
 import { useNow } from '@/lib/clock';
 import { inWindow, sharingWindow } from '../groupMap';
 
-/** Today's trip day (0 = not a trip day), its stops, and whether phones share their position now. */
+/**
+ * Today's trip day (0 = not a trip day), its stops, and whether phones share their position now.
+ * ready = the trip and its stops have loaded (until then `sharing` is false only because nothing is known).
+ */
 export function useTripDay(tripId: string | undefined) {
   const trip = useTrip(tripId);
   const stops = useStops(tripId);
@@ -28,5 +31,6 @@ export function useTripDay(tripId: string | undefined) {
     window,
     sharing: inWindow(window, time.getTime()),
     time,
+    ready: !tripId || (trip.isSuccess && stops.isSuccess),
   };
 }

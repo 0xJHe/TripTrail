@@ -19,3 +19,13 @@ export interface PinWithPhoto extends Pin {
 }
 
 export type NewPin = Pick<Pin, 'type' | 'name' | 'lat' | 'lng' | 'photo_url' | 'created_at'>;
+
+/** Row in `locations`: one phone's position and battery at a time (a new row every ~45 s). */
+export interface LocationRow {
+  member_id: string;
+  trip_id: string;
+  lat: number;
+  lng: number;
+  battery: number | null;
+  recorded_at: string;
+}

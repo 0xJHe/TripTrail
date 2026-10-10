@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
 
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
+import { useShareLocation } from '@/features/group/hooks/useShareLocation';
 import { useEarlyCheck } from '@/features/today/hooks/useEarlyCheck';
 import { useLateCheck } from '@/features/today/hooks/useLateCheck';
 import { useRainCheck } from '@/features/today/hooks/useRainCheck';
@@ -27,6 +28,8 @@ export default function TabsLayout() {
   useEarlyCheck();
   // Checks for rain within the hour at an outdoor stop (rain backup card).
   useRainCheck();
+  // Shares this phone's position and battery with the group on a trip day (group map).
+  useShareLocation();
   return (
     <Tabs
       screenOptions={{
@@ -40,7 +43,7 @@ export default function TabsLayout() {
       }}>
       <Tabs.Screen name="plan" options={{ title: 'Plan', headerShown: false, tabBarIcon: tabIcon('calendar-outline') }} />
       <Tabs.Screen name="today" options={{ title: 'Today', headerShown: false, tabBarIcon: tabIcon('today') }} />
-      <Tabs.Screen name="map" options={{ title: 'Map', tabBarIcon: tabIcon('map') }} />
+      <Tabs.Screen name="map" options={{ title: 'Map', headerShown: false, tabBarIcon: tabIcon('map') }} />
       <Tabs.Screen name="group" options={{ title: 'Group', tabBarIcon: tabIcon('people') }} />
     </Tabs>
   );

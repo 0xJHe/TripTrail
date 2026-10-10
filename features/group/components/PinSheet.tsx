@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Txt } from '@/components/ui/Txt';
 import { clockOf } from '@/features/planning/stops';
 import { directionsUrl } from '@/features/today/todayPlan';
+import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { colors } from '@/lib/theme';
 import { pinTitle } from '../pins';
 import type { PinWithPhoto } from '../types';
@@ -18,10 +19,16 @@ interface PinSheetProps {
   /** "400 m away", null without a position. */
   distance: string | null;
   onClose: () => void;
+  /** Open the photo full screen. */
+  onPhoto: () => void;
+  /** null = not my pin, so no delete. */
+  onDelete: (() => void) | null;
+  deleting: boolean;
+  error: string | null;
 }
 
-/** A tapped pin on the group map: its name, who pinned it, and Directions. */
-export function PinSheet({ pin, by, distance, onClose }: PinSheetProps) {
+/** A tapped pin on the group map: its name, who pinned it, Directions, and Delete for my own pins. */
+export function PinSheet({ pin, by, distance, onClose, onPhoto, onDelete, deleting, error }: PinSheetProps) {
   const title = pinTitle(pin);
   const spot = pin.type === 'spot';
   const directions = () =>
@@ -30,7 +37,9 @@ export function PinSheet({ pin, by, distance, onClose }: PinSheetProps) {
     <Card style={styles.card} testID="pin-sheet">
       <View style={styles.row}>
         {pin.photoLink ? (
-          <Image source={{ uri: pin.photoLink }} style={styles.icon} contentFit="cover" accessibilityLabel={`Photo of ${title}`} />
+          <Pressable onPress={onPhoto} hitSlop={4} accessibilityRole="imagebutton" accessibilityLabel={`Open the photo of ${title}`}>
+            <Image source={{ uri: pin.photoLink }} style={styles.icon} contentFit="cover" />
+          </Pressable>
         ) : (
           <View style={[styles.icon, { backgroundColor: spot ? '#FDEDEB' : '#E8F0FB' }]}>
             <Txt style={{ fontSize: 18 }}>{spot ? '📍' : '🚗'}</Txt>
@@ -48,12 +57,27 @@ export function PinSheet({ pin, by, distance, onClose }: PinSheetProps) {
           <Ionicons name="close" size={20} color={colors.textMuted} />
         </Pressable>
       </View>
-      <Button
-        label="Directions"
-        size="sm"
-        onPress={directions}
-        icon={<Ionicons name="navigate" size={15} color={colors.white} />}
-      />
+      {error ? <ErrorLine message={error} /> : null}
+      <View style={styles.row}>
+        <Button
+          label="Directions"
+          size="sm"
+          onPress={directions}
+          icon={<Ionicons name="navigate" size={15} color={colors.white} />}
+          style={{ flex: 1 }}
+        />
+        {onDelete ? (
+          <Button
+            label="Delete"
+            size="sm"
+            variant="secondary"
+            onPress={onDelete}
+            loading={deleting}
+            icon={<Ionicons name="trash-outline" size={15} color={colors.red} />}
+            testID="pin-delete"
+          />
+        ) : null}
+      </View>
     </Card>
   );
 }

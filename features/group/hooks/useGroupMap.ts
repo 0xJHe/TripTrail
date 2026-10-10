@@ -88,6 +88,7 @@ export function useGroupMap() {
     fitKey,
     dayStops,
     pins: pinsToday(pins.data ?? [], time),
+    meId: me?.id ?? null,
     memberName,
     notice,
     allowLocation,

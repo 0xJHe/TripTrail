@@ -7,7 +7,7 @@ const LINK_SECONDS = 60 * 60;
 
 /** The trip's pins, each with a short-lived link to its photo. */
 export async function fetchPins(tripId: string): Promise<PinWithPhoto[]> {
-  const { data, error } = await supabase.from('pins').select('*').eq('trip_id', tripId);
+  const { data, error } = await supabase.from('pins').select('*').eq('trip_id', tripId).is('deleted_at', null);
   if (error) throw error;
   const pins = (data ?? []) as Pin[];
   const paths = pins.map((p) => p.photo_url).filter((p): p is string => !!p);
@@ -30,6 +30,28 @@ export async function uploadPinPhoto(path: string, uri: string): Promise<void> {
 export async function addPin(tripId: string, memberId: string, pin: NewPin): Promise<void> {
   const { error } = await supabase.from('pins').insert({ ...pin, trip_id: tripId, member_id: memberId });
   if (error) throw error;
+}
+
+/**
+ * Delete one of my pins and its photo. The photo goes first (so a failed delete can be tried
+ * again); then the row is marked deleted, which Realtime (filtered by trip_id) sends to
+ * everyone, and then removed. A stop made from it with Add to plan stays in the plan.
+ */
+export async function deletePin(pin: Pick<Pin, 'id' | 'photo_url'>, at: string): Promise<void> {
+  if (pin.photo_url) {
+    const { data, error } = await supabase.storage.from(PIN_PHOTOS).remove([pin.photo_url]);
+    if (error) throw error;
+    if (!data?.length) {
+      // Nothing removed: either it's already gone (a retry) or storage didn't allow it.
+      const still = await supabase.storage.from(PIN_PHOTOS).createSignedUrl(pin.photo_url, 10);
+      if (!still.error) throw new Error("Couldn't delete the photo. Only the person who pinned it can delete it.");
+    }
+  }
+  const { data, error } = await supabase.from('pins').update({ deleted_at: at }).eq('id', pin.id).select('id');
+  if (error) throw error;
+  if (!data?.length) throw new Error('Only the person who pinned it can delete it.');
+  const gone = await supabase.from('pins').delete().eq('id', pin.id);
+  if (gone.error) throw gone.error;
 }
 
 /** Save this phone's position + battery; everyone in the trip gets it through Realtime on `locations`. */

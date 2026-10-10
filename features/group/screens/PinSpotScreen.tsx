@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, ScrollView, StyleSheet, View } from 'react-native';
 
 import { BottomBar, BOTTOM_BAR_SPACE } from '@/components/ui/BottomBar';
@@ -9,10 +10,13 @@ import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { colors } from '@/lib/theme';
+import { PhotoViewer } from '../components/PhotoViewer';
 import { KindPicker, PhotoField, PinHere } from '../components/PinFormParts';
+import { PinMiniMap } from '../components/PinMiniMap';
 import { PinRow } from '../components/PinRow';
+import { useDeletePin } from '../hooks/useDeletePin';
 import { usePinSpot } from '../hooks/usePinSpot';
-import { DEFAULT_PIN_NAME, pinDistance } from '../pins';
+import { canDeletePin, DEFAULT_PIN_NAME, dropLabel, pinDistance, pinTitle } from '../pins';
 
 const NAME_HINT = { spot: 'e.g. Cendol stall with the long queue', vehicle: 'e.g. Komtar car park L3' } as const;
 
@@ -20,6 +24,9 @@ const NAME_HINT = { spot: 'e.g. Cendol stall with the long queue', vehicle: 'e.g
 export function PinSpotScreen() {
   const p = usePinSpot();
   const { form } = p;
+  const removal = useDeletePin(p.tripId, p.clearDropped);
+  const [photoId, setPhotoId] = useState<string | null>(null);
+  const photoPin = p.pins.find((pin) => pin.id === photoId) ?? null;
   const place = p.trip?.destination ?? p.trip?.name ?? '';
   const subtitle = [p.nearStop?.name, place].filter(Boolean).join(' · ');
 
@@ -33,6 +40,7 @@ export function PinSpotScreen() {
       ) : (
         <>
           <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+            <PinMiniMap here={p.here} label={dropLabel(form.type, form.name)} pins={p.pins} />
             <PinHere here={p.here} near={p.nearStop?.name ?? null} />
 
             <Txt variant="sec">What is it?</Txt>
@@ -57,6 +65,7 @@ export function PinSpotScreen() {
               </View>
             ) : null}
             {p.error ? <ErrorLine message={p.error} /> : null}
+            {removal.error ? <ErrorLine message={removal.error} /> : null}
 
             <Txt variant="lbl" style={{ marginTop: 6 }}>
               Pinned so far today
@@ -74,12 +83,20 @@ export function PinSpotScreen() {
                 onAdd={p.planDay != null ? () => p.addToPlan(pin) : null}
                 added={p.inPlan(pin)}
                 adding={p.adding === pin.id}
+                onPhoto={() => setPhotoId(pin.id)}
+                onDelete={canDeletePin(pin, p.meId) ? () => removal.ask(pin) : null}
+                deleting={removal.deleting === pin.id}
               />
             ))}
           </ScrollView>
           <BottomBar>
             <Button label="📍 Drop pin here" onPress={p.drop} loading={p.dropping} disabled={!p.canPin} testID="drop-pin" />
           </BottomBar>
+          <PhotoViewer
+            uri={photoPin?.photoLink ?? null}
+            title={photoPin ? pinTitle(photoPin) : ''}
+            onClose={() => setPhotoId(null)}
+          />
         </>
       )}
     </KeyboardAvoidingView>

@@ -11,6 +11,8 @@ export interface Pin {
   lng: number;
   photo_url: string | null;
   created_at: string;
+  /** Set just before the row is deleted (hidden from then on). */
+  deleted_at?: string | null;
 }
 
 /** A pin with a short-lived link to its photo (members only). */

@@ -26,6 +26,16 @@ export function pinTitle(pin: Pick<Pin, 'type' | 'name'>): string {
   return `Car · ${name}`;
 }
 
+/** The label over the red pin on the Pin spot map: "📍 Cendol stall" as you type, else "📍 Pin drops here". */
+export function dropLabel(type: PinType, typed: string): string {
+  return `${type === 'spot' ? '📍' : '🚗'} ${typed.trim() || 'Pin drops here'}`;
+}
+
+/** Only the person who pinned it can delete it. */
+export function canDeletePin(pin: Pick<Pin, 'member_id'>, myMemberId: string | null | undefined): boolean {
+  return !!myMemberId && pin.member_id === myMemberId;
+}
+
 /** "400 m away" for a spot, "9 min walk" for a vehicle; null without a position. */
 export function pinDistance(pin: Pin, me: LatLng | null): string | null {
   if (!me) return null;

@@ -41,7 +41,7 @@ const MEET_H = 42;
  * on). On until the marker's view has been laid out, plus a frame or two, after every content
  * change (name, battery, colour), then off. A fallback turns it off if layout never fires.
  */
-function useMarkerTracks(key: string): { tracks: boolean; onLayout: () => void } {
+export function useMarkerTracks(key: string): { tracks: boolean; onLayout: () => void } {
   const [tracks, setTracks] = useState(true);
   const [laidOut, setLaidOut] = useState(0);
   useEffect(() => {
@@ -146,24 +146,49 @@ export function StopMarker({ stop, number, onPress }: { stop: Stop; number: numb
 }
 
 /** A pin from Pin spot: 📍 for a spot, 🚗 for a vehicle. Tapping opens its card. */
-export function PinMarker({ pin, selected, onPress }: { pin: Pin; selected: boolean; onPress: () => void }) {
+export function PinMarker({
+  pin,
+  selected,
+  onPress,
+  showName = false,
+}: {
+  pin: Pin;
+  selected: boolean;
+  onPress?: () => void;
+  /** Its name under the circle (the small map on Pin spot). */
+  showName?: boolean;
+}) {
   const spot = pin.type === 'spot';
-  const { tracks, onLayout } = useMarkerTracks(`${selected}|${pin.type}`);
+  const title = pinTitle(pin);
+  const { tracks, onLayout } = useMarkerTracks(`${selected}|${pin.type}|${showName ? title : ''}`);
+  const height = PIN_BOX + (showName ? LINE : 0);
   return (
     <Marker
       coordinate={at(pin)}
-      anchor={{ x: 0.5, y: 0.5 }}
+      anchor={{ x: 0.5, y: PIN_BOX / 2 / height }}
       tracksViewChanges={tracks}
       zIndex={selected ? 25 : 10}
-      onPress={(e) => {
-        e.stopPropagation?.();
-        onPress();
-      }}
-      accessibilityLabel={`${spot ? 'Pinned spot' : 'Vehicle'}: ${pinTitle(pin)}`}>
-      <View style={styles.pinBox} collapsable={false} onLayout={onLayout}>
+      tappable={!!onPress}
+      onPress={
+        onPress
+          ? (e) => {
+              e.stopPropagation?.();
+              onPress();
+            }
+          : undefined
+      }
+      accessibilityLabel={`${spot ? 'Pinned spot' : 'Vehicle'}: ${title}`}>
+      <View style={[styles.pinBox, showName && styles.pinNamed]} collapsable={false} onLayout={onLayout}>
         <View style={[styles.pin, { borderColor: selected ? colors.teal : spot ? colors.red : colors.blue }]}>
           <Txt style={styles.pinEmoji}>{spot ? '📍' : '🚗'}</Txt>
         </View>
+        {showName ? (
+          <View style={[styles.label, { height: LINE }]}>
+            <Txt style={styles.labelText} numberOfLines={1}>
+              {title}
+            </Txt>
+          </View>
+        ) : null}
       </View>
     </Marker>
   );
@@ -276,6 +301,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pinNamed: { width: MEMBER_W, height: PIN_BOX + LINE, justifyContent: 'flex-start' },
   pinEmoji: { fontSize: 15, lineHeight: 19 },
   distanceBox: {
     width: DISTANCE_W,

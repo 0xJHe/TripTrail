@@ -18,10 +18,18 @@ interface PinRowProps {
   onAdd: (() => void) | null;
   added: boolean;
   adding: boolean;
+  /** Open the photo full screen. */
+  onPhoto: () => void;
+  /** null = not my pin, so no delete. */
+  onDelete: (() => void) | null;
+  deleting: boolean;
 }
 
-/** One pin in "Pinned so far today": spots can be added to the plan, every pin has directions. */
-export function PinRow({ pin, by, distance, onAdd, added, adding }: PinRowProps) {
+/**
+ * One pin in "Pinned so far today": spots can be added to the plan, every pin has directions,
+ * the photo opens full screen, and my own pins can be deleted.
+ */
+export function PinRow({ pin, by, distance, onAdd, added, adding, onPhoto, onDelete, deleting }: PinRowProps) {
   const title = pinTitle(pin);
   const spot = pin.type === 'spot';
   const directions = () =>
@@ -29,7 +37,9 @@ export function PinRow({ pin, by, distance, onAdd, added, adding }: PinRowProps)
   return (
     <Card style={styles.row}>
       {pin.photoLink ? (
-        <Image source={{ uri: pin.photoLink }} style={styles.icon} contentFit="cover" accessibilityLabel={`Photo of ${title}`} />
+        <Pressable onPress={onPhoto} hitSlop={4} accessibilityRole="imagebutton" accessibilityLabel={`Open the photo of ${title}`}>
+          <Image source={{ uri: pin.photoLink }} style={styles.icon} contentFit="cover" />
+        </Pressable>
       ) : (
         <View style={[styles.icon, { backgroundColor: spot ? '#FDEDEB' : '#E8F0FB' }]}>
           <Txt style={{ fontSize: 18 }}>{spot ? '📍' : '🚗'}</Txt>
@@ -84,6 +94,15 @@ export function PinRow({ pin, by, distance, onAdd, added, adding }: PinRowProps)
           <Txt style={styles.pillText}>Directions</Txt>
         </Pressable>
       )}
+      {onDelete ? (
+        deleting ? (
+          <ActivityIndicator size="small" color={colors.textMuted} />
+        ) : (
+          <Pressable onPress={onDelete} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Delete the pin ${title}`}>
+            <Ionicons name="trash-outline" size={19} color={colors.textMuted} />
+          </Pressable>
+        )
+      ) : null}
     </Card>
   );
 }

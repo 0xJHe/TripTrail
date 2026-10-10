@@ -1,4 +1,4 @@
-import { photoPath, pinDistance, pinInPlan, pinName, pinsToday, pinTitle, pinToStop } from '@/features/group/pins';
+import { canDeletePin, dropLabel, photoPath, pinDistance, pinInPlan, pinName, pinsToday, pinTitle, pinToStop } from '@/features/group/pins';
 import type { Pin } from '@/features/group/types';
 import { offsetMeters } from '@/lib/distance';
 
@@ -83,4 +83,25 @@ describe('Add to plan', () => {
 
 it('photoPath puts the photo in the trip folder', () => {
   expect(photoPath('t1', 'm1', new Date(1000))).toMatch(/^t1\/m1-1000-[a-z0-9]+\.jpg$/);
+});
+
+describe('dropLabel (the tag over the red pin on the small map)', () => {
+  it('shows the name as it is typed, with the Spot / Vehicle icon', () => {
+    expect(dropLabel('spot', 'Cendol')).toBe('📍 Cendol');
+    expect(dropLabel('vehicle', '  Komtar L3 ')).toBe('🚗 Komtar L3');
+  });
+
+  it('says "Pin drops here" while the name is empty', () => {
+    expect(dropLabel('spot', '')).toBe('📍 Pin drops here');
+    expect(dropLabel('vehicle', '   ')).toBe('🚗 Pin drops here');
+  });
+});
+
+describe('canDeletePin', () => {
+  it('only the person who pinned it', () => {
+    expect(canDeletePin(pin({ member_id: 'm1' }), 'm1')).toBe(true);
+    expect(canDeletePin(pin({ member_id: 'm1' }), 'm2')).toBe(false);
+    expect(canDeletePin(pin(), null)).toBe(false);
+    expect(canDeletePin(pin(), undefined)).toBe(false);
+  });
 });

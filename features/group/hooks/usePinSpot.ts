@@ -119,6 +119,8 @@ export function usePinSpot() {
     tripId,
     trip: plan.trip,
     canPin: !!me,
+    meId: me?.id ?? null,
+    clearDropped: () => setDropped(null),
     here,
     nearStop,
     pins: pinsToday(pins.data ?? [], time),

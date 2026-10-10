@@ -14,14 +14,16 @@ import { GroupAlertCard } from '../components/GroupAlertCard';
 import { FarLine, MeetMarker, MemberMarker, PinMarker, StopMarker } from '../components/MapMarkers';
 import { MeetPickCard } from '../components/MeetPickCard';
 import { MeetPointCard } from '../components/MeetPointCard';
+import { PhotoViewer } from '../components/PhotoViewer';
 import { PinSheet } from '../components/PinSheet';
 import { SplitBanner } from '../components/SplitBanner';
 import { ZoomControls } from '../components/ZoomControls';
+import { useDeletePin } from '../hooks/useDeletePin';
 import { useGroupMap } from '../hooks/useGroupMap';
 import { useMeetPick } from '../hooks/useMeetPick';
 import { MIN_DELTA } from '../groupMap';
 import { saveErrorText } from '../meetPoint';
-import { pinDistance } from '../pins';
+import { canDeletePin, pinDistance, pinTitle } from '../pins';
 
 /** Room around the fitted area (dp): labels under the circles, the zoom buttons on the right. */
 const FIT_PADDING: EdgePadding = { top: 48, right: 72, bottom: 56, left: 48 };
@@ -41,6 +43,8 @@ export function GroupMapScreen() {
   const [ready, setReady] = useState(false);
   const [closedMeet, setClosedMeet] = useState<string | null>(null);
   const [clearError, setClearError] = useState<string | null>(null);
+  const [photoId, setPhotoId] = useState<string | null>(null);
+  const removal = useDeletePin(g.tripId, (p) => setPinId((id) => (id === p.id ? null : id)));
   const pick = useMeetPick(g.dayStops, g.pins, g.gather);
   const { meet, split } = g.gather;
   const showMeet = meet && !(meet.state === 'together' && closedMeet === meet.row.id) ? meet : null;
@@ -49,6 +53,7 @@ export function GroupMapScreen() {
   const place = g.trip?.destination ?? g.trip?.name ?? '';
   const meAt = g.members.find((m) => m.isMe) ?? null;
   const selected = g.pins.find((p) => p.id === pinId) ?? null;
+  const photoPin = g.pins.find((p) => p.id === photoId) ?? null;
   const farIds = new Set(g.far.map((f) => f.member.id));
   const time = g.time.getTime();
 
@@ -158,6 +163,10 @@ export function GroupMapScreen() {
               by={g.memberName(selected.member_id)}
               distance={pinDistance(selected, meAt)}
               onClose={() => setPinId(null)}
+              onPhoto={() => setPhotoId(selected.id)}
+              onDelete={canDeletePin(selected, g.meId) ? () => removal.ask(selected) : null}
+              deleting={removal.deleting === selected.id}
+              error={removal.error}
             />
           ) : (
             <>
@@ -208,6 +217,11 @@ export function GroupMapScreen() {
         </ScrollView>
         {pick.picking ? null : <Button label="📍 Pin spot" onPress={() => router.push('/pin')} />}
       </View>
+      <PhotoViewer
+        uri={photoPin?.photoLink ?? null}
+        title={photoPin ? pinTitle(photoPin) : ''}
+        onClose={() => setPhotoId(null)}
+      />
     </Frame>
   );
 }

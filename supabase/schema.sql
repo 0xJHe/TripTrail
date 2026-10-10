@@ -135,7 +135,9 @@ create table pins (
   lat double precision not null,
   lng double precision not null,
   photo_url text,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  -- Set just before the row is deleted, so Realtime (filtered by trip_id) tells everyone.
+  deleted_at timestamptz
 );
 
 -- Meet point and Split & rejoin: one row each; the newest of each kind set today is the
@@ -220,7 +222,15 @@ create policy "spends update own" on spends for update
     and (stop_id is null or exists (select 1 from stops s where s.id = stop_id and s.trip_id = spends.trip_id)));
 create policy "spends delete own" on spends for delete
   using (exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid()));
-create policy "pins all" on pins for all using (is_member(trip_id));
+-- Everyone in the trip sees its pins; only the person who pinned one can change or delete it.
+create policy "pins read" on pins for select using (is_member(trip_id));
+create policy "pins insert own" on pins for insert with check (
+  exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid() and m.trip_id = pins.trip_id));
+create policy "pins update own" on pins for update
+  using (exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid()))
+  with check (exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid() and m.trip_id = pins.trip_id));
+create policy "pins delete own" on pins for delete
+  using (exists (select 1 from members m where m.id = member_id and m.user_id = auth.uid()));
 create policy "meet all" on meet_points for all using (is_member(trip_id)) with check (is_member(trip_id));
 create policy "closures all" on day_closures for all using (is_member(trip_id));
 
@@ -337,6 +347,8 @@ create policy "pin photos read" on storage.objects for select to authenticated
   using (bucket_id = 'pin-photos' and public.is_member(((storage.foldername(name))[1])::uuid));
 create policy "pin photos add" on storage.objects for insert to authenticated
   with check (bucket_id = 'pin-photos' and public.is_member(((storage.foldername(name))[1])::uuid));
+create policy "pin photos delete own" on storage.objects for delete to authenticated
+  using (bucket_id = 'pin-photos' and owner = auth.uid());
 
 -- Running late (migrations 005, 006).
 -- Paid API calls per trip per day (Malaysia time), by kind: 'routes' (max 20, eta

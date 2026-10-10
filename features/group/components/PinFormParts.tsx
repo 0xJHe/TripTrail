@@ -9,7 +9,7 @@ import type { LatLng } from '@/lib/distance';
 import { colors, fontFamily } from '@/lib/theme';
 import type { PinType } from '../types';
 
-/** Where the pin will go: this phone's position now (the map comes with the group map). */
+/** Where the pin will go: this phone's position now (shown on the small map above). */
 export function PinHere({ here, near }: { here: LatLng | null; near: string | null }) {
   return (
     <Card style={styles.here} testID="pin-here">

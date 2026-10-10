@@ -311,3 +311,9 @@ Time and location rule (built; follow it in every live-trip feature):
   stops, today's pins (tap: name, who pinned, Directions). Far from group is measured from
   the main cluster's centre (groupMap.ts groupCentre). Low battery: keep the last position,
   marked "last seen [time]" (also any position older than 3 min).
+  Done for today on the map (useMapMembers marks `done` from day_closures, also in Demo
+  mode by the member id): members who closed their day are a grey circle with "Done for
+  today" instead of "last seen", and are left out of the group centre, the far-from-group
+  and low-battery alerts (so Split & rejoin too) and the meet point's "everyone's here"
+  check. After closing my own day: a banner at the top of the map "You've closed today ·
+  location sharing is off" with Reopen today (DayClosedBanner).

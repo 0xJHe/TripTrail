@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import MapView, { PROVIDER_GOOGLE, type EdgePadding, type Region } from 'react-native-maps';
+import MapView, { PROVIDER_GOOGLE, type EdgePadding, type MapStyleElement, type Region } from 'react-native-maps';
 
 import { Button } from '@/components/ui/Button';
 import { NavyHeader } from '@/components/ui/NavyHeader';
@@ -12,14 +12,18 @@ import { BackgroundAskCard } from '../components/BackgroundAskCard';
 import { GroupAlertCard } from '../components/GroupAlertCard';
 import { FarLine, MemberMarker, PinMarker, StopMarker } from '../components/MapMarkers';
 import { PinSheet } from '../components/PinSheet';
+import { PlacesToggle } from '../components/PlacesToggle';
 import { ZoomControls } from '../components/ZoomControls';
 import { useGroupMap } from '../hooks/useGroupMap';
 import { MIN_DELTA } from '../groupMap';
+import { useMapPrefs } from '../mapPrefs';
 import { GROUP_MAP_STYLE } from '../mapStyle';
 import { pinDistance } from '../pins';
 
 /** Room around the fitted area (dp): labels under the circles, the zoom buttons on the right. */
-const FIT_PADDING: EdgePadding = { top: 48, right: 72, bottom: 56, left: 48 };
+const FIT_PADDING: EdgePadding = { top: 56, right: 72, bottom: 56, left: 48 };
+/** Google's default style (places and businesses shown). */
+const NO_STYLE: MapStyleElement[] = [];
 
 /**
  * Group map (prototype screen 11): everyone's latest position and battery, today's stops,
@@ -32,6 +36,8 @@ export function GroupMapScreen() {
   const fitted = useRef<string | null>(null);
   const [pinId, setPinId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const showPlaces = useMapPrefs((s) => s.showPlaces);
+  const setShowPlaces = useMapPrefs((s) => s.setShowPlaces);
   const place = g.trip?.destination ?? g.trip?.name ?? '';
   const meAt = g.members.find((m) => m.isMe) ?? null;
   const selected = g.pins.find((p) => p.id === pinId) ?? null;
@@ -97,7 +103,7 @@ export function GroupMapScreen() {
           showsCompass={false}
           moveOnMarkerPress={false}
           showsPointsOfInterests={false}
-          customMapStyle={GROUP_MAP_STYLE}
+          customMapStyle={showPlaces ? NO_STYLE : GROUP_MAP_STYLE}
           userInterfaceStyle="light">
           {g.dayStops.map((s, i) => (
             <StopMarker key={s.id} stop={s} number={i + 1} />
@@ -111,6 +117,7 @@ export function GroupMapScreen() {
           ))}
         </MapView>
         {g.loading ? <ActivityIndicator style={styles.loading} color={colors.teal} /> : null}
+        <PlacesToggle on={showPlaces} onChange={setShowPlaces} />
         <ZoomControls onCentre={fit} onZoom={zoom} />
       </View>
 

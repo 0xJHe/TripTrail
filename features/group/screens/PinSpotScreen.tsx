@@ -18,7 +18,7 @@ import { useDeletePin } from '../hooks/useDeletePin';
 import { usePinSpot } from '../hooks/usePinSpot';
 import { canDeletePin, DEFAULT_PIN_NAME, dropLabel, pinDistance, pinTitle } from '../pins';
 
-const NAME_HINT = { spot: 'e.g. Food stall with the long queue', vehicle: 'e.g. Car park level 2' } as const;
+const NAME_HINT = { spot: 'e.g. Cendol stall', vehicle: 'e.g. Car park level 2' } as const;
 
 /** Pin spot (prototype screen 13): pin a spot or the car here, see today's pins, add one to the plan. */
 export function PinSpotScreen() {

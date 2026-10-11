@@ -22,7 +22,7 @@ const KINDS: { value: StopKind; label: string }[] = [
 
 const NAME_HINT: Record<StopKind, string> = {
   place: 'e.g. Night market',
-  flight: 'e.g. Flight home · AK 6102',
+  flight: 'e.g. Flight home',
   hotel: 'e.g. Hotel check-in',
 };
 

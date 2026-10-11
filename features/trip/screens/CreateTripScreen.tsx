@@ -77,7 +77,7 @@ export function CreateTripScreen() {
           <Field
             value={form.destination}
             onChangeText={form.setDestination}
-            placeholder="e.g. a city or island"
+            placeholder="e.g. Penang"
             prefix="Place"
             maxLength={40}
             style={{ fontSize: 15 }}

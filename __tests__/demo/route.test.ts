@@ -87,8 +87,30 @@ describe('buildDemoRoute', () => {
     const early = event(route, 'early');
     const s = stopOf(early.stopId);
     expect(early.at).toBeLessThan(Date.parse(s.planned_end!) - 20 * MIN);
-    expect(haversineMeters(sampleRoute(route, early.at).me!, pos(s))).toBeLessThan(100);
-    expect(haversineMeters(sampleRoute(route, early.at + 15 * MIN).me!, pos(s))).toBeGreaterThan(150);
+    // The event is where the leave is noticed: 150 m out for 3 min already.
+    expect(haversineMeters(sampleRoute(route, early.at - 15 * MIN).me!, pos(s))).toBeLessThan(100);
+    for (const t of [early.at - 3 * MIN, early.at]) expect(haversineMeters(sampleRoute(route, t).me!, pos(s))).toBeGreaterThan(150);
+  });
+
+  it('gives the rain card its own tap, not the early leave one', () => {
+    const rain = event(route, 'rain');
+    const before = route.events.filter((e) => e.at < rain.at);
+    expect(before[before.length - 1].kind).toBe('early');
+    expect(sampleRoute(route, before[before.length - 1].at).rainSoon).toBe(false);
+    expect(sampleRoute(route, rain.at).rainSoon).toBe(true);
+  });
+
+  it('keeps the member away for several "Next event" taps, back once the group is at the next stop', () => {
+    const far = event(route, 'far');
+    const rejoin = event(route, 'rejoin');
+    const between = route.events.filter((e) => e.at > far.at && e.at < rejoin.at);
+    expect(between.map((e) => e.kind)).toEqual(['leave', 'travel', 'arrive']);
+    for (const e of [far, ...between]) {
+      const loc = sampleRoute(route, e.at);
+      const drifter = loc.members.find((m) => m.id === far.memberId)!;
+      const rest = centroid(loc.members.filter((m) => m.id !== drifter.id))!;
+      expect(haversineMeters(drifter, rest)).toBeGreaterThan(500);
+    }
   });
 
   it('brings rain within the hour near an outdoor stop', () => {
@@ -169,10 +191,16 @@ describe('buildDemoRoute', () => {
     const last = day1[day1.length - 1];
     const leave = route.events.filter((e) => e.kind === 'leave').pop()!;
     expect(leave.stopId).toBe(last.id);
-    expect(leave.title).toBe("Left Armenian Street murals · spend check · that's every stop for today");
+    expect(leave.title).toBe('Left Armenian Street murals · spend check');
+    // Then the day-end event, last of the day, before "Next day".
+    const end = route.events[route.events.length - 1];
+    expect(end.kind).toBe('end');
+    expect(end.at).toBeGreaterThan(leave.at);
+    expect(end.at).toBeLessThan(route.endsAt);
+    expect(eventsAround(route, end.at).next).toBeNull();
     // Still there at the planned end, gone (and out of range for 3+ min) well before the replay ends.
     expect(leave.at).toBeGreaterThanOrEqual(Date.parse(last.planned_end!));
-    expect(route.endsAt).toBeGreaterThanOrEqual(leave.at + 30 * MIN);
+    expect(route.endsAt).toBeGreaterThanOrEqual(leave.at + 20 * MIN);
     for (const t of [leave.at + 5 * MIN, leave.at + 10 * MIN, route.endsAt]) {
       const me = sampleRoute(route, t).me!;
       expect(haversineMeters(me, pos(last))).toBeGreaterThan(150);

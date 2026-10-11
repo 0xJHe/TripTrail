@@ -12,6 +12,7 @@ import { getGroupLocation, useDemoRoute } from '@/lib/location';
 import { estimateMinutes } from '@/supabase/functions/_shared/eta';
 import type { NearbySuggestion } from '@/supabase/functions/_shared/nearby';
 import { fetchEarlyAlerts, fetchNearby, raiseEarlyAlert, undoDemoMoments } from '../api';
+import { demoSuggestion } from '../demoPlaces';
 import { earlyAlertFor, earlyCheck, justLeft } from '../early';
 import { checkable } from '../late';
 import { useLocationAccess } from '../permission';
@@ -137,6 +138,8 @@ export function useEarlyCheck() {
       } catch (e) {
         console.warn('nearby-suggestion failed, showing the card without one:', e instanceof Error ? e.message : e);
       }
+      // Demo mode: a made-up nearby place when Google fails or finds nothing, so the card always has one.
+      if (!suggestion && demo) suggestion = demoSuggestion(loc.center);
       await raiseEarlyAlert(earlyAlertFor({ tripId, left, next, now: at, travelMin, spareMin, suggestion }));
       queryClient.invalidateQueries({ queryKey: earlyKeys.alerts(tripId) });
     };

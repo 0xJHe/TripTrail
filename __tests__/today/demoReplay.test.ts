@@ -50,10 +50,26 @@ describe('Demo mode replay through the arrive / leave rules', () => {
       expect(Math.abs(Date.parse(change.arrived_at!) - arrive)).toBeLessThanOrEqual(3 * MIN);
       // Every stop is left, the last one too: the group walks off and the day ends (Done for today).
       expect(change.status).toBe('done');
-      // Leaving is confirmed 3 min after the group is 150 m out.
-      expect(Date.parse(change.left_at!) - leaveEvent).toBeGreaterThan(0);
-      expect(Date.parse(change.left_at!) - leaveEvent).toBeLessThanOrEqual(15 * MIN);
+      // Leaving is confirmed 3 min after the group is 150 m out, just before the leave event,
+      // so "Next event" to a "Left" event shows its spend check on that tap.
+      expect(Date.parse(change.left_at!)).toBeLessThanOrEqual(leaveEvent);
+      expect(leaveEvent - Date.parse(change.left_at!)).toBeLessThanOrEqual(2 * MIN);
     }
+  });
+
+  it('a "Next event" jump to a "Left" event lands just after the leave is noticed', () => {
+    for (const e of route.events.filter((x) => x.kind === 'leave' || x.kind === 'early')) {
+      const out = replay(route.startsAt - 30_000, e.at);
+      expect(out.changes.find((c) => c.stopId === e.stopId)?.status).toBe('done');
+    }
+  });
+
+  it('ends the day with its own event after the last leave', () => {
+    const last = route.events[route.events.length - 1];
+    expect(last.kind).toBe('end');
+    expect(last.title).toBe("That's every stop for today · Done for today or Keep going");
+    const out = replay(route.startsAt - 30_000, last.at);
+    expect(plan.every((s) => out.changes.find((c) => c.stopId === s.id)?.status === 'done')).toBe(true);
   });
 
   it('a "Next event" jump to "On the way to [next]" lands after the leave is noticed, before the arrival', () => {

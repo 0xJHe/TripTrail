@@ -59,7 +59,7 @@ During the trip:
 - Supabase: anonymous auth with display name, Postgres, Realtime, Storage (pin photos).
 - Supabase Edge Functions (folder `supabase/functions/`, Deno + TypeScript) for
   ALL external APIs: Gemini, Google Maps Places / Distance Matrix, Google
-  Weather, JAKIM halal lookup. The Gemini and Google keys live only in Supabase
+  Weather. The Gemini and Google keys live only in Supabase
   secrets (`npx supabase secrets set NAME=value`; GEMINI_API_KEY is set).
   App code never holds them. App only holds EXPO_PUBLIC_SUPABASE_URL and
   EXPO_PUBLIC_SUPABASE_ANON_KEY from .env (EXPO_PUBLIC_API_BASE_URL is no
@@ -67,8 +67,9 @@ During the trip:
   The app calls them with `supabase.functions.invoke(name, { body })`, which
   sends the user's JWT. Each function checks the caller's Supabase JWT
   (Authorization: Bearer) and that they are a member of the trip before doing
-  work. lib/ai.ts and lib/distance.ts call these functions; in Demo mode /
-  offline demo they return seed/fake-ai.json instead.
+  work. lib/ai.ts calls the Gemini ones; the functions fall back to sample data
+  themselves (_shared/tripOptions.ts, _shared/itinerary.ts), and if one can't be
+  reached lib/ai.ts makes the same samples, so the app never gets stuck.
   Deploy: `npx supabase functions deploy <name> --project-ref <ref> --no-verify-jwt`
   (the project uses the new sb_publishable keys, so the function checks the JWT
   itself). Logs: Supabase dashboard > Edge Functions > <name> > Logs.
@@ -113,14 +114,11 @@ lib/
   clock.ts            now() — real or demo time
   distance.ts         haversine, ETA helpers, cached Distance Matrix calls
   theme.ts            colours, spacing, fonts
-seed/
-  penang.json         full demo trip: options, 3 days of stops with real lat/lng, prices, tips
-  demo-route.json     fake location timeline that triggers late, early, rain, split
 supabase/
   schema.sql          tables + RLS
 supabase/functions/   Supabase Edge Functions (Deno), one folder each with index.ts:
   generate-trip-options  generate-itinerary  eta
-  nearby-suggestion (running early + rain backup)  weather  halal-check
+  nearby-suggestion (running early + rain backup)  weather  place-search  refresh-photo
   _shared/            shared: gemini client, google client, auth check, zod schemas,
                       tripOptions.ts (types + sample options, also imported by lib/ai.ts;
                       files here must stay plain TS with no imports so React Native
@@ -149,11 +147,13 @@ types.ts. Keep screens under ~200 lines; split into components.
 ## Demo mode (must always work)
 
 Settings has a Demo mode toggle. When on:
-- lib/location.ts replays seed/demo-route.json instead of GPS.
+- lib/location.ts replays a fake route built from the open trip's Day plan
+  (features/demo/route.ts) instead of GPS.
 - lib/clock.ts returns a settable fake time; a small debug bar lets you jump
   the clock and skip to the next event.
-- The Edge Functions are still called, but if they fail, or demo mode is
-  on and "offline demo" is checked, responses come from seed/fake-ai.json.
+- The Edge Functions are still called. If Google Places fails or finds nothing for
+  the running-early suggestion or the rain options, Demo mode (only) shows made-up
+  nearby places (features/today/demoPlaces.ts), so those cards always have some.
 Every feature must be testable in Demo mode from a room, not a real trip.
 
 Time and location rule (built; follow it in every live-trip feature):
@@ -166,7 +166,15 @@ Time and location rule (built; follow it in every live-trip feature):
 - Demo mode lives in lib/demo.ts (Settings > Demo mode, saved on the phone). The fake
   route is built from the open trip's Day plan by features/demo/route.ts: it walks
   stop to stop and includes arriving late, leaving early, rain near an outdoor stop,
-  and one member 900 m away with low battery. The "late" moment is the
+  and one member 900 m away with low battery (from a stop until 10 min after the group
+  reaches the next one, so it lasts several Next event taps: far, leave, on the way,
+  arrive, then back; the Today tab shows an amber "Mei is 900 m from the group · Open
+  map" banner meanwhile, features/group/components/FarBanner.tsx, the far-from-group
+  rule, so real trips get it too). Every "Left [stop]" event sits where the leave is
+  noticed (150 m out for 3 min), so its spend check (and an early card) show on that
+  tap; after the last stop a final "That's every stop for today" event (kind 'end')
+  comes before Next day. The rain card never lands on a leave tap: if it would, the
+  rain comes later so it gets its own Next event. The "late" moment is the
   30-min-before check while the group is still at the stop before (screen 7). The
   "early" moment is a later stop left 30+ min before its planned end with 45+ min to
   spare before the next (screen 8);
@@ -174,8 +182,12 @@ Time and location rule (built; follow it in every live-trip feature):
   after the group gets there, so the rain card shows before they arrive;
   the moments are picked from the plan before any running-early change or rain swap,
   and the replay follows added / moved / swapped stops. Reset undoes rain cards, then
-  early, then late ones. The bar at the
+  early, then late ones, and removes this phone's pins and "+ Add spend" rows made
+  during the demo (at or after the fake start time; features/demo/reset.ts,
+  useDemoReset). The bar at the
   top (+15 min, Next event, Reset) is features/demo/components/DemoBar.tsx.
+- Settings: the gear + "Settings" (SettingsButton) is in the header of every main
+  screen: Home, Plan, Today, Map, Group.
 
 ## Behaviour rules for you (the agent)
 
@@ -185,10 +197,10 @@ Time and location rule (built; follow it in every live-trip feature):
   create/change first.
 - After changes: run `npx tsc --noEmit` and `npx jest`; fix errors before
   saying done. Do not leave TODOs for the core flow.
-- Seed data first, real API second. Every screen must render with
-  seed/penang.json when tables are empty.
+- Sample data first, real API second. Every screen must render (an empty state or
+  sample data) when tables are empty.
 - Gemini: ask for JSON only, validate with zod, retry once, then fall back to
-  seed data. Never crash on a bad AI response. Always through the model chain
+  sample data. Never crash on a bad AI response. Always through the model chain
   (see "Gemini model chain" below), never one fixed model.
 - Cache Distance Matrix results (same origin/destination within 10 min) to
   protect quota.
@@ -237,8 +249,9 @@ Time and location rule (built; follow it in every live-trip feature):
   call): walking if the stop is under 2 km in a straight line from this phone (else the
   group centre, else the stop left last), otherwise driving; Maps picks if neither end is
   known (travelModeTo). Demo mode: the route has an "On the way to [next]" event (kind
-  'travel') between every leave and the next arrival, after the leave is noticed (150 m
-  out for 3 min) and no earlier than halfway; none when the stops are too close for that.
+  'travel') between every leave and the next arrival, 3+ min after the leave event (which
+  is where the leave is noticed) and no earlier than halfway; none when the stops are too
+  close for the leave to be noticed on the way.
 - Running late (features/today/late.ts, supabase/functions/_shared/eta.ts + newDay.ts):
   check the next stop once ~30 min before it starts and once when the group leaves
   a stop if the next starts in < 30 min (max 2 checks, one card per stop, shared

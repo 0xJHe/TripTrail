@@ -9,8 +9,10 @@ import { CHECK_BEFORE_MIN, EARLY_AHEAD_MIN, EARLY_SPARE_MIN, estimateMinutes, sp
  * Builds the fake day that Demo mode replays, from the trip's real Day plan.
  * The group walks stop to stop on the plan's times, with four moments added:
  * arriving late at one stop, leaving one stop early, rain near an outdoor stop,
- * and one member 900 m from the group with low battery. After the last stop the group walks
- * off (so the leave and its spend check are noticed) and the day ends: "That's every stop
+ * and one member 900 m from the group with low battery (from one stop until the group is at
+ * the next, so it lasts several "Next event" taps). Every "Left [stop]" event sits where the
+ * leave is noticed (150 m out for 3 min), so its spend check (and early card) shows on that tap.
+ * After the last stop the group walks off and a final event ends the day: "That's every stop
  * for today" with Done for today / Keep going.
  */
 
@@ -51,6 +53,14 @@ const LEAD_IN_MIN = 30;
 export const WALK_OFF_M = 400;
 /** ...in this long, then the replay runs on until the end of the day. */
 const WALK_OFF_MIN = 5;
+/** The day-end event comes this long after the last stop's leave event. */
+export const DAY_END_AFTER_MIN = 5;
+/** "On the way to [next]" comes at least this long after the leave event. */
+const TRAVEL_AFTER_LEAVE_MIN = 3;
+/** The rain card shows up to 60 min before the rain (lib/location rainSoonAt). */
+const RAIN_AHEAD_MS = 60 * MIN;
+/** Minutes between a leave tap and the rain tap when they would land together. */
+const RAIN_GAP_MIN = 5;
 const FAKE_NAMES = ['Aisha', 'Ben', 'Mei', 'Raj'];
 const GROUP_SIZE = 4;
 // Small spread so members aren't drawn on top of each other (metres east, north).
@@ -230,9 +240,16 @@ function pickMoments(s: Usable[]): Moments {
   const outdoor = idx.filter((i) => s[i].is_outdoor);
   const rain = outdoor.find((i) => i > early) ?? outdoor.find((i) => i !== late) ?? outdoor[0] ?? n - 1;
   // Not the stop before the late one: the group waits there for the running-late check.
+  // Not the last stop if possible: the member stays away until the group is at the next one.
   const free = idx.filter((i) => i !== late && i !== late - 1 && i !== early && i !== rain);
+  const notLast = (i: number) => i < n - 1;
   const far =
-    longest(free, plannedStay) ?? longest(notLate.filter((i) => i !== late - 1), plannedStay) ?? longest(notLate, plannedStay) ?? n - 1;
+    longest(free.filter(notLast), plannedStay) ??
+    longest(idx.filter((i) => notLast(i) && i !== late - 1 && i !== early && i !== rain), plannedStay) ??
+    longest(free, plannedStay) ??
+    longest(notLate.filter((i) => i !== late - 1), plannedStay) ??
+    longest(notLate, plannedStay) ??
+    n - 1;
   return { late: s[late].id, early: s[early].id, rain: s[rain].id, far: s[far].id, earlyLeave: earlyLeave(early) };
 }
 
@@ -289,11 +306,16 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
   }
 
   const startsAt = start[0] - LEAD_IN_MIN * MIN;
-  const farStart = arrive[far] + 10 * MIN;
+  // The wandering member: off from the far stop, back once the group is at the next stop
+  // (so the far-from-group alert lasts through the leave, the way there and the arrival).
+  const farStart = arrive[far] + Math.min(10 * MIN, Math.max(2 * MIN, (leave[far] - arrive[far]) / 3));
   const farReach = farStart + 10 * MIN;
-  const farBack = Math.max(farReach + 10 * MIN, leave[far] - 15 * MIN);
-  const rejoin = farBack + 10 * MIN;
-  const endsAt = Math.max(leave[n - 1] + 30 * MIN, rejoin + 10 * MIN);
+  const rejoin =
+    far < n - 1
+      ? Math.max(farReach + 10 * MIN, Math.min(arrive[far + 1] + 10 * MIN, leave[far + 1] - 2 * MIN))
+      : Math.max(farReach + 10 * MIN, leave[far] - 15 * MIN) + 10 * MIN;
+  const farBack = Math.max(farReach, rejoin - 10 * MIN);
+  let endsAt = Math.max(leave[n - 1] + 30 * MIN, rejoin + 10 * MIN);
 
   // Group path: from 1.5 km out, then stop to stop. After leaving the early stop they walk
   // briskly out of range first, so the leave (150 m for 3 min) is noticed a few minutes later
@@ -363,12 +385,36 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
   });
   const wanderer = tracks[drifter];
 
+  // When each leave is noticed (150 m out for 3 min, on the 30 s readings): the "Left" event
+  // goes there, so its spend check and any early card show on that tap. Stops too close
+  // for the leave to be noticed before the next arrival keep the leave time.
+  const leaveAt = s.map((_, i) => {
+    const until = i < n - 1 ? arrive[i + 1] : endsAt;
+    const away = firstAway(group, at[i], leave[i], until);
+    if (away == null) return leave[i];
+    const noticed = Math.ceil((away + LEAVE_AFTER_MS + MIN) / MIN) * MIN;
+    return noticed < until - MIN ? noticed : leave[i];
+  });
+  // The day ends a few minutes after the last stop's leave is noticed.
+  const dayEndAt = leaveAt[n - 1] + DAY_END_AFTER_MIN * MIN;
+  endsAt = Math.max(endsAt, dayEndAt + 20 * MIN);
+  group[group.length - 1] = { ...group[group.length - 1], t: endsAt };
+
   // Rain over the outdoor stop, wide enough to cover the way there from the stop before.
   const radiusM = Math.max(3000, rain > 0 ? haversineMeters(at[rain - 1], at[rain]) + 500 : 3000);
   const rainZone = { ...at[rain], radiusM, startsAt: arrive[rain] + 10 * MIN, endsAt: arrive[rain] + 70 * MIN };
   const rainFrom = Math.max(arrive[rain] - 45 * MIN, rain > 0 ? arrive[rain - 1] : startsAt);
   // Nothing else happens between the running-late check window opening and the late moment.
-  const rainAt = rainFrom >= checkFrom && rainFrom < lateAt ? lateAt + MIN : rainFrom;
+  let rainAt = rainFrom >= checkFrom && rainFrom < lateAt ? lateAt + MIN : rainFrom;
+  // The rain card gets its own tap: if it would already show on a leave tap (spend check,
+  // early card), the rain comes a little later.
+  const clash = leaveAt.filter((t) => t >= rainZone.startsAt - RAIN_AHEAD_MS && t <= rainAt + RAIN_GAP_MIN * MIN);
+  if (clash.length > 0) {
+    const shift = Math.max(...clash) + RAIN_GAP_MIN * MIN + RAIN_AHEAD_MS - rainZone.startsAt;
+    rainZone.startsAt += shift;
+    rainZone.endsAt += shift;
+    rainAt = rainZone.startsAt - RAIN_AHEAD_MS + MIN;
+  }
 
 
   const events: DemoEvent[] = [{ at: startsAt, kind: 'start', title: `Day ${day} starts: heading to ${s[0].name}` }];
@@ -380,30 +426,32 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
       stopId: x.id,
       title: lateMin > 5 ? `Arrived at ${x.name}, ${durationText(lateMin)} late` : `Arrived at ${x.name}`,
     });
-    const earlyMin = Math.round((end[i] - leave[i]) / MIN);
-    // Spare time before the next stop when they leave (shared rule, free estimate).
-    const spare = i < n - 1 ? Math.floor(spareMinutes(leave[i], estimateMinutes(at[i], at[i + 1]), start[i + 1])) : 0;
-    // Leaving any stop brings the spend check (screen 9); the last one ends the day (screen 14).
-    const spend = i === n - 1 ? " · spend check · that's every stop for today" : ' · spend check';
+    // How far ahead of plan, and the spare time before the next stop, when the leave is
+    // noticed (what the running-early card goes by; shared rule, free estimate).
+    const earlyMin = Math.round((end[i] - leaveAt[i]) / MIN);
+    const spare = i < n - 1 ? Math.floor(spareMinutes(leaveAt[i], estimateMinutes(at[i], at[i + 1]), start[i + 1])) : 0;
+    // Leaving any stop brings the spend check (screen 9).
+    const spend = ' · spend check';
     events.push(
       i === early && earlyMin >= 10
         ? {
-            at: leave[i],
+            at: leaveAt[i],
             kind: 'early',
             stopId: x.id,
             title:
               `Left ${x.name} ${durationText(earlyMin)} early` + (spare >= EARLY_SPARE_MIN ? ` (${durationText(spare)} to spare)` : '') + spend,
           }
-        : { at: leave[i], kind: 'leave', stopId: x.id, title: `Left ${x.name}${spend}` },
+        : { at: leaveAt[i], kind: 'leave', stopId: x.id, title: `Left ${x.name}${spend}` },
     );
   });
-  // Between stops: "On the way to [next]" once the leave has been noticed (150 m out for
-  // 3 min), halfway there at the earliest, so Next event shows the group travelling before it
-  // arrives. Stops too close for the leave to be noticed on the way get none.
+  // After the last stop: the day-end card (screen 14), with its spend check if still unanswered.
+  events.push({ at: dayEndAt, kind: 'end', title: "That's every stop for today · Done for today or Keep going" });
+  // Between stops: "On the way to [next]" a few minutes after the leave event (the spend
+  // check's tap), halfway there at the earliest, so Next event shows the group travelling
+  // before it arrives. Stops too close for the leave to be noticed on the way get none.
   for (let i = 0; i < n - 1; i++) {
-    const away = firstAway(group, at[i], leave[i], arrive[i + 1]);
-    if (away == null) continue;
-    const t = Math.max(away + LEAVE_AFTER_MS + MIN, Math.round((leave[i] + arrive[i + 1]) / 2 / MIN) * MIN);
+    if (leaveAt[i] === leave[i]) continue;
+    const t = Math.max(leaveAt[i] + TRAVEL_AFTER_LEAVE_MIN * MIN, Math.round((leave[i] + arrive[i + 1]) / 2 / MIN) * MIN);
     if (t >= arrive[i + 1] - MIN) continue;
     events.push({ at: t, kind: 'travel', stopId: s[i + 1].id, title: `On the way to ${s[i + 1].name}` });
   }

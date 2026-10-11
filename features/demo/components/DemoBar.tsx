@@ -4,11 +4,12 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Txt } from '@/components/ui/Txt';
-import { advanceFakeTime, resetFakeTime, setFakeTime, useNow } from '@/lib/clock';
+import { advanceFakeTime, setFakeTime, useNow } from '@/lib/clock';
 import { centroid, haversineMeters } from '@/lib/distance';
 import { eventsAround, useGroupLocation, type DemoEvent, type DemoEventKind, type GroupLocation } from '@/lib/location';
 import { colors, fontFamily } from '@/lib/theme';
 import { useDemoReplay } from '../hooks/useDemoReplay';
+import { useDemoReset } from '../hooks/useDemoReset';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -22,6 +23,7 @@ const EVENT_ICON: Record<DemoEventKind, { icon: IconName; color: string }> = {
   rain: { icon: 'rainy', color: colors.blue },
   far: { icon: 'battery-dead', color: colors.amber },
   rejoin: { icon: 'people', color: colors.teal },
+  end: { icon: 'moon', color: colors.white },
 };
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -30,7 +32,8 @@ const timeText = (d: Date) => `${DAYS[d.getDay()]} ${pad(d.getHours())}:${pad(d.
 
 /** Demo mode debug bar: fake time, what just happened, and buttons to move the clock. */
 export function DemoBar({ topInset }: { topInset: number }) {
-  const { route, tripId } = useDemoReplay();
+  const { route, tripId, demoStart } = useDemoReplay();
+  const { reset, resetting } = useDemoReset(tripId, demoStart);
   const time = useNow();
   const loc = useGroupLocation();
   const [open, setOpen] = useState(false);
@@ -74,7 +77,7 @@ export function DemoBar({ topInset }: { topInset: number }) {
           onPress={() => nextAt != null && setFakeTime(nextAt)}
           disabled={nextAt == null}
         />
-        <BarButton label="Reset" onPress={resetFakeTime} />
+        <BarButton label="Reset" onPress={reset} disabled={resetting} />
       </View>
     </View>
   );

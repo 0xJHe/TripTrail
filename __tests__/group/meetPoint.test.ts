@@ -266,7 +266,7 @@ describe('Demo mode: the member who wanders 900 m away', () => {
       return { ...s, status: left ? ('done' as const) : arrived ? ('arrived' as const) : ('planned' as const) };
     });
 
-  it('splits with the far member as group B and rejoins at the next stop, back together on arrival', () => {
+  it('splits with the far member as group B and rejoins at the next stop, back together once they get there', () => {
     const t = farEvent.at;
     const members = membersAt(t);
     const groupB = farMembers(members).map((f) => f.member.id);
@@ -281,15 +281,17 @@ describe('Demo mode: the member who wanders 900 m away', () => {
     expect(rejoin.at).toBe(Date.parse(next.planned_time!));
     expect(bothGroupsHere(members, rejoin.stop, groupB)).toBe(false);
 
-    const arrive = route.events.find((e) => e.kind === 'arrive' && e.stopId === next.id)!.at;
-    expect(bothGroupsHere(membersAt(arrive), rejoin.stop, groupB)).toBe(true);
+    // The group gets there first; the wanderer joins them (the rejoin event).
+    const back = route.events.find((e) => e.kind === 'rejoin')!.at;
+    expect(back).toBeGreaterThan(route.events.find((e) => e.kind === 'arrive' && e.stopId === next.id)!.at);
+    expect(bothGroupsHere(membersAt(back), rejoin.stop, groupB)).toBe(true);
   });
 
-  it("a meet point at the group's stop says everyone's here once the wanderer is back", () => {
-    const here = statusAt(farEvent.at).find((s) => s.status === 'arrived')!;
+  it("a meet point where the group is says everyone's here once the wanderer is back", () => {
+    const back = route.events.find((e) => e.kind === 'rejoin')!.at;
+    const here = statusAt(back).find((s) => s.status === 'arrived')!;
     const point = { lat: here.lat!, lng: here.lng! };
     expect(everyoneHere(membersAt(farEvent.at), point)).toBe(false);
-    const back = route.events.find((e) => e.kind === 'rejoin')!.at;
     expect(everyoneHere(membersAt(back), point)).toBe(true);
   });
 });

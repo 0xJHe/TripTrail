@@ -16,6 +16,7 @@ import {
 import { dueChecks, lastLeftAt, lateAlertFor, openAlertFor } from '@/features/today/late';
 import { todayView } from '@/features/today/todayPlan';
 import type { EarlyAlert, LateAlert } from '@/features/today/types';
+import { haversineMeters } from '@/lib/distance';
 import { sampleRoute, type DemoRoute } from '@/lib/location';
 import {
   CHECK_BEFORE_MIN,
@@ -410,9 +411,10 @@ describe("demo route's early moment", () => {
     expect(early.at).toBeGreaterThan(lateMoment.at);
   });
 
-  it('is noticed within a few minutes, 15+ min ahead with 30+ min to spare: the early card shows', () => {
-    expect(noticed - early.at).toBeLessThanOrEqual(8 * MIN);
-    const c = check(route, day, noticed);
+  it('is already noticed at the moment ("Next event" lands on it), 15+ min ahead with 30+ min to spare: the early card shows', () => {
+    expect(noticed).toBeLessThanOrEqual(early.at);
+    expect(early.at - noticed).toBeLessThanOrEqual(2 * MIN);
+    const c = check(route, day, early.at);
     expect(c.left?.id).toBe(lineClear.id);
     expect(c.view.now).toBeNull();
     expect(c.next?.id).toBe(murals.id);
@@ -424,15 +426,18 @@ describe("demo route's early moment", () => {
     expect(c.late).toBeNull();
   });
 
-  it('also shows when "We\'re done here" is tapped at the moment itself', () => {
-    const now = replay(route, day, early.at).map((s) => (s.id === lineClear.id ? { ...s, status: 'done' as const, left_at: iso(early.at) } : s));
-    const view = todayView({ stage: 'decided', start: '2026-10-12', days: 1, stops: now, now: new Date(early.at) });
+  it('also shows when "We\'re done here" is tapped as the group sets off', () => {
+    // The last moment the group is still at the stop.
+    let off = early.at;
+    while (haversineMeters(sampleRoute(route, off).me!, lineClear as { lat: number; lng: number }) > 20) off -= 30_000;
+    const now = replay(route, day, off).map((s) => (s.id === lineClear.id ? { ...s, status: 'done' as const, left_at: iso(off) } : s));
+    const view = todayView({ stage: 'decided', start: '2026-10-12', days: 1, stops: now, now: new Date(off) });
     if (view.kind !== 'day' || !view.next) throw new Error('expected a next stop');
     const next = view.next as Stop & { lat: number; lng: number };
-    const travelMin = estimateMinutes(sampleRoute(route, early.at).center, next);
-    expect(justLeft(now, early.at)?.id).toBe(lineClear.id);
-    const left = justLeft(now, early.at);
-    const card = earlyCheck({ left, next, now: early.at, travelMin, lateAlerts: [], earlyAlerts: [] })!;
+    const travelMin = estimateMinutes(sampleRoute(route, off).center, next);
+    expect(justLeft(now, off)?.id).toBe(lineClear.id);
+    const left = justLeft(now, off);
+    const card = earlyCheck({ left, next, now: off, travelMin, lateAlerts: [], earlyAlerts: [] })!;
     expect(card.spareMin).toBeGreaterThanOrEqual(EARLY_DEMO_SPARE_MIN);
     expect(card.aheadMin).toBeGreaterThanOrEqual(EARLY_DEMO_AHEAD_MIN);
   });

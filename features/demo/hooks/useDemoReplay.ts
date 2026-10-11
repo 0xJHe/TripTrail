@@ -52,9 +52,13 @@ export function useDemoReplay() {
     if (first) setFakeTime(first.startsAt, activeTrip);
   }, [activeTrip, anchor, stops.data]);
 
+  // The fake start time: Day 1's replay start (Reset goes back there).
+  const demoStart = useMemo(() => (stops.data ? (demoDays(stops.data)[0]?.startsAt ?? null) : null), [stops.data]);
+
   return {
     route: useDemoRoute((s) => s.route),
     tripId: activeTrip,
+    demoStart,
     loading: stops.isLoading,
   };
 }

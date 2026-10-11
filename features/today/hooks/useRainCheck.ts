@@ -12,6 +12,7 @@ import { getGroupLocation, useDemoRoute, useGroupLocation } from '@/lib/location
 import type { RainOption } from '@/supabase/functions/_shared/nearby';
 import type { WeatherReply } from '@/supabase/functions/_shared/weather';
 import { fetchRainAlerts, fetchRainOptions, raiseRainAlert } from '../api';
+import { demoRainOptions } from '../demoPlaces';
 import { useLocationAccess } from '../permission';
 import { rainAlertFor, rainInMinutes, rainTarget, slotStart } from '../rain';
 import { todayView } from '../todayPlan';
@@ -118,6 +119,8 @@ export function useRainCheck() {
       } catch (e) {
         console.warn('Rain options failed, showing the card without any:', e instanceof Error ? e.message : e);
       }
+      // Demo mode: made-up indoor places when Google fails or finds nothing, so the card always has options.
+      if (options.length === 0 && demo) options = demoRainOptions(from);
       await raiseRainAlert(rainAlertFor({ tripId, stop, now: at, rainIn, options }));
       queryClient.invalidateQueries({ queryKey: rainKeys.alerts(tripId) });
     };

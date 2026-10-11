@@ -6,6 +6,7 @@ import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
 import { SettingsButton } from '@/features/demo/components/SettingsButton';
 import { BackgroundAskCard } from '@/features/group/components/BackgroundAskCard';
+import { FarBanner } from '@/features/group/components/FarBanner';
 import { SplitBanner } from '@/features/group/components/SplitBanner';
 import { SpendCheckCard } from '@/features/money/components/SpendCheckCard';
 import { DayClosed } from '@/features/recap/components/DayClosed';
@@ -106,6 +107,7 @@ export function TodayScreen() {
         )}
         <BackgroundAskCard />
         <SplitBanner />
+        <FarBanner />
 
         {now ? (
           <NowCard

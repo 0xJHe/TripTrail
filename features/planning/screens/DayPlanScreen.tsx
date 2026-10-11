@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Chip, Chips } from '@/components/ui/Chip';
 import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
+import { SettingsButton } from '@/features/demo/components/SettingsButton';
 import { BudgetBar } from '@/features/money/components/BudgetBar';
 import { ExtraSpends } from '@/features/money/components/ExtraSpends';
 import { RecapLink } from '@/features/recap/components/RecapLink';
@@ -64,6 +65,7 @@ export function DayPlanScreen() {
         title={trip.destination ?? trip.name}
         subtitle={`${when} · ${memberCountLabel(plan.members.length)}`}
         onBack={() => router.replace('/home')}
+        right={<SettingsButton />}
       />
       <ScrollView
         contentContainerStyle={styles.body}
@@ -98,7 +100,7 @@ export function DayPlanScreen() {
 function Empty({ title, text, action }: { title: string; text: string; action?: { label: string; onPress: () => void } }) {
   return (
     <View style={styles.screen}>
-      <NavyHeader title={title} onBack={() => router.replace('/home')} />
+      <NavyHeader title={title} onBack={() => router.replace('/home')} right={<SettingsButton />} />
       <View style={[styles.center, { gap: 16 }]}>
         <Txt variant="b13" style={{ textAlign: 'center' }}>
           {text}

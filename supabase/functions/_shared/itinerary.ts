@@ -158,8 +158,17 @@ interface FoundPlace {
   lng: number;
 }
 
+/** Shown with the sample plan when every Gemini model is used up for today. */
+export const AI_USED_UP_PLAN_NOTE = "Our free AI has reached today's limit, so this is a sample plan you can edit.";
+
+/** 'busy' / 'used-up' when the Gemini model chain gave up (geminiChain.ts AiBusyError / AiUsedUpError). */
+function chainStopOf(e: unknown): 'busy' | 'used-up' | null {
+  const s = (e as { aiStatus?: unknown } | null)?.aiStatus;
+  return s === 'busy' || s === 'used-up' ? s : null;
+}
+
 export interface PlannerDeps {
-  /** Ask Gemini; `attempt` is 0 or 1. Null when there's no API key. */
+  /** Ask Gemini (the model chain); `attempt` is 0 or 1. Null when there's no API key. */
   ask: ((prompt: string, attempt: number) => Promise<string>) | null;
   /** Look a stop up in Google Places (cache first). Null when there's no Google key. */
   findPlace:
@@ -173,6 +182,8 @@ export interface ItineraryResponse {
   source: 'ai' | 'sample';
   /** Small note for the app, e.g. when Google's daily limit was reached. */
   note: string | null;
+  /** Every model was busy for the minute: no stops, the app shows "Our AI is busy right now". */
+  busy?: true;
   googleCalls: number;
 }
 
@@ -402,12 +413,15 @@ async function addPlaces(stops: StopDraft[], input: ItineraryInput, deps: Planne
 }
 
 /**
- * The whole flow: Gemini (one retry with the problem explained), else the
- * sample plan; then Google Places for each stop. Never throws.
+ * The whole flow: Gemini (one retry with the problem explained, on the next
+ * model in the chain), else the sample plan (with AI_USED_UP_PLAN_NOTE when
+ * every model is used up for today); then Google Places for each stop. When
+ * every model is busy for the minute: { busy: true } and no stops. Never throws.
  */
 export async function planItinerary(input: ItineraryInput, deps: PlannerDeps): Promise<ItineraryResponse> {
   let stops: StopDraft[] | null = null;
   let overBudget: OverBudgetError | null = null;
+  let stop: 'busy' | 'used-up' | null = null;
   if (deps.ask) {
     let feedback: string | undefined;
     for (let attempt = 0; attempt < 2 && !stops; attempt++) {
@@ -417,17 +431,21 @@ export async function planItinerary(input: ItineraryInput, deps: PlannerDeps): P
         if (e instanceof OverBudgetError) overBudget = e;
         feedback = e instanceof Error ? e.message : String(e);
         deps.log?.(`generate-itinerary attempt ${attempt + 1} failed: ${feedback}`);
+        stop = chainStopOf(e);
+        if (stop) break; // no model left to ask
       }
     }
     if (!stops && overBudget) stops = fitToBudget(overBudget.stops, overBudget.budget);
   }
+  if (!stops && stop === 'busy') return { stops: [], source: 'sample', note: null, busy: true, googleCalls: 0 };
   const source: ItineraryResponse['source'] = stops ? 'ai' : 'sample';
   const placed = await addPlaces(stops ?? sampleItinerary(input), input, deps);
+  const notes = [!stops && stop === 'used-up' ? AI_USED_UP_PLAN_NOTE : null, placed.limited ? GOOGLE_LIMIT_NOTE : null];
   return {
     // Only Google's addresses are real; drop Gemini's search text.
     stops: placed.stops.map((s) => (s.placeId ? s : { ...s, address: null, placeId: null })),
     source,
-    note: placed.limited ? GOOGLE_LIMIT_NOTE : null,
+    note: notes.filter(Boolean).join(' ') || null,
     googleCalls: placed.calls,
   };
 }

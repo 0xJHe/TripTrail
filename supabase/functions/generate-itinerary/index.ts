@@ -3,21 +3,20 @@
 // then gets each stop's real address, location and place ID from Google Places
 // (cache first, max 60 Google calls per trip per day). Gemini gets two tries;
 // after that the sample plan is used, so the app always gets a plan.
+// Gemini = the model chain (_shared/geminiChain.ts): best model first, used-up models
+// skipped until midnight Pacific, the retry on the next model. Every model busy for
+// the minute -> { busy: true } (the app shows "Our AI is busy right now" + Try again);
+// every model used up -> the sample plan with a note. A built plan is never made
+// again: once the trip is 'decided' this answers 409.
 //
-// POST { tripId, optionId, start? }  ->  { stops: StopDraft[], source: 'ai' | 'sample', note, googleCalls }
+// POST { tripId, optionId, start? }  ->  { stops: StopDraft[], source: 'ai' | 'sample', note, busy?, model, googleCalls }
 // Only signed-in members of the trip may call it (Authorization: Bearer <user JWT>).
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-import { askGemini, cors, googleDeps, json, requireMember } from '../_shared/edge.ts';
+import { cors, googleDeps, json, makeGeminiChain, requireMember } from '../_shared/edge.ts';
 import { findStopPlace } from '../_shared/google.ts';
 import { planItinerary, type ItineraryInput } from '../_shared/itinerary.ts';
-
-// The retry uses a lighter model, in case the first one is busy (503) or gone (404).
-const MODELS = [
-  Deno.env.get('GEMINI_MODEL') ?? 'gemini-flash-latest',
-  Deno.env.get('GEMINI_FALLBACK_MODEL') ?? 'gemini-flash-lite-latest',
-];
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -45,6 +44,7 @@ Deno.serve(async (req) => {
     db.from('preferences').select('*').eq('trip_id', who.tripId),
   ]);
   if (!trip || !option) return json({ error: 'Trip or option not found' }, 404);
+  if (trip.stage === 'decided') return json({ error: 'The plan is already built' }, 409);
 
   const answered = (prefs ?? []).filter((p) => p.daily_budget != null || (p.free_dates ?? []).length > 0);
   const members = answered.map((p) => ({
@@ -76,16 +76,13 @@ Deno.serve(async (req) => {
   if (!geminiKey) log('GEMINI_API_KEY is not set');
   if (!googleKey) log('GOOGLE_MAPS_API_KEY is not set');
 
-  let geminiCalls = 0;
+  const chain = geminiKey ? makeGeminiChain(admin, geminiKey, Deno.env.get('GEMINI_MODELS'), 0.7, log) : null;
   const result = await planItinerary(input, {
-    ask: geminiKey
-      ? (prompt, attempt) => {
-          geminiCalls++;
-          return askGemini(MODELS[attempt] ?? MODELS[0], prompt, geminiKey);
-        }
-      : null,
+    ask: chain ? (prompt) => chain.ask(prompt) : null,
     findPlace: google ? (query, near) => findStopPlace(google, query, near) : null,
     log,
   });
-  return json({ ...result, geminiCalls });
+  const model = result.source === 'ai' ? chain?.model ?? null : null;
+  console.log(`generate-itinerary trip ${who.tripId}: ${model ? `answered by ${model}` : result.busy ? 'every model busy' : 'sample plan'}`);
+  return json({ ...result, model });
 });

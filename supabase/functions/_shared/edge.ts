@@ -1,7 +1,8 @@
-// Helpers every Edge Function uses: CORS, JSON replies, the member check, Gemini,
-// and Google deps backed by the google_cache table and the per-trip daily limit.
-// No imports (the Supabase clients are passed in), so it stays plain TypeScript.
+// Helpers every Edge Function uses: CORS, JSON replies, the member check, the Gemini
+// model chain, and Google deps backed by the google_cache table and the per-trip
+// daily limit. The Supabase clients are passed in.
 
+import { geminiChain, GeminiHttpError, geminiModels, isGemma, jsonText, type ChainDeps } from './geminiChain.ts';
 import type { GoogleDeps } from './google.ts';
 
 export const cors = {
@@ -38,22 +39,73 @@ export async function requireMember(
   return { memberId: member.id as string, tripId };
 }
 
-/** One Gemini call that must answer with JSON. */
+/**
+ * One Gemini call that must answer with JSON; returns the JSON text. Throws
+ * GeminiHttpError on an HTTP error (geminiChain sorts out what it means).
+ * Gemma has no JSON mode: the "JSON only" instruction goes in the prompt and
+ * the JSON is read from the text (jsonText).
+ */
 export async function askGemini(model: string, prompt: string, apiKey: string, temperature = 0.7): Promise<string> {
+  const gemma = isGemma(model);
+  const text = gemma ? `${prompt}\n\nAnswer with the JSON object only: no code fences, no other words.` : prompt;
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'application/json', temperature },
+      contents: [{ role: 'user', parts: [{ text }] }],
+      generationConfig: gemma ? { temperature } : { responseMimeType: 'application/json', temperature },
     }),
     signal: AbortSignal.timeout(60_000),
   });
-  if (!res.ok) throw new Error(`${model} ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) throw new GeminiHttpError(model, res.status, await res.text());
   const body = await res.json();
-  const text = body?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('');
-  if (!text) throw new Error('Gemini returned no text');
-  return text;
+  const answer = body?.candidates?.[0]?.content?.parts
+    ?.filter((p: { thought?: boolean }) => !p.thought)
+    .map((p: { text?: string }) => p.text ?? '')
+    .join('');
+  if (!answer) throw new Error(`${model} returned no text`);
+  return jsonText(answer);
+}
+
+/**
+ * The gemini_used_up table (service-role client): models used up for today are
+ * skipped until their `until` (next midnight Pacific).
+ */
+export function geminiUsage(admin: Db): Pick<ChainDeps, 'usedUp' | 'markUsedUp'> {
+  return {
+    usedUp: async () => {
+      const { data, error } = await admin.from('gemini_used_up').select('model').gt('until', new Date().toISOString());
+      if (error) throw new Error(error.message);
+      return new Set(((data ?? []) as { model: string }[]).map((r) => r.model));
+    },
+    markUsedUp: async (model, until, reason) => {
+      const { error } = await admin.from('gemini_used_up').upsert({
+        model,
+        until: new Date(until).toISOString(),
+        reason: reason.slice(0, 300),
+        marked_at: new Date().toISOString(),
+      });
+      if (error) throw new Error(error.message);
+    },
+  };
+}
+
+/** The model chain for one request, with the used-up table. `modelsEnv` = the GEMINI_MODELS secret (default list when unset). */
+export function makeGeminiChain(
+  admin: Db,
+  apiKey: string,
+  modelsEnv: string | undefined,
+  temperature: number,
+  log: (m: string) => void,
+) {
+  return geminiChain({
+    models: geminiModels(modelsEnv),
+    call: (model, prompt) => askGemini(model, prompt, apiKey, temperature),
+    ...geminiUsage(admin),
+    now: () => Date.now(),
+    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    log,
+  });
 }
 
 /**

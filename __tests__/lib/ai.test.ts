@@ -1,7 +1,7 @@
 const mockInvoke = jest.fn();
 jest.mock('@/lib/supabase', () => ({ supabase: { functions: { invoke: (...args: unknown[]) => mockInvoke(...args) } } }));
 
-import { generateItinerary, generateTripOptions, OPTION_COUNT, sampleItinerary, sampleTripOptions, type MemberAnswers } from '@/lib/ai';
+import { AiBusyError, generateItinerary, generateTripOptions, OPTION_COUNT, sampleItinerary, sampleTripOptions, type MemberAnswers } from '@/lib/ai';
 
 const beachLover: MemberAnswers = {
   dailyBudget: 150,
@@ -53,6 +53,7 @@ describe('generateTripOptions', () => {
   beforeEach(() => {
     mockInvoke.mockReset();
     jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   it('calls the Edge Function with the trip id and returns its options', async () => {
@@ -67,6 +68,17 @@ describe('generateTripOptions', () => {
     const result = await generateTripOptions('trip-1', req);
     expect(result.source).toBe('sample');
     expect(result.options).toEqual(sampleTripOptions(req));
+  });
+
+  it('says the AI is busy (no sample options) when every model is busy', async () => {
+    mockInvoke.mockResolvedValue({ data: { options: [], source: 'sample', busy: true, note: null }, error: null });
+    await expect(generateTripOptions('trip-1', req)).rejects.toBeInstanceOf(AiBusyError);
+  });
+
+  it('logs which model answered', async () => {
+    mockInvoke.mockResolvedValue({ data: { options: [aiOption], source: 'ai', note: null, model: 'gemini-3.8-flash' }, error: null });
+    await generateTripOptions('trip-1', req);
+    expect(console.log).toHaveBeenCalledWith('generate-trip-options: answered by gemini-3.8-flash');
   });
 
   it('falls back to sample options when the reply is broken', async () => {
@@ -84,6 +96,7 @@ describe('generateItinerary', () => {
   beforeEach(() => {
     mockInvoke.mockReset();
     jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   it('calls the Edge Function with the trip, option and start date', async () => {
@@ -93,6 +106,11 @@ describe('generateItinerary', () => {
       body: { tripId: 'trip-1', optionId: 'opt-1', start: '2026-10-12' },
     });
     expect(result).toEqual({ stops: [stop], source: 'ai', note: null });
+  });
+
+  it('says the AI is busy (no sample plan) when every model is busy', async () => {
+    mockInvoke.mockResolvedValue({ data: { stops: [], source: 'sample', busy: true, note: null }, error: null });
+    await expect(generateItinerary('trip-1', 'opt-1', null, fallback)).rejects.toBeInstanceOf(AiBusyError);
   });
 
   it('falls back to the sample plan when the function fails', async () => {

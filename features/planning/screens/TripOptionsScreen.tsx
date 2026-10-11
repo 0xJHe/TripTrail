@@ -86,6 +86,7 @@ export function TripOptionsScreen() {
             answeredIds={data.answeredIds}
             generating={gen.generating || (data.trip.stage === 'voting' && !gen.error)}
             error={gen.error}
+            busy={gen.busy}
             onBuildNow={gen.generate}
             onEditAnswers={() => router.replace(`/trip/${id}/preferences`)}
           />

@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { generateTripOptions } from '@/lib/ai';
+import { generateTripOptions, isAiBusy } from '@/lib/ai';
 import { claimVoting, insertOptions } from '../api';
 import { optionFit } from '../optionFit';
 import type { PlanningData } from './usePlanningData';
@@ -9,18 +9,23 @@ import type { PlanningData } from './usePlanningData';
 /**
  * Make the trip options from everyone's answers. Runs by itself once all
  * members have answered; `generate` lets the group go ahead without waiting.
+ * Saved options are never made again (only while the trip has none). When
+ * every AI model is busy, `busy` is set and nothing runs by itself: the
+ * screen shows "Our AI is busy right now" with Try again (`generate`).
  */
 export function useGenerateOptions(data: PlanningData) {
   const queryClient = useQueryClient();
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const autoTried = useRef(false);
   const { trip, members, answeredPrefs, options, loading } = data;
 
   const generate = useCallback(async () => {
-    if (!trip || answeredPrefs.length === 0) return;
+    if (!trip || answeredPrefs.length === 0 || options.length > 0) return;
     setGenerating(true);
     setError(null);
+    setBusy(false);
     try {
       const { options: drafts, note } = await generateTripOptions(trip.id, {
         destination: trip.destination,
@@ -55,26 +60,28 @@ export function useGenerateOptions(data: PlanningData) {
         queryClient.invalidateQueries({ queryKey: ['options', trip.id] }),
       ]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not make trip options. Please try again.');
+      if (isAiBusy(e)) setBusy(true);
+      else setError(e instanceof Error ? e.message : 'Could not make trip options. Please try again.');
     } finally {
       setGenerating(false);
     }
-  }, [trip, answeredPrefs, members.length, queryClient]);
+  }, [trip, answeredPrefs, options.length, members.length, queryClient]);
 
   const everyoneAnswered = members.length > 0 && members.every((m) => data.answeredIds.has(m.id));
 
   useEffect(() => {
     if (loading || autoTried.current || generating || !trip) return;
-    if (trip.stage === 'preferences' && everyoneAnswered) {
+    if (trip.stage === 'preferences' && everyoneAnswered && options.length === 0) {
       autoTried.current = true;
       generate();
     }
-  }, [loading, trip, everyoneAnswered, generating, generate]);
+  }, [loading, trip, everyoneAnswered, options.length, generating, generate]);
 
   return {
     generate,
     generating,
     error,
+    busy,
     everyoneAnswered,
     /** Still answering questions, or voting started but options haven't arrived. */
     waiting: !!trip && (trip.stage === 'preferences' || options.length === 0),

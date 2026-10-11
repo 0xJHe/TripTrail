@@ -324,6 +324,19 @@ end $$;
 revoke execute on function take_google_call(uuid, int) from public, anon, authenticated;
 grant execute on function take_google_call(uuid, int) to service_role;
 
+-- Gemini models used up for today (daily free quota reached, or "not found" / "not
+-- available"). generate-trip-options and generate-itinerary skip a model here until
+-- `until` (the next midnight Pacific time, when Google resets free limits). A model
+-- that is only rate limited for the minute is never written here.
+-- Only the Edge Functions use it (service role): RLS is on with no policies.
+create table gemini_used_up (
+  model text primary key,          -- e.g. 'gemini-3.8-flash'
+  until timestamptz not null,      -- skip it until then
+  reason text,                     -- Google's error, shortened
+  marked_at timestamptz not null default now()
+);
+alter table gemini_used_up enable row level security;
+
 -- Weather: max 30 Google Weather calls per trip per day (Malaysia time), separate
 -- from the Places limit. Only the weather Edge Function uses it (service role).
 create table weather_usage (

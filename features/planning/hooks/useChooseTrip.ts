@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
 import { tripKeys } from '@/features/trip/hooks/useTrip';
+import { isAiBusy } from '@/lib/ai';
 import { useCurrentTrip } from '@/features/trip/store';
 import type { Member } from '@/features/trip/types';
 import { buildPlan, chooseOption } from '../api';
@@ -11,7 +12,9 @@ import type { PlanningData } from './usePlanningData';
 
 /**
  * Choosing a trip and building the plan. When the plan gets built (by me or
- * anyone else in the group) everyone is taken to the same Day plan.
+ * anyone else in the group) everyone is taken to the same Day plan. A built
+ * plan is never made again. `busy`: every AI model was busy, so the screen
+ * shows "Our AI is busy right now" with Try again.
  */
 export function useChooseTrip(data: PlanningData) {
   const queryClient = useQueryClient();
@@ -19,6 +22,7 @@ export function useChooseTrip(data: PlanningData) {
   const [choosingId, setChoosingId] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const { trip, me } = data;
   const tripId = trip?.id;
   const stage = trip?.stage;
@@ -59,20 +63,23 @@ export function useChooseTrip(data: PlanningData) {
 
   async function build(result: OptionResult) {
     if (!trip) return;
+    if (trip.stage === 'decided') return openPlan.current(); // already built: never make it again
     setBuilding(true);
     buildingRef.current = true;
     setError(null);
+    setBusy(false);
     try {
       const { note } = await buildPlan(trip, result.option, result.fit.window, data.needsHalal);
       lastStage.current = 'decided'; // don't navigate twice when Realtime reports it
       await queryClient.invalidateQueries({ queryKey: tripKeys.trip(trip.id) });
       openPlan.current(note);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not build the plan. Check your internet and try again.');
+      if (isAiBusy(e)) setBusy(true);
+      else setError(e instanceof Error ? e.message : 'Could not build the plan. Check your internet and try again.');
       setBuilding(false);
       buildingRef.current = false;
     }
   }
 
-  return { choose, choosingId, build, building, error, openPlan: () => openPlan.current() };
+  return { choose, choosingId, build, building, error, busy, openPlan: () => openPlan.current() };
 }

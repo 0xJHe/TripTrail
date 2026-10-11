@@ -183,7 +183,8 @@ Time and location rule (built; follow it in every live-trip feature):
 - Seed data first, real API second. Every screen must render with
   seed/penang.json when tables are empty.
 - Gemini: ask for JSON only, validate with zod, retry once, then fall back to
-  seed data. Never crash on a bad AI response.
+  seed data. Never crash on a bad AI response. Always through the model chain
+  (see "Gemini model chain" below), never one fixed model.
 - Cache Distance Matrix results (same origin/destination within 10 min) to
   protect quota.
 - Realtime subscriptions are filtered by trip_id and cleaned up on unmount.
@@ -192,6 +193,24 @@ Time and location rule (built; follow it in every live-trip feature):
 - Commit message style: short, present tense, e.g. "add preferences screen".
 
 ## Key logic (so every feature uses the same rules)
+
+- Gemini model chain (supabase/functions/_shared/geminiChain.ts, used by generate-trip-options
+  and generate-itinerary through edge.ts makeGeminiChain): free tier limits are tiny and per
+  model (e.g. 5 a minute, 20 a day), so each request walks a list, best first:
+  gemini-3.8-flash, 3.7-flash, 3.6-flash, 3.5-flash, 3.5-flash-lite, 3-flash-preview,
+  3.1-flash-lite, 2.5-flash, 2.5-flash-lite, 2.0-flash, 2.0-flash-lite, gemma-4-31b-it,
+  gemma-4-26b-a4b-it (DEFAULT_GEMINI_MODELS; the Supabase secret GEMINI_MODELS, comma-separated,
+  overrides it without a deploy). Daily quota reached / "not found" / "not available" -> the
+  model goes in the gemini_used_up table until the next midnight Pacific (Google's reset) and
+  every request skips it that day; only rate limited for the minute (429 per-minute, 503
+  overloaded) -> next model, never marked; other errors -> next model. An answer that fails our
+  checks gets ONE retry, on the next model. Every model left busy -> wait 3 s, try those once
+  more, then the function answers { busy: true } (no samples): the app (lib/ai.ts AiBusyError)
+  shows "Our AI is busy right now" with Try again (AiBusyCard). Every model used up -> sample
+  options / plan with a note. Gemma gets no JSON mode: "JSON only" goes in the prompt and the
+  JSON is read from the text (jsonText). Which model answered: the function logs "answered by
+  <model>" and returns `model`. Saved options and a built plan are never made again: the
+  functions answer 409 once the trip has options / is 'decided', and the app never calls them then.
 
 - Arrived: within 100 m of stop for 2 consecutive readings -> status "arrived",
   arrived_at = now. Left: more than 150 m away for 3 minutes after arrived ->

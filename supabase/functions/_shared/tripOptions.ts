@@ -286,8 +286,19 @@ export const NO_GOS = ['Early mornings', 'Late nights', 'Long hikes'];
 const MIN_OPTIONS = 4;
 const MAX_OPTIONS = 5;
 
+/** Shown with the sample options when every Gemini model is used up for today. */
+export const AI_USED_UP_NOTE = "Our free AI has reached today's limit, so these are sample trips";
+
+/** 'busy' / 'used-up' when the Gemini model chain gave up (geminiChain.ts AiBusyError / AiUsedUpError). */
+export function chainStopOf(e: unknown): 'busy' | 'used-up' | null {
+  const s = (e as { aiStatus?: unknown } | null)?.aiStatus;
+  return s === 'busy' || s === 'used-up' ? s : null;
+}
+
+const joinNotes = (...notes: (string | null)[]) => notes.filter(Boolean).join('. ') || null;
+
 export interface OptionsDeps {
-  /** Ask Gemini; `attempt` is 0 or 1. Null when there's no API key. */
+  /** Ask Gemini (the model chain); `attempt` is 0 or 1. Null when there's no API key. */
   ask: ((prompt: string, attempt: number) => Promise<string>) | null;
   /** One photo for a landmark (cache first). Null when there's no Google key. */
   findPhoto: ((landmark: string) => Promise<{ value: OptionPhoto | null; limited: boolean; calls: number }>) | null;
@@ -301,6 +312,8 @@ export interface TripOptionsResponse {
   note: string | null;
   /** Why Gemini wasn't used (only when source is 'sample'). */
   reason?: string;
+  /** Every model was busy for the minute: no options, the app shows "Our AI is busy right now". */
+  busy?: true;
   googleCalls: number;
 }
 
@@ -529,13 +542,17 @@ async function addPhotos(options: TripOptionDraft[], deps: OptionsDeps) {
  * The whole flow: Gemini, checked against the group's budget, shared dates,
  * food needs and no-gos. If an option doesn't fit, Gemini gets one retry with
  * the problems; the better answer is kept, fitting options first, with a short
- * note when they can't all fit. Falls back to the sample options. Never throws.
+ * note when they can't all fit. The retry goes to the next model in the chain.
+ * Falls back to the sample options (with AI_USED_UP_NOTE when every model is
+ * used up for today); when every model is busy for the minute, returns
+ * { busy: true } and no options, so the app can offer "Try again". Never throws.
  */
 export async function planTripOptions(req: TripOptionsRequest, deps: OptionsDeps): Promise<TripOptionsResponse> {
   const limits = groupLimits(req);
   const shared = commonFreeDates((req.freeDates ?? []).filter((l) => l.length > 0));
   let best: TripOptionDraft[] | null = null;
   let reason = 'GEMINI_API_KEY is not set';
+  let stop: 'busy' | 'used-up' | null = null;
   if (deps.ask) {
     let feedback: string | undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -550,9 +567,12 @@ export async function planTripOptions(req: TripOptionsRequest, deps: OptionsDeps
         reason = (e instanceof Error ? e.message : String(e)).slice(0, 300);
         feedback = reason;
         deps.log?.(`generate-trip-options attempt ${attempt + 1} failed: ${reason}`);
+        stop = chainStopOf(e);
+        if (stop) break; // no model left to ask
       }
     }
   }
+  if (!best && stop === 'busy') return { options: [], source: 'sample', busy: true, note: null, reason, googleCalls: 0 };
   const source: TripOptionsResponse['source'] = best ? 'ai' : 'sample';
   const chosen = best ?? sampleTripOptions(req);
   // Options that fit everyone first; the rest by how many things don't fit.
@@ -564,7 +584,7 @@ export async function planTripOptions(req: TripOptionsRequest, deps: OptionsDeps
   return {
     options: withPhotos.options,
     source,
-    note: fitNote(ordered, limits, req),
+    note: joinNotes(!best && stop === 'used-up' ? AI_USED_UP_NOTE : null, fitNote(ordered, limits, req)),
     ...(source === 'sample' ? { reason } : {}),
     googleCalls: withPhotos.calls,
   };

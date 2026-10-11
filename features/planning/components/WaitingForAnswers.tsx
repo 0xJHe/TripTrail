@@ -7,6 +7,7 @@ import { Txt } from '@/components/ui/Txt';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import type { Member } from '@/features/trip/types';
 import { colors } from '@/lib/theme';
+import { AiBusyCard } from './AiBusyCard';
 import { AnsweredCard } from './AnsweredCard';
 
 interface WaitingForAnswersProps {
@@ -14,6 +15,8 @@ interface WaitingForAnswersProps {
   answeredIds: Set<string>;
   generating: boolean;
   error: string | null;
+  /** Every AI model was busy: show "Our AI is busy right now" + Try again. */
+  busy?: boolean;
   onBuildNow: () => void;
   onEditAnswers: () => void;
 }
@@ -24,6 +27,7 @@ export function WaitingForAnswers({
   answeredIds,
   generating,
   error,
+  busy,
   onBuildNow,
   onEditAnswers,
 }: WaitingForAnswersProps) {
@@ -35,6 +39,17 @@ export function WaitingForAnswers({
         <ActivityIndicator size="large" color={colors.teal} />
         <Txt variant="h15">Building trip options…</Txt>
         <Txt variant="s11">From everyone's budgets, dates and must-haves</Txt>
+      </View>
+    );
+  }
+
+  if (busy) {
+    return (
+      <View style={styles.wrap}>
+        <AiBusyCard what="trip options" onTryAgain={onBuildNow} />
+        <View style={styles.actions}>
+          <Button label="Edit my answers" variant="secondary" onPress={onEditAnswers} />
+        </View>
       </View>
     );
   }

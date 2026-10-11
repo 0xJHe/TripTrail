@@ -11,6 +11,7 @@ import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { memberAvatars, memberCountLabel } from '@/features/trip/members';
 import { colors } from '@/lib/theme';
 import { agreedOption, choiceLine, choosersByOption } from '../choice';
+import { AiBusyCard } from '../components/AiBusyCard';
 import { ChooseBar } from '../components/ChooseBar';
 import { NoteLine } from '../components/NoteLine';
 import { RunnerUpRow } from '../components/RunnerUpRow';
@@ -22,7 +23,7 @@ import { finishedSwiping, likesLabel, rankOptions, tiedWithTop, type OptionResul
 export function ResultsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const data = usePlanningData(id);
-  const { choose, choosingId, build, building, error, openPlan } = useChooseTrip(data);
+  const { choose, choosingId, build, building, error, busy, openPlan } = useChooseTrip(data);
 
   const { trip, members, me, options, votes, fits, solo } = data;
   const ranked = options.length && fits.size === options.length ? rankOptions(options, votes, fits) : [];
@@ -83,6 +84,7 @@ export function ResultsScreen() {
               {!solo ? <Avatars people={avatars.map((a) => ({ ...a, muted: !members.find((m) => m.id === a.key)?.chosen_option_id }))} size={24} /> : null}
             </Card>
           ) : null}
+          {busy && !decided ? <AiBusyCard what="day plan" /> : null}
           {!decided && options[0]?.plan_json.fitNote ? <NoteLine text={options[0].plan_json.fitNote} /> : null}
           <WinnerCard result={top} members={members} tag={tag} chosen={myChoice === top.option.id} footer={footer(top)} />
           {others.length ? <Txt variant="lbl">Other trips</Txt> : null}
@@ -109,7 +111,12 @@ export function ResultsScreen() {
           {decided ? (
             <Button label="Open the Day plan" onPress={openPlan} testID="open-plan" />
           ) : agreed ? (
-            <Button label={`Build the plan for ${agreed.option.name}`} onPress={() => build(agreed)} loading={building} testID="build-plan" />
+            <Button
+              label={busy ? 'Try again' : `Build the plan for ${agreed.option.name}`}
+              onPress={() => build(agreed)}
+              loading={building}
+              testID="build-plan"
+            />
           ) : (
             <>
               <Txt variant="s11" style={styles.note}>

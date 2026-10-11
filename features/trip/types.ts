@@ -17,6 +17,8 @@ export interface Trip {
   winning_option_id: string | null;
   stage: TripStage;
   created_at: string;
+  /** Set when someone leaves (the update tells everyone through Realtime). */
+  members_changed_at?: string | null;
 }
 
 /** Row in `members`. */

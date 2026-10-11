@@ -1,3 +1,4 @@
+import { PIN_PHOTOS } from '@/features/group/api';
 import { supabase } from '@/lib/supabase';
 import { makeJoinCode } from './joinCode';
 import type { Member, Trip, TripFields } from './types';
@@ -92,4 +93,32 @@ export async function fetchMyTrips(userId: string): Promise<Trip[]> {
     .map((row) => row.trips)
     .filter((t): t is Trip => !!t);
   return trips.sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+/** What leaving did: 'deleted' when I was the last member (the trip went with me). */
+export type LeaveResult = 'left' | 'deleted';
+
+/**
+ * Leave a trip (Group tab). Pin photos go first, while I'm still a member (storage can't be
+ * cleaned up from SQL): mine, or every photo in the trip's folder when I'm the last member.
+ * Then leave_trip removes my member row, passes the organiser role on, or deletes the trip.
+ */
+export async function leaveTrip(tripId: string, memberId: string, lastMember: boolean): Promise<LeaveResult> {
+  await removePinPhotos(tripId, lastMember ? null : memberId);
+  const { data, error } = await supabase.rpc('leave_trip', { p_trip: tripId });
+  if (error) throw error;
+  return data === 'deleted' ? 'deleted' : 'left';
+}
+
+/** Pin photos are "<trip id>/<member id>-<time>-<random>.jpg" (features/group/pins.ts photoPath). */
+async function removePinPhotos(tripId: string, memberId: string | null): Promise<void> {
+  const bucket = supabase.storage.from(PIN_PHOTOS);
+  const { data, error } = await bucket.list(tripId, { limit: 1000, ...(memberId ? { search: `${memberId}-` } : {}) });
+  if (error) throw error;
+  const paths = (data ?? [])
+    .filter((f) => !memberId || f.name.startsWith(`${memberId}-`))
+    .map((f) => `${tripId}/${f.name}`);
+  if (paths.length === 0) return;
+  const removed = await bucket.remove(paths);
+  if (removed.error) throw removed.error;
 }

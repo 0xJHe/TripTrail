@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabase';
 
 /** Tables we listen to, and the React Query key each one refreshes. */
 const TABLE_KEYS = {
-  trips: 'trip',
+  // Someone leaving updates the trip row (members_changed_at): their row and pins are gone.
+  trips: ['trip', 'members', 'pins'],
   members: 'members',
   preferences: 'preferences',
   trip_options: 'options',
@@ -18,7 +19,7 @@ const TABLE_KEYS = {
   rain_alerts: 'rainAlerts',
   spends: 'spends',
   day_closures: 'dayClosures',
-} as const;
+} satisfies Record<string, string | string[]>;
 
 export type RealtimeTable = keyof typeof TABLE_KEYS;
 
@@ -43,7 +44,9 @@ export function useTripRealtime(tripId: string | undefined, tables: RealtimeTabl
           filter: table === 'trips' ? `id=eq.${tripId}` : `trip_id=eq.${tripId}`,
         },
         () => {
-          queryClient.invalidateQueries({ queryKey: [TABLE_KEYS[table], tripId] });
+          for (const key of ([] as string[]).concat(TABLE_KEYS[table])) {
+            queryClient.invalidateQueries({ queryKey: [key, tripId] });
+          }
         },
       );
     }

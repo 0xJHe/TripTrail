@@ -100,7 +100,7 @@ features/
   planning/           preferences, date finder, trip options, swipe, vote, itinerary, edit stop
   today/              today card, arrive/leave detection, late, early, done-here, rain, tips
   money/              budget bar, spend check
-  group/              group map, meet point, split & rejoin, pins
+  group/              group map, meet point, split & rejoin, pins, Group tab (members, invite, leave)
   recap/              done for today, day recap card
 lib/
   supabase.ts         client
@@ -345,6 +345,33 @@ Time and location rule (built; follow it in every live-trip feature):
   and low-battery alerts (so Split & rejoin too) and the meet point's "everyone's here"
   check. After closing my own day: a banner at the top of the map "You've closed today ·
   location sharing is off" with Reopen today (DayClosedBanner).
+- Group tab (no prototype screen; features/group GroupScreen, groupList.ts, useGroupList):
+  members in join order, avatar + name, "You" and "Organiser" tags (organiser = trips.created_by,
+  else the earliest joiner; trip/members.ts organiserId). Status line: location ("Sharing
+  location", "Last seen HH:MM" after 3 min without a new position, "Location off" with none,
+  e.g. outside the sharing window; "Done for today" wins), battery % (amber "· low" under 15%),
+  preferences ("Preferences in" / "No preferences yet"; a decided trip's late joiner: "Joined
+  after the plan"). Only who answered is loaded (preferences.member_id), never budgets or other
+  answers. Positions come from useMapMembers, so Demo mode shows the replay's members (real ones
+  by id, the made-up "(demo)" ones added with a Demo tag). Invite card: join code + Copy (the
+  code) / Share (invite message); decided trips say "The trip is decided. New members will join
+  the current plan." Joining a decided trip (JoinScreen) opens the Day plan straight away (no
+  preferences or voting); the plan is never changed or rebuilt by a join, and the new member is
+  in Today, the map and spend checks like anyone else.
+  Leave trip (everyone, organiser too): confirm card "Leave this trip?"; last member: "You're the
+  last member. Leaving will delete this trip." trip/api.ts leaveTrip: pin photos first (mine by
+  file prefix "<member id>-"; the last member every file in the trip's folder, storage policy
+  "pin photos delete last member"), then the leave_trip RPC (security definer, locks the trip):
+  deletes my member row (my preferences, votes, spends, pins, positions, closures cascade); the
+  last member deletes the trip (everything cascades by trip_id; nearby-pick / rain-pick cache rows
+  too) -> 'deleted'; otherwise the organiser role passes to the earliest joiner if the organiser
+  left, and trips.members_changed_at = now() (an UPDATE, so Realtime on trips reaches everyone:
+  useTripRealtime refreshes trip + members + pins on any trips change; a DELETE can't be
+  filtered by trip_id). useLeaveTrip stops background sharing, clears the current trip and goes
+  home.
+- Home screen: trips whose end_date is before today (lib/clock, so Demo mode's fake date) go
+  in a collapsed "Past trips (N)" section under the current and upcoming ones (pastTrips.ts),
+  latest first; tapping one still opens it.
 - Day recap (screen 15, features/recap: trail.ts, cardLayout.ts, dayWeather.ts, shareImage.ts,
   useDayRecap, RecapCard, DayRecapScreen, route /recap?day=N): a 9:16 story card for one trip
   day, for this person. Opened from "Day closed" (See your day recap) and from the Plan tab's

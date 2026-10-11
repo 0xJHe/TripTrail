@@ -50,7 +50,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="plan" options={{ title: 'Plan', headerShown: false, tabBarIcon: tabIcon('calendar-outline') }} />
       <Tabs.Screen name="today" options={{ title: 'Today', headerShown: false, tabBarIcon: tabIcon('today') }} />
       <Tabs.Screen name="map" options={{ title: 'Map', headerShown: false, tabBarIcon: tabIcon('map') }} />
-      <Tabs.Screen name="group" options={{ title: 'Group', tabBarIcon: tabIcon('people') }} />
+      <Tabs.Screen name="group" options={{ title: 'Group', headerShown: false, tabBarIcon: tabIcon('people') }} />
     </Tabs>
   );
 }

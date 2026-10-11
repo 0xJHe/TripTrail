@@ -12,16 +12,18 @@ import { Field } from '@/components/ui/Field';
 import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
 import { avatarColors, colors } from '@/lib/theme';
-import { joinTrip } from '../api';
+import { fetchTrip, joinTrip } from '../api';
 import { useAuth, useDisplayName } from '../authStore';
 import { ErrorLine } from '../components/ErrorLine';
 import { normalizeJoinCode } from '../joinCode';
+import { useCurrentTrip } from '../store';
 
 export function JoinScreen() {
   const params = useLocalSearchParams<{ code?: string }>();
   const signedIn = useAuth((s) => !!s.session);
   const name = useDisplayName();
   const queryClient = useQueryClient();
+  const setCurrentTrip = useCurrentTrip((s) => s.setCurrentTrip);
   const [input, setInput] = useState(params.code ?? '');
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,15 @@ export function JoinScreen() {
     try {
       const tripId = await joinTrip(code, name);
       queryClient.invalidateQueries({ queryKey: ['myTrips'] });
-      router.replace(`/trip/${tripId}/preferences`);
+      queryClient.invalidateQueries({ queryKey: ['members', tripId] });
+      // Already decided: skip preferences and voting, straight to the Day plan (it stays as built).
+      const trip = await fetchTrip(tripId).catch(() => null);
+      if (trip?.stage === 'decided') {
+        setCurrentTrip(tripId);
+        router.replace('/plan');
+      } else {
+        router.replace(`/trip/${tripId}/preferences`);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not join. Check your internet and try again.');
       setJoining(false);

@@ -16,7 +16,8 @@ create table trips (
   created_by uuid references auth.users(id),
   winning_option_id uuid,
   stage text not null default 'preferences', -- preferences | voting | decided
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  members_changed_at timestamptz -- set when someone leaves (Realtime: the member list updates live)
 );
 
 create table members (
@@ -148,7 +149,7 @@ create table pins (
 create table meet_points (
   id uuid primary key default gen_random_uuid(),
   trip_id uuid references trips(id) on delete cascade,
-  set_by uuid references members(id),
+  set_by uuid references members(id) on delete set null,
   kind text not null default 'meet', -- meet | split
   name text, -- stop / pin name; null = a spot tapped on the map
   lat double precision not null,
@@ -256,6 +257,51 @@ begin
   on conflict (trip_id, user_id) do update set display_name = excluded.display_name;
   return t;
 end $$;
+
+-- True when I'm the trip's only member (about to delete it by leaving).
+create or replace function is_only_member(t uuid) returns boolean
+language sql stable security definer set search_path = public as $
+  select exists (select 1 from members where trip_id = t and user_id = auth.uid())
+     and (select count(*) from members where trip_id = t) = 1;
+$;
+
+-- Leave a trip: removes my member row (my preferences, votes, spends, pins, positions and
+-- closures go with it). The organiser role passes to the member who joined earliest. The last
+-- member deletes the trip and everything in it. Returns 'left' or 'deleted'.
+create or replace function leave_trip(p_trip uuid)
+returns text language plpgsql security definer set search_path = public as $
+declare
+  t trips%rowtype;
+  me uuid;
+  next_user uuid;
+begin
+  select * into t from trips where id = p_trip for update; -- one leave at a time per trip
+  if not found then raise exception 'That trip is gone'; end if;
+  select id into me from members where trip_id = p_trip and user_id = auth.uid();
+  if me is null then raise exception 'Not a member of this trip'; end if;
+
+  delete from members where id = me;
+
+  if not exists (select 1 from members where trip_id = p_trip) then
+    -- Picks the nearby-suggestion function saved per stop (the rest of google_cache isn't per trip).
+    delete from google_cache
+     where key in (select 'nearby-pick:' || s.id from stops s where s.trip_id = p_trip
+                   union all
+                   select 'rain-pick:' || s.id from stops s where s.trip_id = p_trip);
+    delete from trips where id = p_trip; -- cascades to every table with a trip_id
+    return 'deleted';
+  end if;
+
+  if not exists (select 1 from members where trip_id = p_trip and user_id = t.created_by) then
+    select user_id into next_user from members where trip_id = p_trip order by joined_at asc, id asc limit 1;
+  end if;
+  update trips
+     set created_by = coalesce(next_user, created_by), members_changed_at = now()
+   where id = p_trip;
+  return 'left';
+end $;
+revoke execute on function leave_trip(uuid) from public, anon;
+grant execute on function leave_trip(uuid) to authenticated;
 
 -- Build the plan once, when every member has chosen the same trip.
 -- Locks the trip row so two people tapping "Build the plan" together only build it once.
@@ -372,6 +418,9 @@ create policy "pin photos add" on storage.objects for insert to authenticated
   with check (bucket_id = 'pin-photos' and public.is_member(((storage.foldername(name))[1])::uuid));
 create policy "pin photos delete own" on storage.objects for delete to authenticated
   using (bucket_id = 'pin-photos' and owner = auth.uid());
+-- The last member deletes every photo in the trip's folder before leaving (Group tab > Leave trip).
+create policy "pin photos delete last member" on storage.objects for delete to authenticated
+  using (bucket_id = 'pin-photos' and public.is_only_member(((storage.foldername(name))[1])::uuid));
 
 -- Running late (migrations 005, 006).
 -- Paid API calls per trip per day (Malaysia time), by kind: 'routes' (max 20, eta

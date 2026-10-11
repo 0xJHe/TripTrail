@@ -12,7 +12,9 @@ import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { colors } from '@/lib/theme';
 import { PlaceNameField } from '../components/PlaceNameField';
 import { useStopForm } from '../hooks/useStopForm';
-import { END_BEFORE_START, endNotAfterStart, timesFilled, type StopKind } from '../stopForm';
+import { TimeField } from '../components/TimeField';
+import { END_BEFORE_START, endNotAfterStart, type StopKind } from '../stopForm';
+import { clockText, parseClock } from '../stops';
 
 const KINDS: { value: StopKind; label: string }[] = [
   { value: 'place', label: 'Place' },
@@ -26,10 +28,16 @@ const NAME_HINT: Record<StopKind, string> = {
   hotel: 'e.g. Hotel check-in',
 };
 
+/** Where the Ends clock opens: an hour after Starts (the box itself stays empty until picked). */
+function hourAfter(time: string): string | undefined {
+  const start = parseClock(time);
+  return start == null ? undefined : clockText(Math.min(start + 60, 23 * 60 + 59));
+}
+
 /** Edit a stop (name, time, price), delete it, or add a new one. */
 export function StopFormScreen() {
   const params = useLocalSearchParams<{ id: string; stopId: string; day?: string }>();
-  const { form, set, save, remove, isNew, days, near, missing, saving, error } = useStopForm(
+  const { form, set, save, remove, isNew, days, near, missing, saving, error, timeError } = useStopForm(
     params.id,
     params.stopId,
     Number(params.day) || 1,
@@ -55,6 +63,9 @@ export function StopFormScreen() {
     );
   }
 
+  // Under the times: what Add stop / Save found, or an end not after the start as soon as both are in.
+  const timeLine = timeError ?? (endNotAfterStart(form) ? END_BEFORE_START : null);
+
   return (
     <KeyboardAvoidingView style={styles.screen} behavior="padding">
       {header}
@@ -79,26 +90,23 @@ export function StopFormScreen() {
 
         <Txt variant="sec">Time</Txt>
         <View style={styles.row}>
-          <Field
+          <TimeField
             prefix="Starts"
             value={form.time}
-            onChangeText={(time) => set({ time })}
-            placeholder="09:30"
-            keyboardType="numbers-and-punctuation"
+            onChange={(time) => set({ time })}
             containerStyle={{ flex: 1 }}
             testID="stop-time"
           />
-          <Field
+          <TimeField
             prefix="Ends"
             value={form.endTime}
-            onChangeText={(endTime) => set({ endTime })}
-            placeholder="10:45"
-            keyboardType="numbers-and-punctuation"
+            onChange={(endTime) => set({ endTime })}
+            opensAt={hourAfter(form.time)}
             containerStyle={{ flex: 1 }}
             testID="stop-end-time"
           />
         </View>
-        {endNotAfterStart(form) ? <ErrorLine message={END_BEFORE_START} /> : null}
+        {timeLine ? <ErrorLine message={timeLine} /> : null}
 
         <Txt variant="sec">Price per person</Txt>
         <Field
@@ -143,13 +151,7 @@ export function StopFormScreen() {
         ) : null}
       </ScrollView>
       <BottomBar>
-        <Button
-          label={isNew ? 'Add stop' : 'Save'}
-          onPress={save}
-          disabled={!timesFilled(form) || endNotAfterStart(form)}
-          loading={saving}
-          testID="save-stop"
-        />
+        <Button label={isNew ? 'Add stop' : 'Save'} onPress={save} loading={saving} testID="save-stop" />
       </BottomBar>
     </KeyboardAvoidingView>
   );

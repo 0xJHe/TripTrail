@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 
 import { addStop, deleteStop, updateStop } from '../api';
-import { emptyForm, formFromStop, readStopForm, type StopFormValues } from '../stopForm';
+import { emptyForm, formFromStop, readStopForm, timeProblem, type StopFormValues } from '../stopForm';
 import { planningKeys } from './usePlanning';
 import { useDayPlan } from './useDayPlan';
 
@@ -16,13 +16,18 @@ export function useStopForm(tripId: string, stopId: string, day: number) {
   const [form, setForm] = useState<StopFormValues | null>(isNew ? emptyForm(day) : null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Shown under the times after tapping Add stop / Save; gone once a time is picked again.
+  const [timeError, setTimeError] = useState<string | null>(null);
 
   // Fill the form once the stop has loaded.
   useEffect(() => {
     if (!form && stop) setForm(formFromStop(stop));
   }, [form, stop]);
 
-  const set = (patch: Partial<StopFormValues>) => setForm((f) => (f ? { ...f, ...patch } : f));
+  function set(patch: Partial<StopFormValues>) {
+    if ('time' in patch || 'endTime' in patch) setTimeError(null);
+    setForm((f) => (f ? { ...f, ...patch } : f));
+  }
 
   async function run(action: () => Promise<void>) {
     setSaving(true);
@@ -39,6 +44,9 @@ export function useStopForm(tripId: string, stopId: string, day: number) {
 
   function save() {
     if (!form) return;
+    const problem = timeProblem(form);
+    setTimeError(problem);
+    if (problem) return;
     const read = readStopForm(form, plan.start, stop?.category ?? null);
     if (!read.ok) {
       setError(read.error);
@@ -66,6 +74,7 @@ export function useStopForm(tripId: string, stopId: string, day: number) {
     missing: !isNew && !plan.loading && !stop,
     saving,
     error,
+    timeError,
   };
 }
 

@@ -49,18 +49,33 @@ export function emptyForm(day: number): StopFormValues {
 
 export type StopFields = Omit<NewStop, 'position' | 'tip' | 'is_outdoor'>;
 
+export const PICK_TIMES = 'Please pick a start and end time';
 export const END_BEFORE_START = 'End time must be after the start time';
 
-/** Both Starts and Ends are typed in (Add / Save stays off until then). */
-export function timesFilled(form: Pick<StopFormValues, 'time' | 'endTime'>): boolean {
-  return form.time.trim() !== '' && form.endTime.trim() !== '';
+type Times = Pick<StopFormValues, 'time' | 'endTime'>;
+
+/**
+ * What's wrong with the times when Add stop / Save is tapped (shown under the times, nothing
+ * saved): one missing, or the end not after the start. Null when they're fine.
+ */
+export function timeProblem(form: Times): string | null {
+  const time = form.time.trim();
+  const end = form.endTime.trim();
+  if (!time || !end) return PICK_TIMES;
+  const a = parseClock(time);
+  const b = parseClock(end);
+  return a != null && b != null && b <= a ? END_BEFORE_START : null;
 }
 
 /** A finished time, "9:30" / "09.30" / "0930", not one still being typed ("1", "10:4"). */
 const COMPLETE_CLOCK = /^(\d{1,2}[:.]\d{2}|\d{4})$/;
 
-/** End not after start, once both times are fully typed: the red line under the times. */
-export function endNotAfterStart(form: Pick<StopFormValues, 'time' | 'endTime'>): boolean {
+/**
+ * End not after start, once both times are in: the red line under the times shows straight
+ * away (picked times are always whole; typed ones only once finished, so "1" on the way to
+ * "10:45" doesn't flash it).
+ */
+export function endNotAfterStart(form: Times): boolean {
   const time = form.time.trim();
   const end = form.endTime.trim();
   if (!COMPLETE_CLOCK.test(time) || !COMPLETE_CLOCK.test(end)) return false;
@@ -79,14 +94,13 @@ export function readStopForm(
   if (!name) return { ok: false, error: 'Give the stop a name.' };
   const date = dayDate(start, form.day);
   const time = form.time.trim();
-  if (!time) return { ok: false, error: 'Add a start time.' };
+  const end = form.endTime.trim();
+  if (!time || !end) return { ok: false, error: PICK_TIMES };
   const planned = atClock(date, time);
   if (!planned) return { ok: false, error: 'Time should look like 09:30.' };
-  const end = form.endTime.trim();
-  if (!end) return { ok: false, error: 'Add an end time.' };
   const plannedEnd = atClock(date, end);
   if (!plannedEnd) return { ok: false, error: 'End time should look like 10:45.' };
-  if (plannedEnd <= planned) return { ok: false, error: `${END_BEFORE_START}.` };
+  if (plannedEnd <= planned) return { ok: false, error: END_BEFORE_START };
   const priceText = form.price.replace(/rm/i, '').replace(/[~,\s]/g, '');
   const price = priceText ? Number(priceText) : 0;
   if (!Number.isFinite(price) || price < 0) return { ok: false, error: 'Price should be a number, like 16.' };

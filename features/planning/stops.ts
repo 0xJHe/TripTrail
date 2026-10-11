@@ -21,6 +21,15 @@ export function clockText(minutes: number): string {
   return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 }
 
+/** A saved "09:30" in the phone's own format: "09:30" (24-hour) or "9:30 AM" (12-hour). */
+export function clockForPhone(clock: string, uses24h: boolean): string {
+  const minutes = parseClock(clock);
+  if (minutes == null) return clock;
+  if (uses24h) return clockText(minutes);
+  const h = Math.floor(minutes / 60);
+  return `${h % 12 || 12}:${pad(minutes % 60)} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
 /**
  * A length of time for people to read: "40 min", or hours and minutes from 60 min on
  * ("1 h 15 min", "2 h"). `long` spells out short ones in full ("40 minutes", "1 minute").

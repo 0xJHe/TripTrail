@@ -1,5 +1,5 @@
-import { emptyForm, endNotAfterStart, readStopForm, timesFilled } from '@/features/planning/stopForm';
-import { atClock, clockOf, dayCount, draftsToStops, durationText, parseClock, priceLabel, sortStops, timeLabel } from '@/features/planning/stops';
+import { emptyForm, endNotAfterStart, readStopForm, timeProblem } from '@/features/planning/stopForm';
+import { atClock, clockForPhone, clockOf, dayCount, draftsToStops, durationText, parseClock, priceLabel, sortStops, timeLabel } from '@/features/planning/stops';
 import { sampleItinerary } from '@/lib/ai';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
@@ -99,22 +99,25 @@ describe('stop form', () => {
   it('says what is wrong in plain words', () => {
     expect(readStopForm({ ...form, name: ' ' }, '2026-10-12')).toEqual({ ok: false, error: 'Give the stop a name.' });
     expect(readStopForm({ ...form, time: 'noon' }, '2026-10-12')).toEqual({ ok: false, error: 'Time should look like 09:30.' });
-    expect(readStopForm({ ...form, endTime: '05:00' }, '2026-10-12')).toEqual({ ok: false, error: 'End time must be after the start time.' });
+    expect(readStopForm({ ...form, endTime: '05:00' }, '2026-10-12')).toEqual({ ok: false, error: 'End time must be after the start time' });
     expect(readStopForm({ ...form, price: 'abc' }, '2026-10-12')).toEqual({ ok: false, error: 'Price should be a number, like 16.' });
   });
 
   it.each(['place', 'flight', 'hotel'] as const)('needs both times for a %s, end after start', (kind) => {
     const f = { ...form, kind };
-    expect(readStopForm({ ...f, time: ' ' }, '2026-10-12')).toEqual({ ok: false, error: 'Add a start time.' });
-    expect(readStopForm({ ...f, endTime: '' }, '2026-10-12')).toEqual({ ok: false, error: 'Add an end time.' });
-    expect(readStopForm({ ...f, endTime: '6:50' }, '2026-10-12')).toEqual({ ok: false, error: 'End time must be after the start time.' });
+    expect(readStopForm({ ...f, time: ' ' }, '2026-10-12')).toEqual({ ok: false, error: 'Please pick a start and end time' });
+    expect(readStopForm({ ...f, endTime: '' }, '2026-10-12')).toEqual({ ok: false, error: 'Please pick a start and end time' });
+    expect(readStopForm({ ...f, endTime: '6:50' }, '2026-10-12')).toEqual({ ok: false, error: 'End time must be after the start time' });
     expect(readStopForm(f, '2026-10-12').ok).toBe(true);
   });
 
-  it('keeps Add / Save off until both times are filled in', () => {
-    expect(timesFilled({ time: '09:30', endTime: '10:45' })).toBe(true);
-    expect(timesFilled({ time: '09:30', endTime: ' ' })).toBe(false);
-    expect(timesFilled({ time: '', endTime: '10:45' })).toBe(false);
+  it('never saves without both times, and says so under the times', () => {
+    expect(timeProblem({ time: '', endTime: '' })).toBe('Please pick a start and end time');
+    expect(timeProblem({ time: '09:30', endTime: ' ' })).toBe('Please pick a start and end time');
+    expect(timeProblem({ time: '', endTime: '10:45' })).toBe('Please pick a start and end time');
+    expect(timeProblem({ time: '09:30', endTime: '09:30' })).toBe('End time must be after the start time');
+    expect(timeProblem({ time: '18:00', endTime: '09:15' })).toBe('End time must be after the start time');
+    expect(timeProblem({ time: '09:30', endTime: '10:45' })).toBeNull();
   });
 
   it('shows the red line only once both times are fully typed and end is not after start', () => {
@@ -143,5 +146,16 @@ describe('durationText', () => {
     expect(durationText(40, true)).toBe('40 minutes');
     expect(durationText(1, true)).toBe('1 minute');
     expect(durationText(75, true)).toBe('1 h 15 min');
+  });
+});
+
+describe('clockForPhone', () => {
+  it('shows a saved time the phone way, 24-hour or 12-hour', () => {
+    expect(clockForPhone('09:30', true)).toBe('09:30');
+    expect(clockForPhone('18:05', true)).toBe('18:05');
+    expect(clockForPhone('09:30', false)).toBe('9:30 AM');
+    expect(clockForPhone('18:05', false)).toBe('6:05 PM');
+    expect(clockForPhone('00:15', false)).toBe('12:15 AM');
+    expect(clockForPhone('12:00', false)).toBe('12:00 PM');
   });
 });

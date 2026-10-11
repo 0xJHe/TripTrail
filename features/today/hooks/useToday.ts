@@ -9,7 +9,7 @@ import { useCurrentTrip } from '@/features/trip/store';
 import { now as clockNow, useNow } from '@/lib/clock';
 import { useDemoRoute, useGroupLocation } from '@/lib/location';
 import { useLocationAccess } from '../permission';
-import { todayView } from '../todayPlan';
+import { directionsUrl, justLeftStop, lastLeftStop, todayView, travelModeTo } from '../todayPlan';
 import { useEarlyAlert } from './useEarlyAlert';
 import { useLateAlert } from './useLateAlert';
 import { useRainAlert } from './useRainAlert';
@@ -47,19 +47,26 @@ export function useToday() {
   const early = useEarlyAlert(tripId, day?.next ?? null, dayStops);
   const rain = useRainAlert(tripId, day?.now ?? null, day?.next ?? null);
   const spend = useSpendCheck(tripId, dayStops, plan.members.length);
-  // Running early (screen 8): the navy block shows the stop they just left, Next the one they're heading to.
-  // Spend check (screen 9) the same, for the stop it asks about, unless a running-late card is up.
-  const leftStop = day && !day.now
-    ? early.alert
-      ? (dayStops.find((s) => s.id === early.alert!.left_stop_id) ?? null)
-      : !late.alert
-        ? spend.stop
-        : null
+  // After leaving a stop the navy block says "Just left [stop]" (screens 8, 9), Next the one they're
+  // heading to, until the spend check and any running-early / late card are answered.
+  const leftStop = day
+    ? justLeftStop({
+        dayStops,
+        now: time.getTime(),
+        atStop: day.now != null,
+        spendStop: spend.stop,
+        earlyLeftId: early.alert ? early.alert.left_stop_id : undefined,
+        late: late.alert != null,
+      })
     : null;
-  // Otherwise, between stops the navy block shows where they're heading, so Next is the one after it.
+  // Then, until they arrive, "On the way to [next stop]" (with Directions), so Next is the one after it.
   const heading = day && !day.now && !leftStop ? day.next : null;
   const upNext = day ? (day.now || leftStop ? day.next : day.after) : null;
   const weather = useWeather(tripId, day?.now ?? leftStop ?? heading, upNext);
+  // Directions start from this phone (else the group), or the stop left last before any reading.
+  const lastLeft = lastLeftStop(dayStops, time.getTime());
+  const from = location?.me ?? location?.center ?? (lastLeft?.lat != null && lastLeft.lng != null ? { lat: lastLeft.lat, lng: lastLeft.lng } : null);
+  const directionsTo = (stop: Stop) => directionsUrl(stop, travelModeTo(from, stop));
 
   /** "We're done here": the stop is finished now, without waiting for the 3 minutes away. */
   const doneHere = useCallback(
@@ -106,5 +113,7 @@ export function useToday() {
     allowLocation,
     doneHere,
     leaving,
+    /** Google Maps directions to a stop: walking under ~2 km, else driving (opens the app, no API call). */
+    directionsTo,
   };
 }

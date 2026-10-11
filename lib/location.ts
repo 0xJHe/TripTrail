@@ -38,7 +38,7 @@ export interface GroupLocation {
 
 // ---------- Demo route ----------
 
-export type DemoEventKind = 'start' | 'arrive' | 'leave' | 'late' | 'early' | 'rain' | 'far' | 'rejoin';
+export type DemoEventKind = 'start' | 'arrive' | 'leave' | 'travel' | 'late' | 'early' | 'rain' | 'far' | 'rejoin';
 
 export interface DemoEvent {
   at: number;

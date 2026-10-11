@@ -16,6 +16,7 @@ const EVENT_ICON: Record<DemoEventKind, { icon: IconName; color: string }> = {
   start: { icon: 'flag', color: colors.white },
   arrive: { icon: 'location', color: colors.teal },
   leave: { icon: 'walk', color: colors.textOnNavy },
+  travel: { icon: 'navigate', color: colors.textOnNavy },
   late: { icon: 'alert-circle', color: colors.red },
   early: { icon: 'checkmark-circle', color: colors.green },
   rain: { icon: 'rainy', color: colors.blue },

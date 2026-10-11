@@ -2,6 +2,7 @@ import { daysBetween, todayISO, type ISODate } from '@/features/planning/dates';
 import { dayDate, durationText } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import type { TripStage } from '@/features/trip/types';
+import { haversineMeters, type LatLng } from '@/lib/distance';
 import { currentStop } from './arrival';
 import type { TodayView } from './types';
 
@@ -73,11 +74,60 @@ export function todayView({ stage, start, days, stops, now, day: openDay }: Toda
   };
 }
 
+type LeftStop = Pick<Stop, 'id' | 'status' | 'left_at'>;
+
+/** The stop left most recently today, up to now (lib/clock time). */
+export function lastLeftStop<T extends LeftStop>(dayStops: T[], now: number): T | null {
+  let last: T | null = null;
+  for (const s of dayStops) {
+    if (s.status !== 'done' || !s.left_at || Date.parse(s.left_at) > now) continue;
+    if (!last || Date.parse(s.left_at) > Date.parse(last.left_at!)) last = s;
+  }
+  return last;
+}
+
+/**
+ * Between stops, the navy block says "Just left [stop]" while something about leaving it is
+ * still to answer: the spend check, or an open running-early / running-late card. Once all are
+ * answered or dismissed it's null, and the block says "On the way to [next stop]".
+ */
+export function justLeftStop<T extends LeftStop>(input: {
+  dayStops: T[];
+  now: number;
+  /** The group is at a stop (the normal "Now" block). */
+  atStop: boolean;
+  /** The stop the spend check asks about, until answered. */
+  spendStop: T | null;
+  /** An open early card: the stop it says they left (null if it doesn't say). undefined = no card. */
+  earlyLeftId?: string | null;
+  /** A running-late card is open. */
+  late: boolean;
+}): T | null {
+  const { dayStops, now, atStop, spendStop, earlyLeftId, late } = input;
+  if (atStop) return null;
+  if (earlyLeftId !== undefined) {
+    return dayStops.find((s) => s.id === earlyLeftId) ?? spendStop ?? lastLeftStop(dayStops, now);
+  }
+  if (spendStop) return spendStop;
+  return late ? lastLeftStop(dayStops, now) : null;
+}
+
 /** Google Maps directions link to a stop (opens the Maps app; no API call). */
-export function directionsUrl(stop: Pick<Stop, 'lat' | 'lng' | 'name' | 'address'>): string {
+export function directionsUrl(stop: Pick<Stop, 'lat' | 'lng' | 'name' | 'address'>, mode?: TravelMode | null): string {
   const destination =
     stop.lat != null && stop.lng != null ? `${stop.lat},${stop.lng}` : [stop.name, stop.address].filter(Boolean).join(', ');
-  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
+  return mode ? `${url}&travelmode=${mode}` : url;
+}
+
+export type TravelMode = 'walking' | 'driving';
+/** Up to this far (straight line), directions are for walking; further, driving. */
+export const WALK_UP_TO_M = 2000;
+
+/** Walking under ~2 km from `from` to the stop, else driving; null when either place is unknown (Maps picks). */
+export function travelModeTo(from: LatLng | null, stop: Pick<Stop, 'lat' | 'lng'>): TravelMode | null {
+  if (!from || stop.lat == null || stop.lng == null) return null;
+  return haversineMeters(from, { lat: stop.lat, lng: stop.lng }) < WALK_UP_TO_M ? 'walking' : 'driving';
 }
 
 const WEEKDAYS =['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

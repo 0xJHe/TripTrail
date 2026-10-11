@@ -12,7 +12,7 @@ type NowCardProps =
   /** The group is at this stop. */
   | { kind: 'at'; stop: Stop; weather: WeatherText | null; onDone: () => void; onPin: () => void; leaving: boolean }
   /** Between stops: on the way to this one. */
-  | { kind: 'heading'; stop: Stop; weather: WeatherText | null; onPin: () => void }
+  | { kind: 'heading'; stop: Stop; weather: WeatherText | null; onPin: () => void; onDirections: () => void }
   /** Just left this stop, with time to spare before the next (running early, prototype screen 8). */
   | { kind: 'left'; stop: Stop; weather: WeatherText | null; onPin: () => void }
   /** Every stop of the day is behind them. */
@@ -83,6 +83,11 @@ function StopBody(props: Extract<NowCardProps, { stop: Stop }>) {
             <Pill label="We're done here" onPress={props.onDone} busy={props.leaving} />
             <Pill label="📍 Pin spot" onPress={props.onPin} ghost />
           </>
+        ) : props.kind === 'heading' ? (
+          <>
+            <Pill label="🧭 Directions" onPress={props.onDirections} ghost even />
+            <Pill label="📍 Pin spot" onPress={props.onPin} ghost even />
+          </>
         ) : (
           <Pill label="📍 Pin spot" onPress={props.onPin} ghost />
         )}
@@ -91,14 +96,27 @@ function StopBody(props: Extract<NowCardProps, { stop: Stop }>) {
   );
 }
 
-function Pill({ label, onPress, busy, ghost }: { label: string; onPress: () => void; busy?: boolean; ghost?: boolean }) {
+function Pill({
+  label,
+  onPress,
+  busy,
+  ghost,
+  even,
+}: {
+  label: string;
+  onPress: () => void;
+  busy?: boolean;
+  ghost?: boolean;
+  /** Share the row equally with the pill beside it. */
+  even?: boolean;
+}) {
   return (
     <Pressable
       onPress={busy ? undefined : onPress}
       accessibilityRole="button"
-      accessibilityLabel={label.replace('📍 ', '')}
+      accessibilityLabel={label.replace(/^(📍|🧭) /, '')}
       accessibilityState={{ busy: !!busy }}
-      style={({ pressed }) => [styles.pill, ghost && styles.ghost, pressed && { opacity: 0.85 }]}>
+      style={({ pressed }) => [styles.pill, ghost && styles.ghost, even && styles.even, pressed && { opacity: 0.85 }]}>
       {busy ? <ActivityIndicator color={colors.white} size="small" /> : null}
       <Txt style={styles.pillText} color={colors.white}>
         {label}
@@ -135,5 +153,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.teal,
   },
   ghost: { backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
+  even: { flex: 1, justifyContent: 'center' },
   pillText: { fontFamily: fontFamily.bold, fontSize: 12.5, lineHeight: 16 },
 });

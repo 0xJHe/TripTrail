@@ -155,6 +155,16 @@ describe('buildDemoRoute', () => {
     }
   });
 
+  it('puts "On the way to [next]" between every leave and the next arrival', () => {
+    const kinds = route.events
+      .filter((e) => ['arrive', 'leave', 'early', 'travel'].includes(e.kind))
+      .map((e) => (e.kind === 'early' ? 'leave' : e.kind));
+    expect(kinds).toEqual(day1.flatMap((_, i) => (i === 0 ? ['arrive', 'leave'] : ['travel', 'arrive', 'leave'])));
+    for (const e of route.events.filter((x) => x.kind === 'travel')) {
+      expect(e.title).toBe(`On the way to ${stopOf(e.stopId).name}`);
+    }
+  });
+
   it("reaches the end of the day: the group walks off after the last stop, away from the other stops", () => {
     const last = day1[day1.length - 1];
     const leave = route.events.filter((e) => e.kind === 'leave').pop()!;

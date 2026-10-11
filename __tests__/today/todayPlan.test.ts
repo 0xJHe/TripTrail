@@ -1,5 +1,14 @@
 import type { Stop } from '@/features/planning/types';
-import { directionsUrl, longDate, paceLabel, todayView, tripDayOn } from '@/features/today/todayPlan';
+import {
+  directionsUrl,
+  justLeftStop,
+  lastLeftStop,
+  longDate,
+  paceLabel,
+  todayView,
+  travelModeTo,
+  tripDayOn,
+} from '@/features/today/todayPlan';
 
 const at = (day: number, h: number, m = 0) => new Date(2026, 9, 11 + day, h, m).toISOString();
 const START = '2026-10-12';
@@ -117,6 +126,52 @@ describe('helpers', () => {
     expect(directionsUrl({ lat: null, lng: null, name: 'Kek Lok Si', address: 'Air Itam' })).toContain(
       'destination=Kek%20Lok%20Si%2C%20Air%20Itam',
     );
+  });
+
+  it('directions walk under ~2 km and drive further, and let Maps pick when the start is unknown', () => {
+    const komtar = { lat: 5.4145, lng: 100.3292 };
+    const murals = { lat: 5.4152, lng: 100.3376, name: 'Armenian Street', address: null }; // ~0.9 km
+    const hill = { lat: 5.4249, lng: 100.269, name: 'Penang Hill', address: null }; // ~6.8 km
+    expect(travelModeTo(komtar, murals)).toBe('walking');
+    expect(travelModeTo(komtar, hill)).toBe('driving');
+    expect(travelModeTo(null, hill)).toBeNull();
+    expect(directionsUrl(murals, travelModeTo(komtar, murals))).toBe(
+      'https://www.google.com/maps/dir/?api=1&destination=5.4152%2C100.3376&travelmode=walking',
+    );
+    expect(directionsUrl(hill, 'driving')).toMatch(/&travelmode=driving$/);
+  });
+});
+
+describe('justLeftStop: "Just left" until everything about leaving is answered, then "On the way"', () => {
+  const t = (h: number, m = 0) => Date.parse(at(1, h, m));
+  const a = stop(1, 'Cafe', 9, { status: 'done', arrived_at: at(1, 9), left_at: at(1, 9, 50) });
+  const b = stop(1, 'Hill', 11, { status: 'done', arrived_at: at(1, 11), left_at: at(1, 11, 40) });
+  const c = stop(1, 'Hawkers', 13);
+  const dayStops = [a, b, c];
+  const base = { dayStops, now: t(11, 45), atStop: false, spendStop: null, late: false };
+
+  it('shows the stop the spend check asks about', () => {
+    expect(justLeftStop({ ...base, spendStop: b })).toBe(b);
+  });
+
+  it('shows the stop an open early card left, even after the spend check is answered', () => {
+    expect(justLeftStop({ ...base, earlyLeftId: b.id })).toBe(b);
+    expect(justLeftStop({ ...base, earlyLeftId: null })).toBe(b);
+  });
+
+  it('keeps showing it while a running-late card is open (the stop left last)', () => {
+    expect(justLeftStop({ ...base, late: true })).toBe(b);
+  });
+
+  it('is null once all are answered (On the way), and at a stop', () => {
+    expect(justLeftStop(base)).toBeNull();
+    expect(justLeftStop({ ...base, atStop: true, spendStop: b, late: true })).toBeNull();
+  });
+
+  it('lastLeftStop ignores leaves after now (Demo mode Reset)', () => {
+    expect(lastLeftStop(dayStops, t(11, 45))).toBe(b);
+    expect(lastLeftStop(dayStops, t(10))).toBe(a);
+    expect(lastLeftStop(dayStops, t(9))).toBeNull();
   });
 });
 

@@ -1,5 +1,6 @@
 import { durationText, sortStops } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
+import { LEAVE_AFTER_MS, LEAVE_M } from '@/features/today/arrival';
 import { haversineMeters, offsetMeters, type LatLng } from '@/lib/distance';
 import type { DemoEvent, DemoMemberTrack, DemoRoute } from '@/lib/location';
 import { CHECK_BEFORE_MIN, EARLY_AHEAD_MIN, EARLY_SPARE_MIN, estimateMinutes, spareMinutes } from '@/supabase/functions/_shared/eta';
@@ -396,6 +397,16 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
         : { at: leave[i], kind: 'leave', stopId: x.id, title: `Left ${x.name}${spend}` },
     );
   });
+  // Between stops: "On the way to [next]" once the leave has been noticed (150 m out for
+  // 3 min), halfway there at the earliest, so Next event shows the group travelling before it
+  // arrives. Stops too close for the leave to be noticed on the way get none.
+  for (let i = 0; i < n - 1; i++) {
+    const away = firstAway(group, at[i], leave[i], arrive[i + 1]);
+    if (away == null) continue;
+    const t = Math.max(away + LEAVE_AFTER_MS + MIN, Math.round((leave[i] + arrive[i + 1]) / 2 / MIN) * MIN);
+    if (t >= arrive[i + 1] - MIN) continue;
+    events.push({ at: t, kind: 'travel', stopId: s[i + 1].id, title: `On the way to ${s[i + 1].name}` });
+  }
   const outdoorNote = s[rain].is_outdoor ? ' (outdoor stop)' : '';
   events.push(
     { at: lateAt, kind: 'late', stopId: s[late].id, title: `Running late for ${s[late].name}` },
@@ -422,4 +433,26 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
     events,
     nextDayStartsAt: nextDay?.startsAt ?? null,
   };
+}
+
+/** The group's position at t on its keyframes (sorted by t, clamped at the ends). */
+function groupAt(group: { t: number; lat: number; lng: number }[], t: number): LatLng {
+  if (t <= group[0].t) return group[0];
+  for (let i = 1; i < group.length; i++) {
+    const a = group[i - 1];
+    const b = group[i];
+    if (t <= b.t) {
+      const f = b.t === a.t ? 1 : (t - a.t) / (b.t - a.t);
+      return { lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f };
+    }
+  }
+  return group[group.length - 1];
+}
+
+/** When the group first gets more than 150 m from `stop` between from and to (30 s steps), or null. */
+function firstAway(group: { t: number; lat: number; lng: number }[], stop: LatLng, from: number, to: number): number | null {
+  for (let t = from; t <= to; t += 30_000) {
+    if (haversineMeters(groupAt(group, t), stop) > LEAVE_M) return t;
+  }
+  return null;
 }

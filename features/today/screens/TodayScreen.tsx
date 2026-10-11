@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
@@ -89,7 +89,7 @@ export function TodayScreen() {
   // The stop the spend check asks about moves to Done once answered.
   const doneList = spend.stop ? done.filter((s) => s.id !== spend.stop!.id) : done;
   const tip = now?.tip && hiddenTip !== now.id ? now.tip : null;
-  // The card is for view.next: the Next stop when at a stop, the navy block's stop when on the way.
+  // The card is for view.next: the Next stop when at (or just left) a stop, the navy block's stop when on the way.
   const lateFor = today.late.alert ? view.next : null;
   // Running early is only ever for a stop without a late card (late wins), so never both.
   const earlyFor = !lateFor && today.early.alert ? view.next : null;
@@ -119,7 +119,13 @@ export function TodayScreen() {
         ) : leftStop ? (
           <NowCard kind="left" stop={leftStop} weather={today.weather.now} onPin={() => router.push('/pin')} />
         ) : heading ? (
-          <NowCard kind="heading" stop={heading} weather={today.weather.now} onPin={() => router.push('/pin')} />
+          <NowCard
+            kind="heading"
+            stop={heading}
+            weather={today.weather.now}
+            onPin={() => router.push('/pin')}
+            onDirections={() => Linking.openURL(today.directionsTo(heading)).catch(() => {})}
+          />
         ) : asking ? (
           <DayEndCard end={dayEnd} />
         ) : (
@@ -127,14 +133,14 @@ export function TodayScreen() {
         )}
 
         {lateFor ? (
-          <LateCard late={today.late} stop={lateFor} time={today.time} next={now ? { weather: today.weather.next } : null} />
+          <LateCard late={today.late} stop={lateFor} time={today.time} next={now || leftStop ? { weather: today.weather.next } : null} />
         ) : null}
         <RainCard rain={today.rain} />
         {earlyFor ? <EarlyCard early={today.early} stop={earlyFor} left={leftStop} /> : null}
         {spend.stop ? <SpendCheckCard check={spend} named={spend.stop.id !== (now ?? leftStop)?.id} /> : null}
         {asking && (now || leftStop || heading) ? <DayEndCard end={dayEnd} /> : null}
 
-        {upNext && !(lateFor && now) ? (
+        {upNext && !(lateFor && (now || leftStop)) ? (
           <>
             <Txt variant="lbl">Next</Txt>
             <NextCard stop={upNext} weather={today.weather.next} />

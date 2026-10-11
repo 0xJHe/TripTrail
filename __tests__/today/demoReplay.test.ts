@@ -56,6 +56,18 @@ describe('Demo mode replay through the arrive / leave rules', () => {
     }
   });
 
+  it('a "Next event" jump to "On the way to [next]" lands after the leave is noticed, before the arrival', () => {
+    const travel = route.events.filter((e) => e.kind === 'travel');
+    expect(travel.map((e) => e.stopId)).toEqual(plan.slice(1).map((s) => s.id));
+    for (const e of travel) {
+      const i = plan.findIndex((s) => s.id === e.stopId);
+      const out = replay(route.startsAt - 30_000, e.at);
+      expect(out.changes.find((c) => c.stopId === plan[i - 1].id)?.status).toBe('done');
+      expect(out.changes.find((c) => c.stopId === e.stopId)).toBeUndefined();
+      expect(e.title).toBe(`On the way to ${plan[i].name}`);
+    }
+  });
+
   it('after a "Next event" jump to an arrival, the next reading at the paused time confirms it', () => {
     const arrive = route.events.find((e) => e.kind === 'arrive' && e.stopId === 's1')!.at;
     const jump = replay(route.startsAt - 30_000, arrive);

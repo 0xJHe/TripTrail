@@ -103,7 +103,6 @@ export function useDayRecap(day: number) {
     dateLine: date ? recapDateLine(day, plan.days, longDate(date)) : '',
     /** "Day 1 done"; "Your day" on a one-day trip. */
     title: recapTitle(day, plan.days),
-    trail,
     hasPositions: fixes.length > 1,
     stops: visited.map((s) => ({ id: s.id, name: s.name, category: s.category, lat: s.lat!, lng: s.lng! })),
     meters: trailMeters(trail),

@@ -10,12 +10,9 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 );
 
 const HOME = { lat: 5.4141, lng: 100.3288 };
-const T0 = Date.parse('2026-10-12T08:00:00+08:00');
 
 function recap(over: Partial<DayRecap> = {}): DayRecap {
-  const trail = Array.from({ length: 20 }, (_, i) => ({ ...offsetMeters(HOME, i * 300, i * 120), at: T0 + i * 30 * 60_000 }));
   return {
-    trail,
     hasPositions: true,
     stops: [
       { id: 'a', name: 'Muntri Street', category: 'hotel', ...HOME },
@@ -46,10 +43,9 @@ describe('RecapCard', () => {
     expect(screen.getByText('🛕')).toBeTruthy();
   });
 
-  it('leaves the weather out when there is none, and says when no route was saved', async () => {
-    await render(<RecapCard recap={recap({ weather: null, hasPositions: false, trail: [] })} width={300} />);
+  it('leaves the weather out when there is none, and shows – for km and hours without positions', async () => {
+    await render(<RecapCard recap={recap({ weather: null, hasPositions: false })} width={300} />);
     expect(screen.queryByText('31°')).toBeNull();
-    expect(screen.getByText(/No route saved for this day/)).toBeTruthy();
     expect(screen.getAllByText('–')).toHaveLength(2);
   });
 });

@@ -1,39 +1,72 @@
 import type { StopCategory } from '@/lib/ai';
-import type { LatLng } from '@/lib/distance';
-import { curvePath, projector, simplify, stopEmoji, type Box, type XY } from './trail';
+import { stopEmoji } from './trail';
 
 /**
- * Where everything goes on the day recap card (screen 15), on a 300-wide 9:16 canvas: the trail
- * and markers fitted inside the card with padding, markers kept apart, and every stop's full
- * name in a pill. A pill sits by its marker when there is room; around a cluster it moves into
- * free space (beside, above or below, on a shared row grid so they stack neatly) with a thin
- * line to its marker. Pills never cover each other, a marker, a line or the trail, and stay
- * inside the card. If they can't all fit, the markers get a narrower area (room at the sides)
- * and the font gets a little smaller. Names over 32 characters wrap onto two lines.
+ * Where everything goes on the day recap card (screen 15), on a 300-wide 9:16 canvas. The trail
+ * is always the prototype's line (same shape, every trip); the day's visited stops sit along it
+ * in visit order, evenly spaced, the first at its start and the last at its end. Each stop's
+ * full name goes in a pill on alternating sides of the line; pills never cover each other, a
+ * marker or the line, and stay inside the card (smaller font only if they can't all fit).
  */
 
 export const CARD_W = 300;
 export const CARD_H = (CARD_W * 16) / 9;
+
+export interface XY {
+  x: number;
+  y: number;
+}
+
+/** Prototype screen 15's trail, in card coordinates (the card is the prototype's 300 wide). */
+export const TRAIL_PATH = 'M50 395 C 65 330, 80 260, 120 220 S 190 250, 195 300 S 230 372, 245 340';
+/** The same path as plain cubic Béziers (each "S" with its first control point reflected). */
+const SEGMENTS: [XY, XY, XY, XY][] = [
+  [{ x: 50, y: 395 }, { x: 65, y: 330 }, { x: 80, y: 260 }, { x: 120, y: 220 }],
+  [{ x: 120, y: 220 }, { x: 160, y: 180 }, { x: 190, y: 250 }, { x: 195, y: 300 }],
+  [{ x: 195, y: 300 }, { x: 200, y: 350 }, { x: 230, y: 372 }, { x: 245, y: 340 }],
+];
+/** Left and right ends of the line, for its left-to-right mint → gold gradient (as the prototype). */
+export const TRAIL_X = { from: 50, to: 245 };
+
+/** Marker radius when there's room; smaller when many stops share the line. */
 export const MARKER_R = 13;
+const MIN_MARKER_R = 8;
 /** Pills keep this far from the card's left / right edges. */
 export const EDGE = 10;
-/** Top of the map area under a one-line / two-line trip name. */
-const MAP_TOP_1 = 86;
-const MAP_TOP_2 = 118;
+/** Top of the area pills may use (under the date and a two-line trip name). */
+export const LABEL_TOP = 112;
 /** Top of the stats row. */
 export const STATS_TOP = 410;
 /** Names longer than this wrap onto two lines. */
 export const WRAP_AT = 32;
-/** Space between two markers' edges (wider when a crowded cluster needs room for its lines). */
-const MARKER_GAP = 6;
-const WIDE_GAP = 16;
+/** On a crowded day (when one-line pills can't all fit), names longer than this wrap too. */
+export const CROWDED_WRAP_AT = 16;
 /** Space between a pill and anything else. */
 const PAD = 3;
+/** The line is 6 px wide; pills keep clear of its edges too. */
+const LINE_CLEAR = 3 + PAD;
 const PILL_PAD_X = 6;
 const PILL_PAD_Y = 2.5;
-const FONTS = [9.5, 9, 8.5, 8];
+/**
+ * Pill styles tried in turn until every pill fits: one line at 9.5 → 8 px, then (crowded days)
+ * two lines from 16 characters at 9 → 7 px, then smaller still.
+ */
+const STYLES: { font: number; wrapAt: number }[] = [
+  ...[9.5, 9, 8.5, 8].map((font) => ({ font, wrapAt: WRAP_AT })),
+  ...[9, 8.5, 8, 7.5, 7].map((font) => ({ font, wrapAt: CROWDED_WRAP_AT })),
+  ...[6.5, 6].map((font) => ({ font, wrapAt: CROWDED_WRAP_AT })),
+];
+/** Pills taking more than this share of the label area can't all fit around the line: skip that style. */
+const MAX_FILL = 0.4;
+/** Placement attempts before giving up on a font (keeps the card instant). */
+const BUDGET = 1500;
+/** First, quicker look at every style (most that fit are found within this). */
+const QUICK_BUDGET = 150;
+/** Spots kept per pill, nearest first: by its marker, and elsewhere in free space. */
+const NEAR_SPOTS = 30;
+const FAR_SPOTS = 40;
 
-export interface CardStop extends LatLng {
+export interface CardStop {
   id: string;
   name: string;
   category: StopCategory | null;
@@ -43,8 +76,7 @@ export interface CardMarker extends XY {
   id: string;
   name: string;
   emoji: string;
-  /** Where the stop really is, when the marker was moved off it to keep markers apart. */
-  spot: XY | null;
+  r: number;
 }
 
 export interface Segment {
@@ -69,15 +101,6 @@ export interface CardLabel {
 }
 
 export interface CardLayout {
-  /** Top of the map area (under the trip name). */
-  mapTop: number;
-  /** Where the trail and the markers are fitted. */
-  mapBox: Box;
-  path: string;
-  /** The trail's points on the card (the path is a smooth curve through them). */
-  line: XY[];
-  /** Start and end of the drawn line (for its colour gradient); null without a line. */
-  ends: { from: XY; to: XY } | null;
   markers: CardMarker[];
   labels: CardLabel[];
 }
@@ -93,10 +116,57 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 const hits = (a: Rect, b: Rect, pad = 0) =>
   a.x < b.x + b.w + pad && b.x < a.x + a.w + pad && a.y < b.y + b.h + pad && b.y < a.y + a.h + pad;
 
-/** Name as one line, or two (split at the space nearest the middle) when over 32 characters. */
-export function nameLines(name: string): string[] {
+// ---------- The line ----------
+
+const bez = (s: [XY, XY, XY, XY], t: number): XY => {
+  const u = 1 - t;
+  const [a, b, c, d] = s;
+  return {
+    x: u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x,
+    y: u * u * u * a.y + 3 * u * u * t * b.y + 3 * u * t * t * c.y + t * t * t * d.y,
+  };
+};
+
+/** The line as dense points with the distance along it. */
+const POINTS: (XY & { d: number })[] = (() => {
+  const out: (XY & { d: number })[] = [];
+  let d = 0;
+  for (const s of SEGMENTS) {
+    for (let k = out.length ? 1 : 0; k <= 200; k++) {
+      const p = bez(s, k / 200);
+      if (out.length) d += Math.hypot(p.x - out[out.length - 1].x, p.y - out[out.length - 1].y);
+      out.push({ ...p, d });
+    }
+  }
+  return out;
+})();
+export const TRAIL_LENGTH = POINTS[POINTS.length - 1].d;
+
+/** The point `d` px along the line, and the unit normal there (pointing left of the way the line runs). */
+export function pointAlong(d: number): XY & { nx: number; ny: number } {
+  const dist = clamp(d, 0, TRAIL_LENGTH);
+  let i = POINTS.findIndex((p) => p.d >= dist);
+  if (i <= 0) i = 1;
+  const a = POINTS[i - 1];
+  const b = POINTS[i];
+  const f = b.d === a.d ? 0 : (dist - a.d) / (b.d - a.d);
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, nx: (b.y - a.y) / len, ny: -(b.x - a.x) / len };
+}
+
+/** Distance along the line of each of n stops: evenly spaced, first at the start, last at the end (one stop: the middle). */
+export function stopDistances(n: number): number[] {
+  if (n <= 0) return [];
+  if (n === 1) return [TRAIL_LENGTH / 2];
+  return Array.from({ length: n }, (_, i) => (TRAIL_LENGTH * i) / (n - 1));
+}
+
+// ---------- Pills ----------
+
+/** Name as one line, or two (split at the space nearest the middle) when longer than wrapAt (32). */
+export function nameLines(name: string, wrapAt = WRAP_AT): string[] {
   const n = name.trim();
-  if (n.length <= WRAP_AT) return [n];
+  if (n.length <= wrapAt) return [n];
   const mid = n.length / 2;
   let best = -1;
   for (let i = 0; i < n.length; i++) if (n[i] === ' ' && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
@@ -107,8 +177,8 @@ export function nameLines(name: string): string[] {
 const textWidth = (s: string, font: number) => s.length * font * 0.6;
 
 /** Pill size for a name at a font size. */
-export function pillSize(name: string, font: number) {
-  const lines = nameLines(name);
+export function pillSize(name: string, font: number, wrapAt = WRAP_AT) {
+  const lines = nameLines(name, wrapAt);
   const lineHeight = Math.round(font * 1.3 * 10) / 10;
   return {
     lines,
@@ -116,82 +186,6 @@ export function pillSize(name: string, font: number) {
     w: Math.max(...lines.map((l) => textWidth(l, font))) + PILL_PAD_X * 2,
     h: lines.length * lineHeight + PILL_PAD_Y * 2,
   };
-}
-
-/** Pushes markers apart until no two are closer than `gap`, keeping them in the box. Same-spot markers fan out in a fixed direction. */
-export function spreadMarkers<T extends XY>(points: T[], box: Box, gap: number): T[] {
-  const p = points.map((q) => ({ ...q }));
-  const keepIn = (q: XY) => {
-    q.x = clamp(q.x, box.x, box.x + box.w);
-    q.y = clamp(q.y, box.y, box.y + box.h);
-  };
-  for (let round = 0; round < 80; round++) {
-    let moved = false;
-    for (let i = 0; i < p.length; i++) {
-      for (let j = i + 1; j < p.length; j++) {
-        let dx = p[j].x - p[i].x;
-        let dy = p[j].y - p[i].y;
-        let d = Math.hypot(dx, dy);
-        if (d >= gap - 0.01) continue;
-        if (d < 0.01) {
-          const a = (j * 2.4) % (2 * Math.PI);
-          dx = Math.cos(a);
-          dy = Math.sin(a);
-          d = 1;
-        }
-        const push = (gap - d) / 2 + 0.05;
-        p[i].x -= (dx / d) * push;
-        p[i].y -= (dy / d) * push;
-        p[j].x += (dx / d) * push;
-        p[j].y += (dy / d) * push;
-        keepIn(p[i]);
-        keepIn(p[j]);
-        moved = true;
-      }
-    }
-    if (!moved) break;
-  }
-  return p;
-}
-
-const CELL = 2;
-const COLS = Math.ceil(CARD_W / CELL) + 2;
-const ROWS = Math.ceil(CARD_H / CELL) + 2;
-
-/**
- * Which 2 px cells of the card the trail passes through, with running totals (a summed-area
- * table) so checking a whole pill takes a few steps.
- */
-export class TrailGrid {
-  private sum = new Int32Array((COLS + 1) * (ROWS + 1));
-  constructor(line: XY[]) {
-    const on = new Uint8Array(COLS * ROWS);
-    const mark = (p: XY) => {
-      const cx = clamp(Math.floor(p.x / CELL), 0, COLS - 1);
-      const cy = clamp(Math.floor(p.y / CELL), 0, ROWS - 1);
-      on[cy * COLS + cx] = 1;
-    };
-    if (line.length) mark(line[0]);
-    for (let i = 1; i < line.length; i++) {
-      const a = line[i - 1];
-      const b = line[i];
-      const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)));
-      for (let k = 1; k <= n; k++) mark({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
-    }
-    const W1 = COLS + 1;
-    for (let y = 0; y < ROWS; y++)
-      for (let x = 0; x < COLS; x++)
-        this.sum[(y + 1) * W1 + x + 1] = on[y * COLS + x] + this.sum[y * W1 + x + 1] + this.sum[(y + 1) * W1 + x] - this.sum[y * W1 + x];
-  }
-  /** The trail passes through the rectangle (grown by pad). */
-  hits(r: Rect, pad = 0): boolean {
-    const W1 = COLS + 1;
-    const x0 = clamp(Math.floor((r.x - pad) / CELL), 0, COLS);
-    const y0 = clamp(Math.floor((r.y - pad) / CELL), 0, ROWS);
-    const x1 = clamp(Math.ceil((r.x + r.w + pad) / CELL), 0, COLS);
-    const y1 = clamp(Math.ceil((r.y + r.h + pad) / CELL), 0, ROWS);
-    return this.sum[y1 * W1 + x1] - this.sum[y0 * W1 + x1] - this.sum[y1 * W1 + x0] + this.sum[y0 * W1 + x0] > 0;
-  }
 }
 
 const cross = (o: XY, a: XY, b: XY) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
@@ -202,6 +196,7 @@ function segmentsCross(s: Segment, t: Segment): boolean {
   const d = { x: t.x2, y: t.y2 };
   return cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0;
 }
+
 /** The segment passes through the (padded) rectangle's inside (Liang–Barsky clipping). */
 function segmentHitsRect(s: Segment, r: Rect, pad = 0): boolean {
   const dx = s.x2 - s.x1;
@@ -228,105 +223,162 @@ function segmentHitsRect(s: Segment, r: Rect, pad = 0): boolean {
 }
 
 /** Line from the marker's edge to the nearest point of the pill; null when the pill is right by the marker. */
-function leaderTo(m: XY, r: Rect): Segment | null {
+function leaderTo(m: CardMarker, r: Rect): Segment | null {
   const nx = clamp(m.x, r.x, r.x + r.w);
   const ny = clamp(m.y, r.y, r.y + r.h);
   const d = Math.hypot(nx - m.x, ny - m.y);
-  if (d <= MARKER_R + 6) return null;
-  return { x1: m.x + ((nx - m.x) / d) * MARKER_R, y1: m.y + ((ny - m.y) / d) * MARKER_R, x2: nx, y2: ny };
+  if (d <= m.r + 8) return null;
+  return { x1: m.x + ((nx - m.x) / d) * m.r, y1: m.y + ((ny - m.y) / d) * m.r, x2: nx, y2: ny };
 }
 
-interface Rules {
-  font: number;
-  avoidTrail: boolean;
-  avoidCrossing: boolean;
+/**
+ * Which 2 px cells of the card the line covers (grown by LINE_CLEAR), with running totals (a
+ * summed-area table): "does this pill touch the line?" is then four lookups. Built once.
+ */
+const CELL = 2;
+const COLS = Math.ceil(CARD_W / CELL) + 1;
+const ROWS = Math.ceil(CARD_H / CELL) + 1;
+const ON_LINE = new Uint8Array(COLS * ROWS);
+const LINE_SUM = new Int32Array((COLS + 1) * (ROWS + 1));
+(() => {
+  const grow = Math.ceil(LINE_CLEAR / CELL);
+  for (const p of POINTS) {
+    const cx = Math.floor(p.x / CELL);
+    const cy = Math.floor(p.y / CELL);
+    for (let dx = -grow; dx <= grow; dx++)
+      for (let dy = -grow; dy <= grow; dy++) {
+        const x = cx + dx;
+        const y = cy + dy;
+        if (x >= 0 && y >= 0 && x < COLS && y < ROWS) ON_LINE[y * COLS + x] = 1;
+      }
+  }
+  const W1 = COLS + 1;
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++)
+      LINE_SUM[(y + 1) * W1 + x + 1] = ON_LINE[y * COLS + x] + LINE_SUM[y * W1 + x + 1] + LINE_SUM[(y + 1) * W1 + x] - LINE_SUM[y * W1 + x];
+})();
+
+/** The pill touches the line (or comes within LINE_CLEAR of it). */
+function touchesLine(r: Rect): boolean {
+  const W1 = COLS + 1;
+  const x0 = clamp(Math.floor(r.x / CELL), 0, COLS);
+  const y0 = clamp(Math.floor(r.y / CELL), 0, ROWS);
+  const x1 = clamp(Math.ceil((r.x + r.w) / CELL), 0, COLS);
+  const y1 = clamp(Math.ceil((r.y + r.h) / CELL), 0, ROWS);
+  return LINE_SUM[y1 * W1 + x1] - LINE_SUM[y0 * W1 + x1] - LINE_SUM[y1 * W1 + x0] + LINE_SUM[y0 * W1 + x0] > 0;
 }
 
-/** Most spots kept per pill, nearest first (after the fixed obstacles are ruled out). */
-const MAX_SPOTS = 40;
-/** Placement attempts before giving up on these rules (keeps the card instant). */
-const BUDGET = 4000;
+/** A leader line runs over the trail (allowed, but busier). */
+function crossesTrail(s: Segment): boolean {
+  const len = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+  const n = Math.max(1, Math.ceil(len / 3));
+  for (let k = 0; k <= n; k++) {
+    const x = Math.floor((s.x1 + ((s.x2 - s.x1) * k) / n) / CELL);
+    const y = Math.floor((s.y1 + ((s.y2 - s.y1) * k) / n) / CELL);
+    if (x >= 0 && y >= 0 && x < COLS && y < ROWS && ON_LINE[y * COLS + x]) return true;
+  }
+  return false;
+}
+
 
 interface Spot {
   r: Rect;
   leader: Segment | null;
-  score: number;
+  /** The pill and its line together (a quick first test for clashes). */
+  box: Rect;
 }
 
-/** Every place a marker's pill could go, nearest first, without covering a marker, the trail or a moved-marker line. */
-function spotsFor(m: CardMarker, i: number, markers: CardMarker[], dots: Rect[], fixedLines: Segment[], trail: TrailGrid, area: Rect, rules: Rules) {
-  const size = pillSize(m.name, rules.font);
-  const row = size.h + PAD;
-  const near = MARKER_R + 4;
+function envelope(r: Rect, l: Segment | null): Rect {
+  if (!l) return r;
+  const x = Math.min(r.x, l.x1, l.x2);
+  const y = Math.min(r.y, l.y1, l.y2);
+  return { x, y, w: Math.max(r.x + r.w, l.x1, l.x2) - x, h: Math.max(r.y + r.h, l.y1, l.y2) - y };
+}
+
+const AREA: Rect = { x: EDGE, y: LABEL_TOP, w: CARD_W - 2 * EDGE, h: STATS_TOP - 4 - LABEL_TOP };
+
+/**
+ * Places for marker i's pill, best first: straight out from the line on its own side (even stops
+ * on one side, odd on the other), then a little further out or slid along the line, then the
+ * other side. None covers a marker or the line, and all are inside the card.
+ */
+function spotsFor(i: number, markers: CardMarker[], normals: XY[], font: number, wrapAt: number) {
+  const m = markers[i];
+  const size = pillSize(m.name, font, wrapAt);
+  const dots: Rect[] = markers.map((o) => ({ x: o.x - o.r, y: o.y - o.r, w: o.r * 2, h: o.r * 2 }));
+  const n = normals[i];
+  const tx = -n.y;
+  const ty = n.x;
+  const own = i % 2 === 0 ? 1 : -1;
+  const near: (Spot & { score: number })[] = [];
+  const far: (Spot & { score: number })[] = [];
+  let out = near;
   const seen = new Set<number>();
-  const out: Spot[] = [];
-  const add = (x: number, y: number, extra = 0) => {
-    const r = { x: clamp(x, area.x, area.x + area.w - size.w), y: clamp(y, area.y, area.y + area.h - size.h), w: size.w, h: size.h };
-    const k = Math.round(r.x) * 1000 + Math.round(r.y);
-    if (seen.has(k)) return;
-    seen.add(k);
+  const add = (cx: number, cy: number, extra: number) => {
+    const r = {
+      x: clamp(cx - size.w / 2, AREA.x, AREA.x + AREA.w - size.w),
+      y: clamp(cy - size.h / 2, AREA.y, AREA.y + AREA.h - size.h),
+      w: size.w,
+      h: size.h,
+    };
+    const key = Math.round(r.x) * 1000 + Math.round(r.y);
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (touchesLine(r)) return;
     if (dots.some((d) => hits(r, d, PAD))) return;
-    if (fixedLines.some((s) => segmentHitsRect(s, r, PAD))) return;
-    if (rules.avoidTrail && trail.hits(r, PAD)) return;
     const leader = leaderTo(m, r);
-    if (leader && dots.some((d, k2) => k2 !== i && segmentHitsRect(leader, d))) return;
+    if (leader && dots.some((d, k) => k !== i && segmentHitsRect(leader, d))) return;
     const nx = clamp(m.x, r.x, r.x + r.w);
     const ny = clamp(m.y, r.y, r.y + r.h);
-    out.push({ r, leader, score: Math.hypot(nx - m.x, ny - m.y) + extra });
+    // A line to the pill that crosses the trail is allowed, but looks busier.
+    const overTrail = leader && crossesTrail(leader) ? 40 : 0;
+    out.push({ r, leader, box: envelope(r, leader), score: Math.hypot(nx - m.x, ny - m.y) + extra + overTrail });
   };
-  // Right by the marker: above, below, right, left.
-  add(m.x - size.w / 2, m.y - near - size.h);
-  add(m.x - size.w / 2, m.y + near);
-  add(m.x + near, m.y - size.h / 2);
-  add(m.x - near - size.w, m.y - size.h / 2);
-  // Further out: beside the marker on a shared row grid (so a cluster's pills stack neatly), or above / below.
-  for (let k = 0; k <= 6; k++) {
-    for (let j = -9; j <= 9; j++) {
-      const y = area.y + Math.round((m.y - size.h / 2 - area.y) / row + j) * row;
-      add(m.x + near + k * 16, y, 2);
-      add(m.x - near - size.w - k * 16, y, 2);
+  // Straight out from the line on its own side, a little further out or slid along; then the other side.
+  for (const side of [own, -own]) {
+    const sx = n.x * side;
+    const sy = n.y * side;
+    // How far the pill's centre sits from its edge facing the marker, along this direction.
+    const reach = (Math.abs(sx) * size.w) / 2 + (Math.abs(sy) * size.h) / 2;
+    for (let away = 0; away <= 60; away += 6) {
+      for (const slide of [0, -10, 10, -22, 22, -36, 36]) {
+        add(
+          m.x + sx * (m.r + 5 + away + reach) + tx * slide,
+          m.y + sy * (m.r + 5 + away + reach) + ty * slide,
+          Math.abs(slide) * 0.3 + (side === own ? 0 : 25),
+        );
+      }
     }
   }
-  for (let k = 1; k <= 6; k++) {
-    for (const dx of [-0.5, -0.25, 0, 0.25, 0.5]) {
-      add(m.x - size.w / 2 + dx * size.w, m.y - near - size.h - k * row, 2);
-      add(m.x - size.w / 2 + dx * size.w, m.y + near + k * row, 2);
-    }
+  // Anywhere else that's free (e.g. the open space above the arch or inside the loop), with a line.
+  out = far;
+  const row = size.h + PAD;
+  for (let y = AREA.y; y + size.h <= AREA.y + AREA.h; y += row) {
+    for (let x = AREA.x; x + size.w <= AREA.x + AREA.w + 0.01; x += 14) add(x + size.w / 2, y + size.h / 2, 30);
+    add(AREA.x + AREA.w - size.w / 2, y + size.h / 2, 30);
   }
-  return { size, spots: out.sort((a, b) => a.score - b.score).slice(0, MAX_SPOTS) };
+  const best = (list: typeof near, k: number) => list.sort((a, b) => a.score - b.score).slice(0, k);
+  return { size, spots: [...best(near, NEAR_SPOTS), ...best(far, FAR_SPOTS)].sort((a, b) => a.score - b.score) };
 }
 
-/** Every spot of every pill for one marker area and font, and which pairs of spots clash. */
-interface SpotTable {
-  options: ReturnType<typeof spotsFor>[];
-  /** Flat list: owner marker and spot. */
-  all: { m: number; s: Spot }[];
-  /**
-   * How spot k clashes with every other spot (worked out the first time it's asked, as the search
-   * only tries a few): 1 = they overlap or a line runs through a pill; 2 = only their lines cross.
-   */
-  row: (k: number) => Uint8Array;
+/** 1 = the two spots overlap or a line runs through a pill; 2 = only their lines cross. */
+function clashOf(p: Spot, q: Spot): number {
+  if (!hits(p.box, q.box, PAD)) return 0;
+  if (hits(p.r, q.r, PAD) || (p.leader && segmentHitsRect(p.leader, q.r, PAD)) || (q.leader && segmentHitsRect(q.leader, p.r, PAD))) return 1;
+  return p.leader && q.leader && segmentsCross(p.leader, q.leader) ? 2 : 0;
 }
 
-function spotTable(markers: CardMarker[], trail: TrailGrid, area: Rect, rules: Rules): SpotTable {
-  const dots: Rect[] = markers.map((m) => ({ x: m.x - MARKER_R, y: m.y - MARKER_R, w: MARKER_R * 2, h: MARKER_R * 2 }));
-  // Lines from moved markers to their real spots.
-  const fixedLines: Segment[] = markers.flatMap((m) => (m.spot ? [{ x1: m.spot.x, y1: m.spot.y, x2: m.x, y2: m.y }] : []));
-  // Crowded markers first: if one has nowhere to go, stop (no need for the rest or the clash table).
-  const crowd = (m: CardMarker) => markers.filter((o) => o !== m && Math.hypot(o.x - m.x, o.y - m.y) < 70).length;
-  const order = markers.map((m, i) => ({ i, c: crowd(m) })).sort((a, b) => b.c - a.c || a.i - b.i);
-  const options: ReturnType<typeof spotsFor>[] = new Array(markers.length);
-  for (const { i } of order) {
-    options[i] = spotsFor(markers[i], i, markers, dots, fixedLines, trail, area, rules);
-    if (options[i].spots.length === 0) return { options: [options[i]], all: [], row: () => new Uint8Array(0) };
-  }
+/**
+ * One spot per pill so that none clash, or null. The pill with the fewest free spots goes next;
+ * when one has none left, earlier pills try their next spot (bounded, so it stays instant).
+ */
+type Options = ReturnType<typeof spotsFor>[];
+
+function placeLabels(markers: CardMarker[], options: Options, font: number, avoidCrossing: boolean, budget: number): CardLabel[] | null {
+  if (options.some((o) => o.spots.length === 0)) return null;
   const all = options.flatMap((o, m) => o.spots.map((s) => ({ m, s })));
   const n = all.length;
   const rows = new Map<number, Uint8Array>();
-  const clashOf = (p: Spot, q: Spot) => {
-    if (hits(p.r, q.r, PAD) || (p.leader && segmentHitsRect(p.leader, q.r, PAD)) || (q.leader && segmentHitsRect(q.leader, p.r, PAD))) return 1;
-    return p.leader && q.leader && segmentsCross(p.leader, q.leader) ? 2 : 0;
-  };
   const row = (k: number) => {
     let r = rows.get(k);
     if (!r) {
@@ -336,19 +388,7 @@ function spotTable(markers: CardMarker[], trail: TrailGrid, area: Rect, rules: R
     }
     return r;
   };
-  return { options, all, row };
-}
-
-/**
- * Picks one spot per pill so that no two clash, or returns null. The pill with the fewest free
- * spots goes next; when one has none left, earlier pills try their next spot (a bounded search
- * over the clash table, so it stays instant).
- */
-function placeLabels(markers: CardMarker[], table: SpotTable, rules: Rules): CardLabel[] | null {
-  const { options, all, row } = table;
-  if (options.some((o) => o.spots.length === 0)) return null;
-  const n = all.length;
-  const limit = rules.avoidCrossing ? 2 : 1;
+  const limit = avoidCrossing ? 2 : 1;
   const blocked = new Int16Array(n);
   const chosen = new Int32Array(markers.length).fill(-1);
   const byMarker = markers.map((_, m) => all.map((x, k) => (x.m === m ? k : -1)).filter((k) => k >= 0));
@@ -371,7 +411,7 @@ function placeLabels(markers: CardMarker[], table: SpotTable, rules: Rules): Car
     }
     const rest = left.filter((m) => m !== next);
     for (const k of free) {
-      if (++steps > BUDGET) return false;
+      if (++steps > budget) return false;
       chosen[next] = k;
       mark(k, 1);
       if (search(rest)) return true;
@@ -381,73 +421,43 @@ function placeLabels(markers: CardMarker[], table: SpotTable, rules: Rules): Car
     return false;
   };
   if (!search(markers.map((_, i) => i))) return null;
-
   return markers.map((m, i) => {
-    const s = all[chosen[i]].s;
+    const { r, leader } = all[chosen[i]].s;
     const size = options[i].size;
-    return { id: m.id, name: m.name, lines: size.lines, ...s.r, fontSize: rules.font, lineHeight: size.lineHeight, leader: s.leader };
+    return { id: m.id, name: m.name, lines: size.lines, ...r, fontSize: font, lineHeight: size.lineHeight, leader };
   });
 }
 
-function drawIn(trail: LatLng[], stops: CardStop[], box: Box, gap: number) {
-  const project = projector([...trail, ...stops], box);
-  const line = simplify(trail.map(project), 1.2);
-  const spots = stops.map((s) => project(s));
-  const markers = spreadMarkers(
-    stops.map((s, i) => ({ ...spots[i], id: s.id, name: s.name, emoji: stopEmoji(s), spot: null as XY | null })),
-    box,
-    MARKER_R * 2 + gap,
-  ).map((m, i) => (Math.hypot(m.x - spots[i].x, m.y - spots[i].y) > MARKER_R ? { ...m, spot: spots[i] } : m));
-  const ends = line.length >= 2 ? { from: line[0], to: line[line.length - 1] } : null;
-  return { line, path: line.length >= 2 ? curvePath(line) : '', ends, markers };
-}
-
-/** Lines the trip name takes on the card (30 px extra-bold, 260 px wide). */
-export const titleLines = (title: string) => (textWidth(title, 30) * 0.92 > CARD_W - 40 ? 2 : 1);
-
-/** The whole card layout for a trail and the stops visited, in visit order. */
-export function cardLayout(trail: LatLng[], stops: CardStop[], title = ''): CardLayout {
-  const mapTop = titleLines(title) === 2 ? MAP_TOP_2 : MAP_TOP_1;
-  const area: Rect = { x: EDGE, y: mapTop, w: CARD_W - 2 * EDGE, h: STATS_TOP - 6 - mapTop };
-  const top = mapTop + 24;
-  const bottom = STATS_TOP - 26;
-  // Markers fill the map, or leave room at the sides for the pills of a crowded day; a cluster
-  // can spread a little wider so the lines from its middle markers can get out.
-  const full: Box = { x: 38, y: top, w: CARD_W - 76, h: bottom - top };
-  const narrow: Box = { x: 80, y: top + 10, w: CARD_W - 160, h: bottom - top - 20 };
-  const narrower: Box = { x: 105, y: top + 20, w: CARD_W - 210, h: bottom - top - 40 };
-  const variants: { box: Box; gap: number }[] = [
-    { box: full, gap: MARKER_GAP },
-    { box: full, gap: WIDE_GAP },
-    { box: narrow, gap: MARKER_GAP },
-    { box: narrow, gap: WIDE_GAP },
-    { box: narrower, gap: WIDE_GAP },
-  ];
-  const tries: [number, Rules][] = [];
-  for (const avoidCrossing of [true, false])
-    for (const font of FONTS) for (let v = 0; v < variants.length; v++) tries.push([v, { font, avoidTrail: true, avoidCrossing }]);
-  for (const font of FONTS) for (let v = 0; v < variants.length; v++) tries.push([v, { font, avoidTrail: false, avoidCrossing: false }]);
-
-  const drawn = new Map<number, ReturnType<typeof drawIn> & { grid: TrailGrid; tables: Map<string, SpotTable> }>();
-  const draw = (v: number) => {
-    let d = drawn.get(v);
-    if (!d) {
-      const base = drawIn(trail, stops, variants[v].box, variants[v].gap);
-      d = { ...base, grid: new TrailGrid(base.line), tables: new Map() };
-      drawn.set(v, d);
+/** Markers along the prototype's line for the stops visited (in visit order), with a name pill each. */
+export function cardLayout(stops: CardStop[]): CardLayout {
+  const n = stops.length;
+  const spacing = n > 1 ? TRAIL_LENGTH / (n - 1) : TRAIL_LENGTH;
+  const r = clamp(Math.floor(spacing / 2 - 3), MIN_MARKER_R, MARKER_R);
+  const at = stopDistances(n).map(pointAlong);
+  const markers: CardMarker[] = stops.map((s, i) => ({ id: s.id, name: s.name, emoji: stopEmoji(s), r, x: at[i].x, y: at[i].y }));
+  const normals = at.map((p) => ({ x: p.nx, y: p.ny }));
+  const fits = ({ font, wrapAt }: (typeof STYLES)[number]) =>
+    stops.reduce((sum, s) => {
+      const p = pillSize(s.name, font, wrapAt);
+      return sum + (p.w + PAD) * (p.h + PAD);
+    }, 0) <=
+    MAX_FILL * AREA.w * AREA.h;
+  const spots = new Map<(typeof STYLES)[number], Options>();
+  for (const avoidCrossing of [true, false]) {
+    for (const budget of [QUICK_BUDGET, BUDGET]) {
+      for (const style of STYLES) {
+        if (!fits(style)) continue;
+        // The same spots serve every pass with this style.
+        let options = spots.get(style);
+        if (!options) {
+          options = markers.map((_, i) => spotsFor(i, markers, normals, style.font, style.wrapAt));
+          spots.set(style, options);
+        }
+        const labels = placeLabels(markers, options, style.font, avoidCrossing, budget);
+        if (labels) return { markers, labels };
+      }
     }
-    return d;
-  };
-  for (const [v, rules] of tries) {
-    const d = draw(v);
-    // The same spots and clashes serve every try with this font (only the line-crossing rule differs).
-    const key = `${rules.font}:${rules.avoidTrail}`;
-    const table = d.tables.get(key) ?? spotTable(d.markers, d.grid, area, rules);
-    d.tables.set(key, table);
-    const labels = placeLabels(d.markers, table, rules);
-    if (labels) return { mapTop, mapBox: variants[v].box, path: d.path, line: d.line, ends: d.ends, markers: d.markers, labels };
   }
-  // Nothing fits cleanly (a very crowded day): markers only.
-  const d = draw(variants.length - 1);
-  return { mapTop, mapBox: variants[variants.length - 1].box, path: d.path, line: d.line, ends: d.ends, markers: d.markers, labels: [] };
+  // A day too crowded for any of that: markers without names.
+  return { markers, labels: [] };
 }

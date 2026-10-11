@@ -321,41 +321,43 @@ Time and location rule (built; follow it in every live-trip feature):
   and low-battery alerts (so Split & rejoin too) and the meet point's "everyone's here"
   check. After closing my own day: a banner at the top of the map "You've closed today ·
   location sharing is off" with Reopen today (DayClosedBanner).
-- Day recap (screen 15, features/recap: trail.ts, dayWeather.ts, shareImage.ts, useDayRecap,
-  RecapCard, DayRecapScreen, route /recap?day=N): a 9:16 story card for one trip day, for this
-  person. Opened from "Day closed" (See your day recap) and from the Plan tab's "Day recap" link
-  on finished days (dayEnd.ts recapDays: days before the open day, all of them after the trip,
-  and the open day once its last stop is finished or closed). No Google or Gemini calls.
-  Trail: this person's saved `locations` rows from the day's midnight to when it ends (1 h
-  before the next day's first stop, openDayEndsAt), capped at now(); Demo mode: the day's demo
-  route (buildDemoRoute from useDemoStops, same as the replay), this phone's member every
-  minute up to now(). Jitter smoothing (trail.ts smoothTrail): drop jumps reached and left
-  faster than 150 km/h, median of 5 positions (symmetric, so the ends stay put), then keep a
-  point only once it is 25 m from the last kept. Drawn with react-native-svg (no map tiles):
-  flat projection into the card, Douglas–Peucker + Catmull-Rom curve, mint→gold gradient with
-  a glow (the line drawn wide and faint underneath). Markers: one emoji per visited stop
-  (arrived by now(); Demo: also the route's arrive events), by category, a few sights by name
-  (stopEmoji). Layout (cardLayout.ts): trail and markers fitted inside the card with padding;
-  markers pushed apart to a minimum gap (a moved one gets a thin line to a dot at its real
-  spot). Every stop's FULL name in a pill (never cut; over 32 characters wraps onto two
-  lines; no numbers, no list). A pill sits right by its marker when free, else moves into free
-  space around the cluster (beside on a shared row grid so pills stack neatly, or above /
-  below) with a thin line from the marker's edge. Pills never cover each other, a marker, the
-  trail, a line or a moved-marker line, and stay inside the card (map area from under the
-  trip name down to the stats). Search: candidate spots per pill, then the most constrained
-  pill first with backtracking over a lazily computed clash table (bounded, ~50 ms for 7
-  stops); if nothing fits it tries a wider marker gap, narrower marker areas (room at the
-  sides) and fonts 9.5 → 8, then allows lines to cross, then pills over the trail. The card
-  recomputes it only when the trail, stops or trip name change. (Last resort, a day too crowded
-  for any of that: markers without names.) Pill width is estimated a little generously; the
-  text also has adjustsFontSizeToFit so it shrinks rather than cuts if the estimate is short.
+- Day recap (screen 15, features/recap: trail.ts, cardLayout.ts, dayWeather.ts, shareImage.ts,
+  useDayRecap, RecapCard, DayRecapScreen, route /recap?day=N): a 9:16 story card for one trip
+  day, for this person. Opened from "Day closed" (See your day recap) and from the Plan tab's
+  "Day recap" link on finished days (dayEnd.ts recapDays: days before the open day, all of them
+  after the trip, and the open day once its last stop is finished or closed). No Google or
+  Gemini calls.
+  The trail drawn is ALWAYS prototype screen 15's line, the same for every trip
+  (cardLayout.ts TRAIL_PATH, in the card's 300-wide coordinates; react-native-svg, no map):
+  6 px, mint #8FE0D2 → gold #F0A01E left to right, with a soft glow (wide faint copies
+  underneath). The real GPS route is NOT drawn. The day's visited stops (arrived by now();
+  Demo: also the route's arrive events), in visit order, sit evenly spaced along it by arc
+  length: first at its start, last at its end (one stop: the middle). Markers: white circle +
+  emoji by category, a few sights by name (stopEmoji); radius 13, smaller when many stops
+  share the line (never touching). Every stop's FULL name in a pill (never cut; over 32
+  characters wraps onto two lines): straight out from the line on alternating sides (even
+  stops one side, odd the other) when there's room, else moved into free space (e.g. above
+  the arch, inside the loop) with a thin line from the marker's edge. Pills never cover each
+  other, a marker or the line, lines don't run through pills, and everything stays inside the
+  card (pills from y 112 to the stats). Search: candidate spots per pill, the most constrained
+  pill first with backtracking over a lazily computed clash table; styles tried in turn: one
+  line 9.5 → 8 px, then (crowded days) names over 16 characters on two lines 9 → 7 px, then
+  6.5 / 6 px; then lines may cross. (Last resort: markers without names.) ~50 ms for 7 stops,
+  ~150 ms for 14; the card recomputes it only when the stops change. Pill width is estimated
+  a little generously; the text also has adjustsFontSizeToFit so it shrinks rather than cuts.
   Header: the trip name only. One-day trip: card date "WEDNESDAY 11 NOV", screen title "Your
-  day"; longer trips "DAY 2 · …" and "Day 2 done". Stats: km = smoothed trail
-  length ("3.4", "38"), stops visited, hours out = first to last position ("40m", "6.5h",
-  "13h"), weather = what the Today card already fetched (useRecordDayWeather in the tabs layout
-  saves it on the phone: the current weather and the reply's forecast hours, one per hour, a
-  real reading beats a forecast): highest real °C + a summary: "cloudy" (all day), "sunny,
-  then rain" (changed mid-day), "mostly cloudy", "mostly sunny, some rain"; left out if none. No positions:
-  "–" for km and hours, "No route saved for this day". Share your day = capture at 1080×1920
-  + share sheet; Download = gallery (Android 13+ needs no permission; older asks for storage
-  after our own "Save to your gallery?" explanation; blocked -> Open settings).
+  day"; longer trips "DAY 2 · …" and "Day 2 done".
+  Stats stay real. Positions: this person's saved `locations` rows from the day's midnight to
+  when it ends (1 h before the next day's first stop, openDayEndsAt), capped at now(); Demo
+  mode: the day's demo route (buildDemoRoute from useDemoStops, same as the replay), this
+  phone's member every minute up to now(). Jitter smoothing (trail.ts smoothTrail): drop jumps
+  reached and left faster than 150 km/h, median of 5 positions (symmetric, so the ends stay
+  put), then keep a point only once it is 25 m from the last kept. km = smoothed trail length
+  ("3.4", "38"), stops visited, hours out = first to last position ("40m", "6.5h", "13h"),
+  weather = what the Today card already fetched (useRecordDayWeather in the tabs layout saves
+  it on the phone: the current weather and the reply's forecast hours, one per hour, a real
+  reading beats a forecast): highest real °C + a summary: "cloudy" (all day), "sunny, then
+  rain" (changed mid-day), "mostly cloudy", "mostly sunny, some rain"; left out if none. No
+  positions: "–" for km and hours. Share your day = capture at 1080×1920 + share sheet;
+  Download = gallery (Android 13+ needs no permission; older asks for storage after our own
+  "Save to your gallery?" explanation; blocked -> Open settings).

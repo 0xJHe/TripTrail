@@ -1,11 +1,9 @@
 import { recapDateLine, recapDays, recapTitle, visitedBy } from '@/features/recap/dayEnd';
 import {
-  curvePath,
   hoursOutMs,
   hoursText,
   kmText,
   MIN_STEP_M,
-  projector,
   smoothTrail,
   stopEmoji,
   trailMeters,
@@ -136,31 +134,6 @@ describe('km text', () => {
     expect(kmText(20)).toBe('0');
     expect(kmText(3420)).toBe('3.4');
     expect(kmText(38_400)).toBe('38');
-  });
-});
-
-describe('drawing', () => {
-  const box = { x: 30, y: 140, w: 240, h: 240 };
-
-  it('fits every point inside the box, north up', () => {
-    const pts = [HOME, offsetMeters(HOME, 3000, 1000), offsetMeters(HOME, -500, 4000)];
-    const project = projector(pts, box);
-    for (const p of pts.map(project)) {
-      expect(p.x).toBeGreaterThanOrEqual(box.x - 0.01);
-      expect(p.x).toBeLessThanOrEqual(box.x + box.w + 0.01);
-      expect(p.y).toBeGreaterThanOrEqual(box.y - 0.01);
-      expect(p.y).toBeLessThanOrEqual(box.y + box.h + 0.01);
-    }
-    expect(project(pts[2]).y).toBeLessThan(project(pts[0]).y);
-  });
-
-  it('puts a single spot in the middle', () => {
-    expect(projector([HOME], box)(HOME)).toEqual({ x: 150, y: 260 });
-  });
-
-  it('draws a smooth path through the points', () => {
-    expect(curvePath([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 10 }])).toMatch(/^M0 0 C.* C.* 20 10$/);
-    expect(curvePath([])).toBe('');
   });
 });
 

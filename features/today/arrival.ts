@@ -7,6 +7,8 @@ import type { VisitChange, VisitStop } from './types';
  * - Left: more than 150 m from the arrived stop for 3 minutes -> status "done", left_at = now.
  * - Two stops within 150 m of each other: arriving at one only counts from 15 min before its
  *   planned start, so being near it early doesn't skip the stop the group is at.
+ * - Any stop that isn't the next one on the plan: the same (from 15 min before its start), so
+ *   walking past a later stop on the way to another one doesn't tick it off.
  * Pure functions; the tracker hook feeds them readings and saves the changes.
  */
 
@@ -35,9 +37,16 @@ export const emptyTracker = (): TrackerState => ({ near: null, awaySince: null, 
 
 const hasPlace = (s: VisitStop): s is VisitStop & LatLng => s.lat != null && s.lng != null;
 
-/** A stop with another one within 150 m that doesn't start for more than 15 min yet: not arrived. */
+/**
+ * Being near a stop that doesn't start for more than 15 min yet doesn't count as arriving when
+ * it isn't the next stop on the plan (walking past a later stop on the way to another one isn't
+ * a visit), or when another stop is within 150 m (being near it early doesn't skip the stop
+ * the group is at). `stops` = the day's stops in plan order.
+ */
 function tooEarly(s: VisitStop & LatLng, stops: VisitStop[], at: number): boolean {
   if (!s.planned_time || at >= Date.parse(s.planned_time) - EARLY_ARRIVE_MS) return false;
+  const next = stops.find((o) => o.status === 'planned' && hasPlace(o));
+  if (next && next.id !== s.id) return true;
   return stops.some((o) => o.id !== s.id && o.status !== 'dropped' && hasPlace(o) && haversineMeters(o, s) <= NEAR_STOPS_M);
 }
 

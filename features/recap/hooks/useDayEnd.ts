@@ -3,7 +3,7 @@ import { useCallback, useMemo } from 'react';
 
 import type { Stop } from '@/features/planning/types';
 import { now, useNow } from '@/lib/clock';
-import { dayEndMode, dayFinished, sharingBackAt } from '../dayEnd';
+import { dayEndMode, dayFinished, sharingBackAt, visitedBy } from '../dayEnd';
 import { keptGoing, useKeepGoing } from '../keepGoing';
 import { useDayClosures } from './useDayClosures';
 
@@ -32,7 +32,8 @@ export function useDayEnd(tripId: string | undefined, day: number, dayStops: Sto
 
   return {
     mode,
-    visited: dayStops.filter((s) => s.status === 'done' || s.status === 'arrived').length,
+    // Visits after the (fake) time don't count yet.
+    visited: dayStops.filter((s) => visitedBy(s, time)).length,
     total: dayStops.length,
     /** "07:00": sharing comes back on 60 min before tomorrow's first stop; null on the last day. */
     backAt: useMemo(() => (tomorrow ? sharingBackAt(tomorrow) : null), [tomorrow]),

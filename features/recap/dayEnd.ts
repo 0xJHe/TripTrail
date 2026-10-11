@@ -17,7 +17,7 @@ export const DEFAULT_STAY_MIN = 60;
 /** Arriving up to this late is on time (the running-late rule's 5 min). */
 const ON_TIME_MIN = 5;
 
-type TimedStop = Pick<Stop, 'status' | 'planned_time' | 'planned_end'>;
+type TimedStop = Pick<Stop, 'status' | 'planned_time' | 'planned_end'> & { left_at?: string | null };
 
 /** When a stop is planned to end (ms): its end time, else 60 min after it starts; null without a time. */
 export function plannedEndOf(s: Pick<Stop, 'planned_time' | 'planned_end'>): number | null {
@@ -29,11 +29,12 @@ export function plannedEndOf(s: Pick<Stop, 'planned_time' | 'planned_end'>): num
  * The day's last stop is finished: the group left it (or tapped "We're done here" there), or its
  * planned end has passed. `dayStops` = the day's stops still in the plan, in order (sortStops).
  * A stop added after it becomes the last one, so the day is open again until that one is finished.
+ * Left only counts once its time has come (Demo mode: not a leave from later on the fake clock).
  */
 export function dayFinished(dayStops: TimedStop[], t: number): boolean {
   const last = dayStops[dayStops.length - 1];
   if (!last) return false;
-  if (last.status === 'done') return true;
+  if (last.status === 'done' && (!last.left_at || Date.parse(last.left_at) <= t)) return true;
   const end = plannedEndOf(last);
   return end != null && t >= end;
 }

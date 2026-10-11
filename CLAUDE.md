@@ -222,6 +222,18 @@ Time and location rule (built; follow it in every live-trip feature):
   one doesn't tick it off (George Town: Armenian Street -> Cheong Fatt Tze passes ~50 m
   from Chulia Street). The end-of-day check follows the clock: the last stop's leave and
   the "N of N visited" count only include visits up to now() (Demo mode: the fake time).
+- Today's navy block between stops (features/today/todayPlan.ts justLeftStop, useToday):
+  at a stop it is "Now" (We're done here + Pin spot). After leaving, "Just left [stop]"
+  (Pin spot only) while anything about leaving is still to answer: the spend check, an open
+  running-early card (its left stop), or an open running-late card (the stop left last up to
+  now()); with a late card up, Next sits inside the late card as at a stop. Once all are
+  answered or dismissed: "On the way to [next stop]" until the group arrives, with
+  Directions + Pin spot side by side (equal width). Directions opens Google Maps (no API
+  call): walking if the stop is under 2 km in a straight line from this phone (else the
+  group centre, else the stop left last), otherwise driving; Maps picks if neither end is
+  known (travelModeTo). Demo mode: the route has an "On the way to [next]" event (kind
+  'travel') between every leave and the next arrival, after the leave is noticed (150 m
+  out for 3 min) and no earlier than halfway; none when the stops are too close for that.
 - Running late (features/today/late.ts, supabase/functions/_shared/eta.ts + newDay.ts):
   check the next stop once ~30 min before it starts and once when the group leaves
   a stop if the next starts in < 30 min (max 2 checks, one card per stop, shared

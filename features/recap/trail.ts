@@ -223,28 +223,3 @@ export function curvePath(points: XY[]): string {
   }
   return d;
 }
-
-export interface Label extends XY {
-  /** Label above (or below, when it would cover another one) the marker. */
-  below: boolean;
-}
-
-/** Rough pill width for a stop name (px at 9.5 px bold). */
-export const labelWidth = (name: string) => Math.min(120, 14 + name.length * 5.6);
-const LABEL_H = 16;
-const LABEL_GAP = 22;
-
-/** Where each marker's name pill goes: above it, or below if that would overlap a label already placed. */
-export function placeLabels(markers: (XY & { name: string })[]): Label[] {
-  const placed: { x: number; y: number; w: number }[] = [];
-  const hits = (x: number, y: number, w: number) =>
-    placed.some((p) => Math.abs(p.x - x) < (p.w + w) / 2 + 2 && Math.abs(p.y - y) < LABEL_H + 2);
-  return markers.map((m) => {
-    const w = labelWidth(m.name);
-    const above = m.y - LABEL_GAP;
-    const below = !hits(m.x, above, w) ? false : !hits(m.x, m.y + LABEL_GAP, w);
-    const y = below ? m.y + LABEL_GAP : above;
-    placed.push({ x: m.x, y, w });
-    return { x: m.x, y, below };
-  });
-}

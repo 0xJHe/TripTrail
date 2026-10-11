@@ -1,11 +1,10 @@
-import { recapDays, visitedBy } from '@/features/recap/dayEnd';
+import { recapDateLine, recapDays, recapTitle, visitedBy } from '@/features/recap/dayEnd';
 import {
   curvePath,
   hoursOutMs,
   hoursText,
   kmText,
   MIN_STEP_M,
-  placeLabels,
   projector,
   smoothTrail,
   stopEmoji,
@@ -163,15 +162,6 @@ describe('drawing', () => {
     expect(curvePath([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 10 }])).toMatch(/^M0 0 C.* C.* 20 10$/);
     expect(curvePath([])).toBe('');
   });
-
-  it('moves a label below its marker when it would cover another', () => {
-    const labels = placeLabels([
-      { x: 100, y: 200, name: 'Chulia Street' },
-      { x: 110, y: 205, name: 'Batu Ferringhi' },
-    ]);
-    expect(labels[0].below).toBe(false);
-    expect(labels[1].below).toBe(true);
-  });
 });
 
 describe('stop emoji', () => {
@@ -204,5 +194,17 @@ describe('which days have a recap', () => {
     expect(visitedBy(arrived, T0)).toBe(true);
     expect(visitedBy(arrived, T0 - MIN)).toBe(false);
     expect(visitedBy({ status: 'planned', arrived_at: null }, T0)).toBe(false);
+  });
+});
+
+describe('one-day trips', () => {
+  it('drop "Day 1" from the card and the header', () => {
+    expect(recapDateLine(1, 1, 'Wednesday 11 Nov')).toBe('WEDNESDAY 11 NOV');
+    expect(recapTitle(1, 1)).toBe('Your day');
+  });
+
+  it('keep "Day N" on longer trips', () => {
+    expect(recapDateLine(2, 3, 'Thursday 12 Nov')).toBe('DAY 2 · THURSDAY 12 NOV');
+    expect(recapTitle(2, 3)).toBe('Day 2 done');
   });
 });

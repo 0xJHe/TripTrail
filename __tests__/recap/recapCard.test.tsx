@@ -25,7 +25,7 @@ function recap(over: Partial<DayRecap> = {}): DayRecap {
     outMs: 9.5 * 3_600_000,
     weather: { tempC: 31, words: 'mostly sunny', kind: 'sunny' },
     dateLine: 'DAY 1 · MONDAY 12 OCT',
-    route: 'Muntri Street → Kek Lok Si',
+    title: 'Day 1 done',
     trip: { name: 'Penang' },
     people: [{ key: 'm1', name: 'Aisha', color: '#00A38F' }],
     ...over,
@@ -37,7 +37,6 @@ describe('RecapCard', () => {
     await render(<RecapCard recap={recap()} width={300} />);
     expect(screen.getByText('Penang')).toBeTruthy();
     expect(screen.getByText('DAY 1 · MONDAY 12 OCT')).toBeTruthy();
-    expect(screen.getByText('Muntri Street → Kek Lok Si')).toBeTruthy();
     expect(screen.getByText('6.2')).toBeTruthy();
     expect(screen.getByText('2')).toBeTruthy();
     expect(screen.getByText('9.5h')).toBeTruthy();

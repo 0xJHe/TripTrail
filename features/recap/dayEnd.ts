@@ -253,3 +253,13 @@ export function visitedBy(s: Pick<Stop, 'status' | 'arrived_at'>, t: number): bo
   if (s.arrived_at) return Date.parse(s.arrived_at) <= t;
   return s.status === 'arrived' || s.status === 'done';
 }
+
+/** Card date line: "DAY 2 · SUNDAY 12 OCT", or just "SUNDAY 12 OCT" when the trip is one day. */
+export function recapDateLine(day: number, days: number, date: string): string {
+  return (days <= 1 ? date : `Day ${day} · ${date}`).toUpperCase();
+}
+
+/** Recap screen title: "Day 2 done", or "Your day" when the trip is one day. */
+export function recapTitle(day: number, days: number): string {
+  return days <= 1 ? 'Your day' : `Day ${day} done`;
+}

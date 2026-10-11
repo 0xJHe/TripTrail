@@ -13,7 +13,7 @@ import { now, useNow } from '@/lib/clock';
 import { useDemo } from '@/lib/demo';
 import { sampleRoute, type DemoRoute } from '@/lib/location';
 import { fetchMyPositions } from '../api';
-import { openDayEndsAt, visitedBy } from '../dayEnd';
+import { openDayEndsAt, recapDateLine, recapTitle, visitedBy } from '../dayEnd';
 import { dayWeatherOf, useDayWeather, weatherSummary } from '../dayWeather';
 import { hoursOutMs, smoothTrail, trailMeters, type Fix } from '../trail';
 
@@ -91,10 +91,6 @@ export function useDayRecap(day: number) {
     return dayStops.filter((s) => s.lat != null && s.lng != null && (visitedBy(s, time) || arrivedInDemo.has(s.id)));
   }, [dayStops, route, time]);
 
-  const ends = visited.length > 0 ? visited : dayStops;
-  const from = ends[0]?.name;
-  const to = ends[ends.length - 1]?.name;
-
   return {
     tripId,
     trip: plan.trip,
@@ -103,10 +99,10 @@ export function useDayRecap(day: number) {
     refetch: positions.refetch,
     isDay,
     day,
-    /** "DAY 1 · SUNDAY 12 OCT". */
-    dateLine: date ? `Day ${day} · ${longDate(date)}`.toUpperCase() : '',
-    /** "George Town → Batu Ferringhi" (first and last stop visited). */
-    route: from && to && from !== to ? `${from} → ${to}` : (from ?? ''),
+    /** "DAY 1 · SUNDAY 12 OCT"; just "SUNDAY 12 OCT" on a one-day trip. */
+    dateLine: date ? recapDateLine(day, plan.days, longDate(date)) : '',
+    /** "Day 1 done"; "Your day" on a one-day trip. */
+    title: recapTitle(day, plan.days),
     trail,
     hasPositions: fixes.length > 1,
     stops: visited.map((s) => ({ id: s.id, name: s.name, category: s.category, lat: s.lat!, lng: s.lng! })),

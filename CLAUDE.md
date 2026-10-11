@@ -335,11 +335,18 @@ Time and location rule (built; follow it in every live-trip feature):
   flat projection into the card, Douglas–Peucker + Catmull-Rom curve, mint→gold gradient with
   a glow (the line drawn wide and faint underneath). Markers: one emoji per visited stop
   (arrived by now(); Demo: also the route's arrive events), by category, a few sights by name
-  (stopEmoji), name pill above (below if it would cover another). Stats: km = smoothed trail
+  (stopEmoji). Layout (cardLayout.ts): trail and markers fitted inside the card with padding;
+  markers pushed apart to a minimum gap (a moved one gets a thin line to a dot at its real
+  spot); a name pill beside each (above, below, right, left: first that covers nothing, kept
+  in the card, max 132 px, "…" beyond). If any pill can't fit, all markers get a small number
+  badge instead and the names are listed under the map ("1 · Roti canai", 1–3 columns).
+  Header: the trip name only. One-day trip: card date "WEDNESDAY 11 NOV", screen title "Your
+  day"; longer trips "DAY 2 · …" and "Day 2 done". Stats: km = smoothed trail
   length ("3.4", "38"), stops visited, hours out = first to last position ("40m", "6.5h",
-  "13h"), weather = the day's readings the Today card already fetched (useRecordDayWeather in
-  the tabs layout saves them on the phone, at most every 20 min unless the sky changes):
-  highest °C + most common sky, "mostly …" if it changed; left out if none. No positions:
+  "13h"), weather = what the Today card already fetched (useRecordDayWeather in the tabs layout
+  saves it on the phone: the current weather and the reply's forecast hours, one per hour, a
+  real reading beats a forecast): highest real °C + a summary: "cloudy" (all day), "sunny,
+  then rain" (changed mid-day), "mostly cloudy", "mostly sunny, some rain"; left out if none. No positions:
   "–" for km and hours, "No route saved for this day". Share your day = capture at 1080×1920
   + share sheet; Download = gallery (Android 13+ needs no permission; older asks for storage
   after our own "Save to your gallery?" explanation; blocked -> Open settings).

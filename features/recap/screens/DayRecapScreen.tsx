@@ -32,7 +32,7 @@ export function DayRecapScreen() {
   const screen = useWindowDimensions();
   const [bodyH, setBodyH] = useState(0);
   const back = () => (router.canGoBack() ? router.back() : router.replace('/today'));
-  const header = <NavyHeader title={`Day ${day} done`} subtitle="Share your day" onBack={back} />;
+  const header = <NavyHeader title={recap.title} subtitle="Share your day" onBack={back} />;
 
   if (recap.loading || !recap.trip) {
     return (

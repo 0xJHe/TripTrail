@@ -349,10 +349,8 @@ Time and location rule (built; follow it in every live-trip feature):
   members in join order, avatar + name, "You" and "Organiser" tags (organiser = trips.created_by,
   else the earliest joiner; trip/members.ts organiserId). Status line: location ("Sharing
   location", "Last seen HH:MM" after 3 min without a new position, "Location off" with none,
-  e.g. outside the sharing window; "Done for today" wins), battery % (amber "· low" under 15%),
-  preferences ("Preferences in" / "No preferences yet"; a decided trip's late joiner: "Joined
-  after the plan"). Only who answered is loaded (preferences.member_id), never budgets or other
-  answers. Positions come from useMapMembers, so Demo mode shows the replay's members (real ones
+  e.g. outside the sharing window; "Done for today" wins), battery % (amber "· low" under 15%).
+  No preferences status, and nothing from preferences is loaded. Positions come from useMapMembers, so Demo mode shows the replay's members (real ones
   by id, the made-up "(demo)" ones added with a Demo tag). Invite card: join code + Copy (the
   code) / Share (invite message); decided trips say "The trip is decided. New members will join
   the current plan." Joining a decided trip (JoinScreen) opens the Day plan straight away (no

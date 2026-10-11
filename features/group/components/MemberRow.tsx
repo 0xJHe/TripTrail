@@ -5,11 +5,11 @@ import { StyleSheet, View } from 'react-native';
 import { Avatars } from '@/components/ui/Avatars';
 import { Txt } from '@/components/ui/Txt';
 import { colors, fontFamily, radius } from '@/lib/theme';
-import { batteryText, isLowBattery, locationText, prefsText, type GroupRow } from '../groupList';
+import { batteryText, isLowBattery, locationText, type GroupRow } from '../groupList';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
-/** One member: avatar, name, You / Organiser / Demo tags, then location · battery · preferences. */
+/** One member: avatar, name, You / Organiser / Demo tags, then location · battery. */
 export function MemberRow({ row }: { row: GroupRow }) {
   const loc = row.location;
   const battery = batteryText(row.battery);
@@ -38,11 +38,6 @@ export function MemberRow({ row }: { row: GroupRow }) {
               text={low ? `${battery} · low` : battery}
             />
           ) : null}
-          <Status
-            icon={row.prefs === 'answered' ? 'checkmark-circle' : row.prefs === 'joined-after' ? 'enter-outline' : 'ellipse-outline'}
-            color={row.prefs === 'answered' ? colors.green : colors.textMuted}
-            text={prefsText(row.prefs)}
-          />
         </View>
       </View>
     </View>

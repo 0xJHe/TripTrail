@@ -110,10 +110,3 @@ export async function endMeetPoint(id: string, status: 'together' | 'cleared', a
     .eq('id', id);
   if (error) throw error;
 }
-
-/** Who has answered preferences (member ids only: the answers themselves stay private to planning). */
-export async function fetchAnsweredIds(tripId: string): Promise<string[]> {
-  const { data, error } = await supabase.from('preferences').select('member_id').eq('trip_id', tripId);
-  if (error) throw error;
-  return ((data ?? []) as { member_id: string }[]).map((r) => r.member_id);
-}

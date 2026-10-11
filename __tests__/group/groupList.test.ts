@@ -6,7 +6,6 @@ import {
   isLowBattery,
   leaveText,
   locationText,
-  prefsText,
   type GroupRowsInput,
 } from '@/features/group/groupList';
 
@@ -33,8 +32,6 @@ function input(over: Partial<GroupRowsInput> = {}): GroupRowsInput {
     organiserId: 'm1',
     placed: [],
     closed: new Set(),
-    answered: new Set(['m1', 'm2']),
-    decided: false,
     demo: false,
     time: T,
     ...over,
@@ -52,14 +49,9 @@ describe('groupRows', () => {
     ]);
   });
 
-  it('shows who answered preferences, and late joiners of a decided trip as joined after the plan', () => {
-    expect(groupRows(input()).map((r) => r.prefs)).toEqual(['answered', 'answered', 'not-yet']);
-    expect(groupRows(input({ decided: true }))[2].prefs).toBe('joined-after');
-  });
-
-  it('never carries anyone’s budget or other answers', () => {
+  it('never carries anyone’s preferences', () => {
     const keys = Object.keys(groupRows(input())[0]).sort();
-    expect(keys).toEqual(['battery', 'color', 'demo', 'id', 'isMe', 'location', 'name', 'organiser', 'prefs']);
+    expect(keys).toEqual(['battery', 'color', 'demo', 'id', 'isMe', 'location', 'name', 'organiser']);
   });
 
   it('gives each member their location state and battery', () => {
@@ -94,7 +86,7 @@ describe('groupRows', () => {
     const rows = groupRows(input({ placed, demo: true }));
     expect(rows.map((r) => r.name)).toEqual(['Aisha', 'Ravi', 'Mei', 'Mei (demo)', 'Sam (demo)']);
     const [mei, sam] = rows.slice(3);
-    expect(mei).toMatchObject({ demo: true, organiser: false, isMe: false, battery: 13, prefs: 'answered' });
+    expect(mei).toMatchObject({ demo: true, organiser: false, isMe: false, battery: 13 });
     expect(mei.location.kind).toBe('last-seen');
     expect(sam.location).toEqual({ kind: 'done' });
     // Not in Demo mode: only the real members.
@@ -124,10 +116,7 @@ describe('texts', () => {
     expect(isLowBattery(null)).toBe(false);
   });
 
-  it('describes preferences and the group size', () => {
-    expect(prefsText('answered')).toBe('Preferences in');
-    expect(prefsText('not-yet')).toBe('No preferences yet');
-    expect(prefsText('joined-after')).toBe('Joined after the plan');
+  it('describes the group size', () => {
     expect(groupCountLabel([{ demo: false }])).toBe('Just you');
     expect(groupCountLabel([{ demo: false }, { demo: false }, { demo: true }])).toBe('2 members · 1 demo');
   });

@@ -16,8 +16,8 @@ import { groupCountLabel } from '../groupList';
 import { useGroupList } from '../hooks/useGroupList';
 
 /**
- * Group tab: who is in the trip with their live status (location, battery, Done for today,
- * preferences answered; never their budget or other answers), the join code with Copy / Share,
+ * Group tab: who is in the trip with their live status (location, battery, Done for today;
+ * never their preferences), the join code with Copy / Share,
  * and Leave trip at the bottom.
  */
 export function GroupScreen() {

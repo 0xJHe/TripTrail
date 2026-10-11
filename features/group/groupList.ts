@@ -11,10 +11,7 @@ export type LocationState =
   /** Closed their day (Done for today): sharing is off for the night. */
   | { kind: 'done' };
 
-/** answered = preferences in; joined-after = joined once the plan was built (skips preferences). */
-export type PrefsState = 'answered' | 'not-yet' | 'joined-after';
-
-/** One line in the Group tab's members list. Never holds anyone's budget or other answers. */
+/** One line in the Group tab's members list. Never holds anyone's preferences (budget or other answers). */
 export interface GroupRow {
   id: string;
   name: string;
@@ -25,7 +22,6 @@ export interface GroupRow {
   demo: boolean;
   location: LocationState;
   battery: number | null;
-  prefs: PrefsState;
 }
 
 export interface GroupRowsInput {
@@ -37,10 +33,6 @@ export interface GroupRowsInput {
   placed: MapMember[];
   /** Members who closed today (Done for today). */
   closed: Set<string>;
-  /** Members who answered preferences. */
-  answered: Set<string>;
-  /** The plan is built (stage 'decided'). */
-  decided: boolean;
   demo: boolean;
   /** now() in ms. */
   time: number;
@@ -51,7 +43,7 @@ export interface GroupRowsInput {
  * follow, with their fake position, battery and Done for today.
  */
 export function groupRows(input: GroupRowsInput): GroupRow[] {
-  const { members, meId, organiserId, placed, closed, answered, decided, demo, time } = input;
+  const { members, meId, organiserId, placed, closed, demo, time } = input;
   const ids = new Set(members.map((m) => m.id));
   const posOf = (id: string, isMe: boolean) => placed.find((p) => p.id === id) ?? (isMe ? placed.find((p) => p.isMe) : undefined);
   const rows: GroupRow[] = members.map((m, i) => {
@@ -66,7 +58,6 @@ export function groupRows(input: GroupRowsInput): GroupRow[] {
       demo: false,
       location: locationState(pos, isMe, closed.has(m.id), time),
       battery: pos?.battery ?? null,
-      prefs: answered.has(m.id) ? 'answered' : decided ? 'joined-after' : 'not-yet',
     };
   });
   if (!demo) return rows;
@@ -82,7 +73,6 @@ export function groupRows(input: GroupRowsInput): GroupRow[] {
       demo: true,
       location: locationState(p, false, closed.has(p.id) || !!p.done, time),
       battery: p.battery,
-      prefs: 'answered' as const,
     })),
   ];
 }
@@ -115,13 +105,6 @@ export function batteryText(battery: number | null): string | null {
 }
 
 export const isLowBattery = (battery: number | null) => battery != null && battery < LOW_BATTERY;
-
-/** "Preferences in", "No preferences yet", "Joined after the plan". */
-export function prefsText(state: PrefsState): string {
-  if (state === 'answered') return 'Preferences in';
-  if (state === 'joined-after') return 'Joined after the plan';
-  return 'No preferences yet';
-}
 
 /** "4 members", "Just you", "4 members · 2 demo". */
 export function groupCountLabel(rows: Pick<GroupRow, 'demo'>[]): string {

@@ -1,4 +1,4 @@
-import { emptyForm, readStopForm } from '@/features/planning/stopForm';
+import { emptyForm, endNotAfterStart, readStopForm, timesFilled } from '@/features/planning/stopForm';
 import { atClock, clockOf, dayCount, draftsToStops, durationText, parseClock, priceLabel, sortStops, timeLabel } from '@/features/planning/stops';
 import { sampleItinerary } from '@/lib/ai';
 
@@ -99,8 +99,33 @@ describe('stop form', () => {
   it('says what is wrong in plain words', () => {
     expect(readStopForm({ ...form, name: ' ' }, '2026-10-12')).toEqual({ ok: false, error: 'Give the stop a name.' });
     expect(readStopForm({ ...form, time: 'noon' }, '2026-10-12')).toEqual({ ok: false, error: 'Time should look like 09:30.' });
-    expect(readStopForm({ ...form, endTime: '05:00' }, '2026-10-12')).toEqual({ ok: false, error: 'End time is before the start time.' });
+    expect(readStopForm({ ...form, endTime: '05:00' }, '2026-10-12')).toEqual({ ok: false, error: 'End time must be after the start time.' });
     expect(readStopForm({ ...form, price: 'abc' }, '2026-10-12')).toEqual({ ok: false, error: 'Price should be a number, like 16.' });
+  });
+
+  it.each(['place', 'flight', 'hotel'] as const)('needs both times for a %s, end after start', (kind) => {
+    const f = { ...form, kind };
+    expect(readStopForm({ ...f, time: ' ' }, '2026-10-12')).toEqual({ ok: false, error: 'Add a start time.' });
+    expect(readStopForm({ ...f, endTime: '' }, '2026-10-12')).toEqual({ ok: false, error: 'Add an end time.' });
+    expect(readStopForm({ ...f, endTime: '6:50' }, '2026-10-12')).toEqual({ ok: false, error: 'End time must be after the start time.' });
+    expect(readStopForm(f, '2026-10-12').ok).toBe(true);
+  });
+
+  it('keeps Add / Save off until both times are filled in', () => {
+    expect(timesFilled({ time: '09:30', endTime: '10:45' })).toBe(true);
+    expect(timesFilled({ time: '09:30', endTime: ' ' })).toBe(false);
+    expect(timesFilled({ time: '', endTime: '10:45' })).toBe(false);
+  });
+
+  it('shows the red line only once both times are fully typed and end is not after start', () => {
+    expect(endNotAfterStart({ time: '09:30', endTime: '09:00' })).toBe(true);
+    expect(endNotAfterStart({ time: '09:30', endTime: '09:30' })).toBe(true);
+    expect(endNotAfterStart({ time: '0930', endTime: '8.15' })).toBe(true);
+    expect(endNotAfterStart({ time: '09:30', endTime: '10:45' })).toBe(false);
+    // Still typing "10:45": "1" or "10:4" would read as earlier times.
+    expect(endNotAfterStart({ time: '09:30', endTime: '1' })).toBe(false);
+    expect(endNotAfterStart({ time: '09:30', endTime: '10:4' })).toBe(false);
+    expect(endNotAfterStart({ time: '', endTime: '10:45' })).toBe(false);
   });
 });
 

@@ -12,7 +12,7 @@ import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { colors } from '@/lib/theme';
 import { PlaceNameField } from '../components/PlaceNameField';
 import { useStopForm } from '../hooks/useStopForm';
-import type { StopKind } from '../stopForm';
+import { END_BEFORE_START, endNotAfterStart, timesFilled, type StopKind } from '../stopForm';
 
 const KINDS: { value: StopKind; label: string }[] = [
   { value: 'place', label: 'Place' },
@@ -92,11 +92,13 @@ export function StopFormScreen() {
             prefix="Ends"
             value={form.endTime}
             onChangeText={(endTime) => set({ endTime })}
-            placeholder="optional"
+            placeholder="10:45"
             keyboardType="numbers-and-punctuation"
             containerStyle={{ flex: 1 }}
+            testID="stop-end-time"
           />
         </View>
+        {endNotAfterStart(form) ? <ErrorLine message={END_BEFORE_START} /> : null}
 
         <Txt variant="sec">Price per person</Txt>
         <Field
@@ -141,7 +143,13 @@ export function StopFormScreen() {
         ) : null}
       </ScrollView>
       <BottomBar>
-        <Button label={isNew ? 'Add stop' : 'Save'} onPress={save} loading={saving} testID="save-stop" />
+        <Button
+          label={isNew ? 'Add stop' : 'Save'}
+          onPress={save}
+          disabled={!timesFilled(form) || endNotAfterStart(form)}
+          loading={saving}
+          testID="save-stop"
+        />
       </BottomBar>
     </KeyboardAvoidingView>
   );

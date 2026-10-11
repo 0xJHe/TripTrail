@@ -79,6 +79,11 @@ During the trip:
   the EAS keystore SHA-1, Maps SDK for Android only). app.config.ts keeps app.json and
   adds it to the react-native-maps plugin. Never put the key in git. Expo Go needs no key.
 - expo-battery for battery %.
+- @react-native-community/datetimepicker (the Android clock picker for stop times) and
+  expo-localization (the phone's 12 / 24-hour setting, so picked times show the phone's way;
+  saved as "HH:MM"). Native: they need the development build / APK made after they were
+  added; features/planning/phoneClock.ts loads them only when there, and an older build
+  falls back to typing the time (features/planning/components/TimeField.tsx).
 - react-native-view-shot (capture the day recap card), expo-sharing (share sheet) and
   expo-media-library (save to gallery, `expo-media-library/legacy`). Native: they need the
   development build / APK made after they were added; features/recap/shareImage.ts loads them

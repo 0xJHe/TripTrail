@@ -79,6 +79,10 @@ During the trip:
   the EAS keystore SHA-1, Maps SDK for Android only). app.config.ts keeps app.json and
   adds it to the react-native-maps plugin. Never put the key in git. Expo Go needs no key.
 - expo-battery for battery %.
+- react-native-view-shot (capture the day recap card), expo-sharing (share sheet) and
+  expo-media-library (save to gallery, `expo-media-library/legacy`). Native: they need the
+  development build / APK made after they were added; features/recap/shareImage.ts loads them
+  only when tapped and says "needs the latest build" instead of crashing on an older one.
 - Development build (expo-dev-client): `npx eas-cli build -p android --profile development`
   (APK, internal, preview env vars, same package + keystore as the preview APK). With
   expo-dev-client installed, `expo start` / `npm run start:tunnel` open the development
@@ -317,3 +321,25 @@ Time and location rule (built; follow it in every live-trip feature):
   and low-battery alerts (so Split & rejoin too) and the meet point's "everyone's here"
   check. After closing my own day: a banner at the top of the map "You've closed today ·
   location sharing is off" with Reopen today (DayClosedBanner).
+- Day recap (screen 15, features/recap: trail.ts, dayWeather.ts, shareImage.ts, useDayRecap,
+  RecapCard, DayRecapScreen, route /recap?day=N): a 9:16 story card for one trip day, for this
+  person. Opened from "Day closed" (See your day recap) and from the Plan tab's "Day recap" link
+  on finished days (dayEnd.ts recapDays: days before the open day, all of them after the trip,
+  and the open day once its last stop is finished or closed). No Google or Gemini calls.
+  Trail: this person's saved `locations` rows from the day's midnight to when it ends (1 h
+  before the next day's first stop, openDayEndsAt), capped at now(); Demo mode: the day's demo
+  route (buildDemoRoute from useDemoStops, same as the replay), this phone's member every
+  minute up to now(). Jitter smoothing (trail.ts smoothTrail): drop jumps reached and left
+  faster than 150 km/h, median of 5 positions (symmetric, so the ends stay put), then keep a
+  point only once it is 25 m from the last kept. Drawn with react-native-svg (no map tiles):
+  flat projection into the card, Douglas–Peucker + Catmull-Rom curve, mint→gold gradient with
+  a glow (the line drawn wide and faint underneath). Markers: one emoji per visited stop
+  (arrived by now(); Demo: also the route's arrive events), by category, a few sights by name
+  (stopEmoji), name pill above (below if it would cover another). Stats: km = smoothed trail
+  length ("3.4", "38"), stops visited, hours out = first to last position ("40m", "6.5h",
+  "13h"), weather = the day's readings the Today card already fetched (useRecordDayWeather in
+  the tabs layout saves them on the phone, at most every 20 min unless the sky changes):
+  highest °C + most common sky, "mostly …" if it changed; left out if none. No positions:
+  "–" for km and hours, "No route saved for this day". Share your day = capture at 1080×1920
+  + share sheet; Download = gallery (Android 13+ needs no permission; older asks for storage
+  after our own "Save to your gallery?" explanation; blocked -> Open settings).

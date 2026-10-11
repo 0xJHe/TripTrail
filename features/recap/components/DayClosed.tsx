@@ -1,11 +1,15 @@
+import { router } from 'expo-router';
 import { View } from 'react-native';
 
 import { NoPlan } from '@/features/today/components/NoPlan';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import type { DayEndState } from '../hooks/useDayEnd';
 
-/** Today tab after Done for today: location off for the night, and a way back if it was a mistake. */
-export function DayClosed({ end }: { end: DayEndState }) {
+/**
+ * Today tab after Done for today: location off for the night, the day's recap story card
+ * (screen 15), and a way back if it was a mistake.
+ */
+export function DayClosed({ end, day }: { end: DayEndState; day: number }) {
   const text = end.lastDay
     ? "Your location is off. That was the trip's last day: hope it was a great one!"
     : end.backAt
@@ -17,7 +21,12 @@ export function DayClosed({ end }: { end: DayEndState }) {
         icon="moon-outline"
         title={end.lastDay ? 'Day closed' : 'Day closed. See you tomorrow'}
         text={text}
-        action={{ label: end.saving ? 'Reopening…' : 'Reopen today', onPress: end.reopen }}
+        action={{
+          label: 'See your day recap',
+          onPress: () => router.push({ pathname: '/recap', params: { day: String(day) } }),
+          testID: 'see-day-recap',
+        }}
+        secondary={{ label: end.saving ? 'Reopening…' : 'Reopen today', onPress: end.reopen }}
       />
       {end.error ? (
         <View style={{ paddingHorizontal: 32, paddingBottom: 24 }}>

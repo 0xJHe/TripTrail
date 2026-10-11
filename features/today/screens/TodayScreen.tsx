@@ -80,7 +80,7 @@ export function TodayScreen() {
   if (dayEnd.mode === 'closed') {
     return (
       <Frame title={title} subtitle={subtitle}>
-        <DayClosed end={dayEnd} />
+        <DayClosed end={dayEnd} day={view.day} />
       </Frame>
     );
   }

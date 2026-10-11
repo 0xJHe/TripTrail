@@ -12,11 +12,13 @@ interface NoPlanProps {
   icon: IconName;
   title: string;
   text: string;
-  action?: { label: string; onPress: () => void };
+  action?: { label: string; onPress: () => void; testID?: string };
+  /** White outline button under the main one. */
+  secondary?: { label: string; onPress: () => void };
 }
 
 /** Friendly message when there is no day to show (no trip, trip not started, trip over…). */
-export function NoPlan({ icon, title, text, action }: NoPlanProps) {
+export function NoPlan({ icon, title, text, action, secondary }: NoPlanProps) {
   return (
     <View style={styles.box} testID="today-empty">
       <Ionicons name={icon} size={40} color={colors.teal} />
@@ -26,7 +28,12 @@ export function NoPlan({ icon, title, text, action }: NoPlanProps) {
       <Txt variant="b13" color={colors.textMuted} style={styles.center}>
         {text}
       </Txt>
-      {action ? <Button label={action.label} onPress={action.onPress} style={{ alignSelf: 'stretch', marginTop: 8 }} /> : null}
+      {action ? (
+        <Button label={action.label} onPress={action.onPress} testID={action.testID} style={{ alignSelf: 'stretch', marginTop: 8 }} />
+      ) : null}
+      {secondary ? (
+        <Button label={secondary.label} onPress={secondary.onPress} variant="secondary" style={{ alignSelf: 'stretch' }} />
+      ) : null}
     </View>
   );
 }

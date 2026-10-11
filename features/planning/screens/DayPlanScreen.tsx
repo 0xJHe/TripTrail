@@ -8,6 +8,8 @@ import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
 import { BudgetBar } from '@/features/money/components/BudgetBar';
 import { ExtraSpends } from '@/features/money/components/ExtraSpends';
+import { RecapLink } from '@/features/recap/components/RecapLink';
+import { useRecapDays } from '@/features/recap/hooks/useRecapDays';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { memberCountLabel } from '@/features/trip/members';
 import { tripEntryRoute } from '@/features/trip/routes';
@@ -30,6 +32,8 @@ export function DayPlanScreen() {
   const { trip, days, start } = plan;
   const day = Math.min(picked, days);
   const dayStops = plan.stops.filter((s) => s.day_number === day);
+  // Finished days get a "Day recap" link (story card, screen 15).
+  const recapDays = useRecapDays(trip?.stage === 'decided' ? tripId : undefined, days);
 
   if (!tripId || (!plan.loading && !trip)) {
     return <Empty title="No trip open" text="Open a trip from your trips list to see its plan." />;
@@ -70,6 +74,7 @@ export function DayPlanScreen() {
           ))}
         </Chips>
         {note ? <NoteLine text={note} /> : null}
+        {recapDays.has(day) ? <RecapLink day={day} /> : null}
         <BudgetBar summary={plan.budget}>
           <ExtraSpends tripId={trip.id} day={day} />
         </BudgetBar>

@@ -236,3 +236,20 @@ export function sharingBackAt(dayStops: Pick<Stop, 'planned_time'>[]): string | 
   if (first.length === 0) return null;
   return clockOf(new Date(Math.min(...first) - 60 * MIN).toISOString());
 }
+
+// ---------- Day recap ----------
+
+/**
+ * Trip days that have a recap (Plan tab "Day recap" link): every day before the open day (all of
+ * them once the trip is over), and the open day itself once its stops are finished or closed.
+ */
+export function recapDays({ days, openDay, openDayDone }: { days: number; openDay: number; openDayDone: boolean }): number[] {
+  const last = openDay > days ? days : openDayDone ? openDay : openDay - 1;
+  return Array.from({ length: Math.max(0, Math.min(last, days)) }, (_, i) => i + 1);
+}
+
+/** Visited by time t: arrived (an arrival after the fake time doesn't count, so Demo mode Reset undoes it). */
+export function visitedBy(s: Pick<Stop, 'status' | 'arrived_at'>, t: number): boolean {
+  if (s.arrived_at) return Date.parse(s.arrived_at) <= t;
+  return s.status === 'arrived' || s.status === 'done';
+}

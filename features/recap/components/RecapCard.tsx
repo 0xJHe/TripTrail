@@ -1,12 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Fragment, forwardRef, useMemo, type ReactNode } from 'react';
+import { forwardRef, useMemo, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { Avatars } from '@/components/ui/Avatars';
 import { WEATHER_ICONS } from '@/features/today/components/WeatherLine';
 import { colors, fontFamily } from '@/lib/theme';
-import { CARD_H, CARD_W, cardLayout, LABEL_H, LEGEND_ROW, MARKER_R } from '../cardLayout';
+import { CARD_H, CARD_W, cardLayout, MARKER_R } from '../cardLayout';
 import type { DayRecap } from '../hooks/useDayRecap';
 import { hoursText, kmText } from '../trail';
 
@@ -14,7 +14,6 @@ const MINT = '#8FE0D2';
 const GOLD = '#F0A01E';
 const META = '#C9D8EE';
 const SUN = '#FFD86B';
-const BADGE_R = 6.5;
 
 interface RecapCardProps {
   recap: DayRecap;
@@ -24,14 +23,18 @@ interface RecapCardProps {
 /**
  * Day recap story card (prototype screen 15): the route this person walked as a glowing line
  * on a dark background (react-native-svg, no map tiles), an emoji marker per visited stop with
- * its name (or a number and a list under the map when names would collide; cardLayout.ts),
+ * its full name (moved into free space with a thin line when stops are close; cardLayout.ts),
  * km / stops / hours out / weather, the trip and date, the group and the TripTrail mark.
  * The ref is the view captured for Share / Download (square corners, 9:16).
  */
 export const RecapCard = forwardRef<View, RecapCardProps>(function RecapCard({ recap, width }, ref) {
   const s = width / CARD_W;
   const px = (n: number) => n * s;
-  const layout = useMemo(() => cardLayout(recap.trail, recap.stops), [recap.trail, recap.stops]);
+  // Worked out again only when the trail, the stops or the name change (not on every clock tick).
+  const last = recap.trail[recap.trail.length - 1];
+  const key = [recap.trail.length, last?.at, last?.lat, last?.lng, ...recap.stops.map((p) => `${p.id}@${p.lat},${p.lng}`), recap.trip?.name].join('|');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const layout = useMemo(() => cardLayout(recap.trail, recap.stops, recap.trip?.name ?? ''), [key]);
   const ends = layout.ends;
   const w = recap.weather;
 
@@ -82,51 +85,34 @@ export const RecapCard = forwardRef<View, RecapCardProps>(function RecapCard({ r
             </G>
           ) : null,
         )}
+        {/* Thin lines from a marker to its name when the name sits away from it. */}
+        <G stroke={colors.white} strokeOpacity={0.7} strokeWidth={1}>
+          {layout.labels.map((l) => (l.leader ? <Path key={`leader-${l.id}`} d={`M${l.leader.x1} ${l.leader.y1} L${l.leader.x2} ${l.leader.y2}`} /> : null))}
+        </G>
         {layout.markers.map((m) => (
-          <Fragment key={m.id}>
-            <Circle cx={m.x} cy={m.y} r={MARKER_R} fill={colors.white} />
-            {layout.numbered ? (
-              <Circle cx={m.x + MARKER_R * 0.75} cy={m.y - MARKER_R * 0.75} r={BADGE_R} fill={colors.teal} stroke={colors.white} strokeWidth={1.2} />
-            ) : null}
-          </Fragment>
+          <Circle key={m.id} cx={m.x} cy={m.y} r={MARKER_R} fill={colors.white} />
         ))}
       </Svg>
 
       {layout.markers.map((m) => (
-        <Fragment key={m.id}>
-          <Text style={[styles.emoji, { left: px(m.x - MARKER_R), top: px(m.y - MARKER_R), width: px(MARKER_R * 2), fontSize: px(13), lineHeight: px(MARKER_R * 2) }]}>
-            {m.emoji}
-          </Text>
-          {layout.numbered ? (
-            <Text
-              style={[
-                styles.badge,
-                { left: px(m.x + MARKER_R * 0.75 - BADGE_R), top: px(m.y - MARKER_R * 0.75 - BADGE_R), width: px(BADGE_R * 2), fontSize: px(8), lineHeight: px(BADGE_R * 2) },
-              ]}>
-              {m.n}
-            </Text>
-          ) : null}
-        </Fragment>
+        <Text
+          key={m.id}
+          style={[styles.emoji, { left: px(m.x - MARKER_R), top: px(m.y - MARKER_R), width: px(MARKER_R * 2), fontSize: px(13), lineHeight: px(MARKER_R * 2) }]}>
+          {m.emoji}
+        </Text>
       ))}
 
       {layout.labels.map((l) => (
         <View
           key={l.id}
-          style={[styles.label, { left: px(l.x - l.w / 2), top: px(l.y - LABEL_H / 2), width: px(l.w), height: px(LABEL_H), borderRadius: px(LABEL_H / 2) }]}>
-          <Text numberOfLines={1} style={[styles.labelText, { fontSize: px(9.5), lineHeight: px(12), paddingHorizontal: px(6) }]}>
-            {l.name}
+          style={[styles.label, { left: px(l.x), top: px(l.y), width: px(l.w), height: px(l.h), borderRadius: px(Math.min(l.h / 2, 8)) }]}>
+          <Text
+            numberOfLines={l.lines.length}
+            adjustsFontSizeToFit
+            style={[styles.labelText, { fontSize: px(l.fontSize), lineHeight: px(l.lineHeight) }]}>
+            {l.lines.join('\n')}
           </Text>
         </View>
-      ))}
-
-      {layout.legend.map((item) => (
-        <Text
-          key={item.n}
-          numberOfLines={1}
-          style={[styles.legend, { left: px(item.x), top: px(item.y), width: px(item.w), fontSize: px(9.5), lineHeight: px(LEGEND_ROW) }]}>
-          <Text style={styles.legendNumber}>{item.n} · </Text>
-          {item.name}
-        </Text>
       ))}
 
       {!recap.hasPositions ? (
@@ -190,11 +176,8 @@ function Stat({ value, label, s, icon, lines = 1 }: { value: string; label: stri
 
 const styles = StyleSheet.create({
   emoji: { position: 'absolute', textAlign: 'center', color: colors.text },
-  badge: { position: 'absolute', textAlign: 'center', color: colors.white, fontFamily: fontFamily.bold },
   label: { position: 'absolute', backgroundColor: 'rgba(20,40,79,0.78)', alignItems: 'center', justifyContent: 'center' },
-  labelText: { fontFamily: fontFamily.bold, color: colors.white },
-  legend: { position: 'absolute', fontFamily: fontFamily.medium, color: META },
-  legendNumber: { fontFamily: fontFamily.bold, color: MINT },
+  labelText: { fontFamily: fontFamily.bold, color: colors.white, textAlign: 'center' },
   noRoute: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   date: { fontFamily: fontFamily.bold, color: MINT, letterSpacing: 0.5 },
   title: { fontFamily: fontFamily.extrabold, color: colors.white, letterSpacing: -0.6 },

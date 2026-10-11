@@ -337,9 +337,18 @@ Time and location rule (built; follow it in every live-trip feature):
   (arrived by now(); Demo: also the route's arrive events), by category, a few sights by name
   (stopEmoji). Layout (cardLayout.ts): trail and markers fitted inside the card with padding;
   markers pushed apart to a minimum gap (a moved one gets a thin line to a dot at its real
-  spot); a name pill beside each (above, below, right, left: first that covers nothing, kept
-  in the card, max 132 px, "…" beyond). If any pill can't fit, all markers get a small number
-  badge instead and the names are listed under the map ("1 · Roti canai", 1–3 columns).
+  spot). Every stop's FULL name in a pill (never cut; over 32 characters wraps onto two
+  lines; no numbers, no list). A pill sits right by its marker when free, else moves into free
+  space around the cluster (beside on a shared row grid so pills stack neatly, or above /
+  below) with a thin line from the marker's edge. Pills never cover each other, a marker, the
+  trail, a line or a moved-marker line, and stay inside the card (map area from under the
+  trip name down to the stats). Search: candidate spots per pill, then the most constrained
+  pill first with backtracking over a lazily computed clash table (bounded, ~50 ms for 7
+  stops); if nothing fits it tries a wider marker gap, narrower marker areas (room at the
+  sides) and fonts 9.5 → 8, then allows lines to cross, then pills over the trail. The card
+  recomputes it only when the trail, stops or trip name change. (Last resort, a day too crowded
+  for any of that: markers without names.) Pill width is estimated a little generously; the
+  text also has adjustsFontSizeToFit so it shrinks rather than cuts if the estimate is short.
   Header: the trip name only. One-day trip: card date "WEDNESDAY 11 NOV", screen title "Your
   day"; longer trips "DAY 2 · …" and "Day 2 done". Stats: km = smoothed trail
   length ("3.4", "38"), stops visited, hours out = first to last position ("40m", "6.5h",

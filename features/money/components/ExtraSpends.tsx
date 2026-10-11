@@ -11,7 +11,7 @@ import { cleanAmountInput, parseAmount } from '../spend';
 
 /**
  * Under the budget bar: "+ Add spend" to log a spend anytime (amount + optional note,
- * e.g. "Grab to hotel") on the selected day, and that day's extra spends with a delete each.
+ * e.g. "Taxi to hotel") on the selected day, and that day's extra spends with a delete each.
  */
 export function ExtraSpends({ tripId, day }: { tripId: string; day: number }) {
   const extras = useExtraSpends(tripId, day);
@@ -73,7 +73,7 @@ export function ExtraSpends({ tripId, day }: { tripId: string; day: number }) {
             <Field
               value={note}
               onChangeText={setNote}
-              placeholder="Note (optional), e.g. Grab to hotel"
+              placeholder="Note (optional), e.g. Taxi to hotel"
               maxLength={80}
               returnKeyType="done"
               onSubmitEditing={save}

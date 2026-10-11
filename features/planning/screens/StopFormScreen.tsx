@@ -21,9 +21,9 @@ const KINDS: { value: StopKind; label: string }[] = [
 ];
 
 const NAME_HINT: Record<StopKind, string> = {
-  place: 'e.g. Kek Lok Si Temple',
-  flight: 'e.g. Flight KUL → PEN · AK 6102',
-  hotel: 'e.g. Hotel check-in · Muntri Street',
+  place: 'e.g. Night market',
+  flight: 'e.g. Flight home · AK 6102',
+  hotel: 'e.g. Hotel check-in',
 };
 
 /** Edit a stop (name, time, price), delete it, or add a new one. */

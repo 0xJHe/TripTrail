@@ -19,7 +19,13 @@ interface FieldProps extends TextInputProps {
   invalid?: boolean;
 }
 
-/** White input box (prototype .field) with an optional grey prefix ("RM", "Month"). */
+/** Light grey for the "e.g. ..." hints, so an empty box never looks filled in. */
+const PLACEHOLDER_COLOR = '#A3AAB6';
+
+/**
+ * White input box (prototype .field) with an optional grey prefix ("RM", "Month").
+ * While empty, the placeholder shows light grey in regular weight (typed text is semibold).
+ */
 export const Field = forwardRef<TextInput, FieldProps>(function Field(
   { prefix, containerStyle, mono, invalid, style, ...rest },
   ref,
@@ -29,9 +35,9 @@ export const Field = forwardRef<TextInput, FieldProps>(function Field(
       {prefix ? <Txt style={styles.prefix}>{prefix}</Txt> : null}
       <TextInput
         ref={ref}
-        placeholderTextColor="#A3AAB6"
+        placeholderTextColor={PLACEHOLDER_COLOR}
         {...rest}
-        style={[styles.input, mono && styles.mono, style]}
+        style={[styles.input, mono && styles.mono, style, !rest.value && styles.placeholder]}
       />
     </View>
   );
@@ -83,5 +89,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   select: { fontSize: 14, paddingVertical: 0 },
+  placeholder: { fontFamily: fontFamily.regular },
   mono: { fontFamily: fontFamily.mono, letterSpacing: 1 },
 });

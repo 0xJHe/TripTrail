@@ -443,7 +443,7 @@ const TAG_PAD_Y = 2.5;
 
 export type TagKind = 'start' | 'end' | 'both';
 
-/** A small tag by the first / last marker: "Start · 08:30", "End · 20:00" (one stop: both in one). */
+/** A small tag by the first / last marker: "Start", "End" (one stop: "Start – End"). */
 export interface CardTag {
   kind: TagKind;
   text: string;
@@ -454,21 +454,13 @@ export interface CardTag {
   leader: Segment | null;
 }
 
-/** When the day started and ended ("08:30"), or null when not known. */
-export interface DayEnds {
-  start: string | null;
-  end: string | null;
-}
-
-/** The tags' words: "Start · 08:30" / "End · 20:00", or "Start · 08:30 – End · 20:00" for a one-stop day. */
-export function tagTexts(stops: number, ends: DayEnds): { kind: TagKind; text: string; m: number }[] {
-  const start = ends.start ? `Start · ${ends.start}` : 'Start';
-  const end = ends.end ? `End · ${ends.end}` : 'End';
+/** The tags: "Start" at the first stop and "End" at the last, or one "Start – End" for a one-stop day. */
+export function tagTexts(stops: number): { kind: TagKind; text: string; m: number }[] {
   if (stops <= 0) return [];
-  if (stops === 1) return [{ kind: 'both', text: `${start} – ${end}`, m: 0 }];
+  if (stops === 1) return [{ kind: 'both', text: 'Start – End', m: 0 }];
   return [
-    { kind: 'start', text: start, m: 0 },
-    { kind: 'end', text: end, m: stops - 1 },
+    { kind: 'start', text: 'Start', m: 0 },
+    { kind: 'end', text: 'End', m: stops - 1 },
   ];
 }
 
@@ -478,7 +470,7 @@ export const tagSize = (text: string) => ({ w: textWidth(text, TAG_FONT) + PILL_
  * Markers along the prototype's line for the stops visited (in visit order), a name pill each,
  * and Start / End tags at the first and last stop.
  */
-export function cardLayout(stops: CardStop[], ends: DayEnds = { start: null, end: null }): CardLayout {
+export function cardLayout(stops: CardStop[]): CardLayout {
   const n = stops.length;
   const spacing = n > 1 ? TRAIL_LENGTH / (n - 1) : TRAIL_LENGTH;
   const r = clamp(Math.floor(spacing / 2 - 3), MIN_MARKER_R, MARKER_R);
@@ -487,7 +479,7 @@ export function cardLayout(stops: CardStop[], ends: DayEnds = { start: null, end
   const normals = at.map((p) => ({ x: p.nx, y: p.ny }));
   // Names alternate sides of the line; a stop's tag prefers the side its name doesn't.
   const side = (i: number) => (i % 2 === 0 ? 1 : -1);
-  const tags = tagTexts(n, ends).map((t) => ({ ...t, ...tagSize(t.text) }));
+  const tags = tagTexts(n).map((t) => ({ ...t, ...tagSize(t.text) }));
   const tagSpots = tags.map((t) => spotsFor({ m: t.m, w: t.w, h: t.h, own: -side(t.m) }, markers, normals));
   const tagArea = tags.reduce((sum, t) => sum + (t.w + PAD) * (t.h + PAD), 0);
 

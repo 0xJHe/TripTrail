@@ -13,7 +13,7 @@ import { now, useNow } from '@/lib/clock';
 import { useDemo } from '@/lib/demo';
 import { sampleRoute, type DemoRoute } from '@/lib/location';
 import { fetchMyPositions } from '../api';
-import { openDayEndsAt, recapDateLine, recapTimes, recapTitle, visitedBy } from '../dayEnd';
+import { openDayEndsAt, recapDateLine, recapTitle, visitedBy } from '../dayEnd';
 import { dayWeatherOf, useDayWeather, weatherSummary } from '../dayWeather';
 import { hoursOutMs, smoothTrail, trailMeters, type Fix } from '../trail';
 
@@ -109,8 +109,6 @@ export function useDayRecap(day: number) {
     outMs: hoursOutMs(fixes),
     // The typical weather while out (first to last position).
     weather: weatherSummary(dayWeatherOf(weatherDays, tripId, day), { from: fixes[0]?.at, to: fixes[fixes.length - 1]?.at, until: time }),
-    /** Start / End tags: first arrival and last departure, else first and last position. */
-    ends: recapTimes(visited, route?.events ?? [], fixes, time),
     people: memberAvatars(plan.members),
   };
 }

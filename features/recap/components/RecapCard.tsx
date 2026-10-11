@@ -23,18 +23,18 @@ interface RecapCardProps {
 /**
  * Day recap story card (prototype screen 15): the prototype's glowing trail (the same line for
  * every trip, react-native-svg, no map tiles) with the day's visited stops along it in visit
- * order, an emoji marker and full-name pill each, "Start · 08:30" / "End · 20:00" tags at the first
- * and last stop (cardLayout.ts), the real km / stops / hours out / weather, the trip and date,
+ * order, an emoji marker and full-name pill each, "Start" / "End" tags at the first and last
+ * stop (cardLayout.ts), the real km / stops / hours out / weather, the trip and date,
  * the group and the TripTrail mark.
  * The ref is the view captured for Share / Download (square corners, 9:16).
  */
 export const RecapCard = forwardRef<View, RecapCardProps>(function RecapCard({ recap, width }, ref) {
   const s = width / CARD_W;
   const px = (n: number) => n * s;
-  // Worked out again only when the stops or the start / end times change (not on every clock tick).
-  const key = [...recap.stops.map((p) => `${p.id}:${p.name}:${p.category}`), recap.ends.start, recap.ends.end].join('|');
+  // Worked out again only when the stops change (not on every clock tick).
+  const key = recap.stops.map((p) => `${p.id}:${p.name}:${p.category}`).join('|');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const layout = useMemo(() => cardLayout(recap.stops, recap.ends), [key]);
+  const layout = useMemo(() => cardLayout(recap.stops), [key]);
   const w = recap.weather;
 
   return (

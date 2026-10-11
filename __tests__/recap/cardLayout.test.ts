@@ -58,7 +58,6 @@ function expectClean(l: CardLayout, list: CardStop[]) {
   }
 }
 
-const ENDS = { start: '08:30', end: '20:00' };
 
 describe('stops along the prototype trail', () => {
   it('puts the first stop at the start of the line and the last at its end', () => {
@@ -84,7 +83,7 @@ describe('stops along the prototype trail', () => {
   });
 
   it('draws no markers without stops', () => {
-    expect(cardLayout([], ENDS)).toEqual({ markers: [], labels: [], tags: [] });
+    expect(cardLayout([])).toEqual({ markers: [], labels: [], tags: [] });
   });
 
   it('keeps full-size markers with room, and makes them smaller (never touching) when many share the line', () => {
@@ -97,7 +96,7 @@ describe('stops along the prototype trail', () => {
 
 describe('name pills', () => {
   it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12])('%i stops: every full name and the Start / End tags, no overlaps, inside the card', (n) => {
-    const l = cardLayout(stops(n), ENDS);
+    const l = cardLayout(stops(n));
     expect(l.tags.length).toBe(n === 1 ? 1 : 2);
     expectClean(l, stops(n));
   });
@@ -144,24 +143,20 @@ describe('name pills', () => {
 });
 
 describe('Start / End tags', () => {
-  it('says when the day started and ended, at the first and last stop', () => {
-    expect(tagTexts(5, ENDS)).toEqual([
-      { kind: 'start', text: 'Start · 08:30', m: 0 },
-      { kind: 'end', text: 'End · 20:00', m: 4 },
+  it('says "Start" at the first stop and "End" at the last, no times', () => {
+    expect(tagTexts(5)).toEqual([
+      { kind: 'start', text: 'Start', m: 0 },
+      { kind: 'end', text: 'End', m: 4 },
     ]);
   });
 
-  it('puts both in one tag for a one-stop day', () => {
-    expect(tagTexts(1, ENDS)).toEqual([{ kind: 'both', text: 'Start · 08:30 – End · 20:00', m: 0 }]);
-  });
-
-  it('leaves the time out when it is not known, and has no tags without stops', () => {
-    expect(tagTexts(3, { start: null, end: '19:10' }).map((t) => t.text)).toEqual(['Start', 'End · 19:10']);
-    expect(tagTexts(0, ENDS)).toEqual([]);
+  it('shows "Start – End" once for a one-stop day, and no tags without stops', () => {
+    expect(tagTexts(1)).toEqual([{ kind: 'both', text: 'Start – End', m: 0 }]);
+    expect(tagTexts(0)).toEqual([]);
   });
 
   it('sits each tag near its own stop', () => {
-    const l = cardLayout(stops(5), ENDS);
+    const l = cardLayout(stops(5));
     const near = (t: CardLayout['tags'][number], m: CardLayout['markers'][number]) =>
       Math.hypot(Math.max(t.x - m.x, 0, m.x - t.x - t.w), Math.max(t.y - m.y, 0, m.y - t.y - t.h));
     expect(near(l.tags[0], l.markers[0])).toBeLessThan(near(l.tags[0], l.markers[4]));

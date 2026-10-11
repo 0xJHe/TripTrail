@@ -340,10 +340,8 @@ Time and location rule (built; follow it in every live-trip feature):
   the arch, inside the loop) with a thin line from the marker's edge. Pills never cover each
   other, a marker or the line, lines don't run through pills, and everything stays inside the
   card (pills from y 112 to the stats). Start / End tags (small teal pills, a mint dot for
-  Start, a gold flag for End): "Start · 08:30" by the first stop, "End · 20:00" by the last;
-  one stop: a single "Start · 08:30 – End · 20:00". Times (dayEnd.ts recapTimes): arriving at
-  the first stop visited and leaving the last (Demo: also the route's arrive / leave moments),
-  else the first / last position; no time known: just "Start" / "End". The tags go through
+  Start, a gold flag for End), no times: "Start" by the first stop, "End" by the last; one
+  stop: a single "Start – End". The tags go through
   the same placement as the pills (they prefer the side of the line their stop's name doesn't
   use), so they never cover a pill, a marker or the line. Search: candidate spots per pill, the most constrained
   pill first with backtracking over a lazily computed clash table; styles tried in turn: one

@@ -5,12 +5,14 @@ import {
   LABEL_TOP,
   MARKER_R,
   nameLines,
+  tagTexts,
   pointAlong,
   stopDistances,
   STATS_TOP,
   TRAIL_LENGTH,
   type CardLayout,
   type CardStop,
+  type Segment,
 } from '@/features/recap/cardLayout';
 
 const NAMES = [
@@ -34,20 +36,29 @@ type Rect = { x: number; y: number; w: number; h: number };
 const hit = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 const inside = (p: { x: number; y: number }, r: Rect) => p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h;
 
-/** Every rule the user can see: full names, nothing covered, all inside the card. */
+/** Every rule the user can see: full names, nothing covered (pills or tags), all inside the card. */
 function expectClean(l: CardLayout, list: CardStop[]) {
   expect(l.labels.map((b) => b.lines.join(' '))).toEqual(list.map((s) => s.name));
   const line = Array.from({ length: 400 }, (_, k) => pointAlong((TRAIL_LENGTH * k) / 399));
-  for (const b of l.labels) {
+  const boxes: (Rect & { leader: Segment | null })[] = [...l.labels, ...l.tags];
+  const leaders = [...l.labels, ...l.tags].flatMap((b) => (b.leader ? [b.leader] : []));
+  for (const b of boxes) {
     expect(b.x).toBeGreaterThanOrEqual(EDGE - 0.01);
     expect(b.x + b.w).toBeLessThanOrEqual(CARD_W - EDGE + 0.01);
     expect(b.y).toBeGreaterThanOrEqual(LABEL_TOP - 0.01);
     expect(b.y + b.h).toBeLessThanOrEqual(STATS_TOP);
-    for (const o of l.labels) if (o !== b) expect(hit(b, o)).toBe(false);
+    for (const o of boxes) if (o !== b) expect(hit(b, o)).toBe(false);
     for (const m of l.markers) expect(hit(b, { x: m.x - m.r, y: m.y - m.r, w: 2 * m.r, h: 2 * m.r })).toBe(false);
     expect(line.some((p) => inside(p, b))).toBe(false);
+    // No line from another marker runs through it.
+    for (const s of leaders) {
+      const own = b.leader === s;
+      if (!own) for (let k = 1; k < 20; k++) expect(inside({ x: s.x1 + ((s.x2 - s.x1) * k) / 20, y: s.y1 + ((s.y2 - s.y1) * k) / 20 }, b)).toBe(false);
+    }
   }
 }
+
+const ENDS = { start: '08:30', end: '20:00' };
 
 describe('stops along the prototype trail', () => {
   it('puts the first stop at the start of the line and the last at its end', () => {
@@ -73,7 +84,7 @@ describe('stops along the prototype trail', () => {
   });
 
   it('draws no markers without stops', () => {
-    expect(cardLayout([])).toEqual({ markers: [], labels: [] });
+    expect(cardLayout([], ENDS)).toEqual({ markers: [], labels: [], tags: [] });
   });
 
   it('keeps full-size markers with room, and makes them smaller (never touching) when many share the line', () => {
@@ -85,8 +96,10 @@ describe('stops along the prototype trail', () => {
 });
 
 describe('name pills', () => {
-  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12])('%i stops: every full name, no overlaps, inside the card', (n) => {
-    expectClean(cardLayout(stops(n)), stops(n));
+  it.each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12])('%i stops: every full name and the Start / End tags, no overlaps, inside the card', (n) => {
+    const l = cardLayout(stops(n), ENDS);
+    expect(l.tags.length).toBe(n === 1 ? 1 : 2);
+    expectClean(l, stops(n));
   });
 
   it("puts short names (like the prototype's) close to their markers, changing sides along the line", () => {
@@ -127,5 +140,31 @@ describe('name pills', () => {
     const l = cardLayout(long);
     expect(l.labels[0].lines).toHaveLength(2);
     expectClean(l, long);
+  });
+});
+
+describe('Start / End tags', () => {
+  it('says when the day started and ended, at the first and last stop', () => {
+    expect(tagTexts(5, ENDS)).toEqual([
+      { kind: 'start', text: 'Start · 08:30', m: 0 },
+      { kind: 'end', text: 'End · 20:00', m: 4 },
+    ]);
+  });
+
+  it('puts both in one tag for a one-stop day', () => {
+    expect(tagTexts(1, ENDS)).toEqual([{ kind: 'both', text: 'Start · 08:30 – End · 20:00', m: 0 }]);
+  });
+
+  it('leaves the time out when it is not known, and has no tags without stops', () => {
+    expect(tagTexts(3, { start: null, end: '19:10' }).map((t) => t.text)).toEqual(['Start', 'End · 19:10']);
+    expect(tagTexts(0, ENDS)).toEqual([]);
+  });
+
+  it('sits each tag near its own stop', () => {
+    const l = cardLayout(stops(5), ENDS);
+    const near = (t: CardLayout['tags'][number], m: CardLayout['markers'][number]) =>
+      Math.hypot(Math.max(t.x - m.x, 0, m.x - t.x - t.w), Math.max(t.y - m.y, 0, m.y - t.y - t.h));
+    expect(near(l.tags[0], l.markers[0])).toBeLessThan(near(l.tags[0], l.markers[4]));
+    expect(near(l.tags[1], l.markers[4])).toBeLessThan(near(l.tags[1], l.markers[0]));
   });
 });

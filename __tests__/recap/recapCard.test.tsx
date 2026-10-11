@@ -23,6 +23,7 @@ function recap(over: Partial<DayRecap> = {}): DayRecap {
     weather: { tempC: 31, words: 'mostly sunny', kind: 'sunny' },
     dateLine: 'DAY 1 · MONDAY 12 OCT',
     title: 'Day 1 done',
+    ends: { start: '08:30', end: '20:00' },
     trip: { name: 'Penang' },
     people: [{ key: 'm1', name: 'Aisha', color: '#00A38F' }],
     ...over,
@@ -38,6 +39,8 @@ describe('RecapCard', () => {
     expect(screen.getByText('2')).toBeTruthy();
     expect(screen.getByText('9.5h')).toBeTruthy();
     expect(screen.getByText('31°')).toBeTruthy();
+    expect(screen.getByText('Start · 08:30')).toBeTruthy();
+    expect(screen.getByText('End · 20:00')).toBeTruthy();
     expect(screen.getByText('mostly sunny')).toBeTruthy();
     expect(screen.getByText('🏨')).toBeTruthy();
     expect(screen.getByText('🛕')).toBeTruthy();

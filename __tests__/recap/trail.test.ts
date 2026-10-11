@@ -1,4 +1,4 @@
-import { recapDateLine, recapDays, recapTitle, visitedBy } from '@/features/recap/dayEnd';
+import { recapDateLine, recapDays, recapTimes, recapTitle, visitedBy } from '@/features/recap/dayEnd';
 import {
   hoursOutMs,
   hoursText,
@@ -179,5 +179,37 @@ describe('one-day trips', () => {
   it('keep "Day N" on longer trips', () => {
     expect(recapDateLine(2, 3, 'Thursday 12 Nov')).toBe('DAY 2 · THURSDAY 12 NOV');
     expect(recapTitle(2, 3)).toBe('Day 2 done');
+  });
+});
+
+describe('Start / End times', () => {
+  const iso = (h: number) => new Date(T0 + (h - 8) * 60 * MIN).toISOString();
+  const clock = (h: number) => {
+    const d = new Date(T0 + (h - 8) * 60 * MIN);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+  const visited = [
+    { id: 'a', arrived_at: iso(8.5), left_at: iso(9.5) },
+    { id: 'b', arrived_at: iso(19), left_at: iso(20) },
+  ];
+  const fixes = [{ at: T0 }, { at: T0 + 13 * 60 * MIN }];
+
+  it('uses arriving at the first stop and leaving the last one', () => {
+    expect(recapTimes(visited, [], fixes, T0 + 14 * 60 * MIN)).toEqual({ start: clock(8.5), end: clock(20) });
+  });
+
+  it('falls back to Demo mode moments, then to the first and last position', () => {
+    const noTimes = visited.map((v) => ({ ...v, arrived_at: null, left_at: null }));
+    const moments = [
+      { kind: 'arrive', stopId: 'a', at: T0 + 45 * MIN },
+      { kind: 'early', stopId: 'b', at: T0 + 11 * 60 * MIN },
+    ];
+    expect(recapTimes(noTimes, moments, fixes, T0 + 14 * 60 * MIN)).toEqual({ start: clock(8.75), end: clock(19) });
+    expect(recapTimes(noTimes, [], fixes, T0 + 14 * 60 * MIN)).toEqual({ start: clock(8), end: clock(21) });
+  });
+
+  it('ignores times after the (fake) time, and is empty with nothing known', () => {
+    expect(recapTimes(visited, [], [], T0 + 2 * 60 * MIN).end).toBeNull();
+    expect(recapTimes([], [], [], T0)).toEqual({ start: null, end: null });
   });
 });

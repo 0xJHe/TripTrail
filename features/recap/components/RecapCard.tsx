@@ -6,7 +6,7 @@ import Svg, { Circle, Defs, G, LinearGradient, Path, Rect, Stop } from 'react-na
 import { Avatars } from '@/components/ui/Avatars';
 import { WEATHER_ICONS } from '@/features/today/components/WeatherLine';
 import { colors, fontFamily } from '@/lib/theme';
-import { CARD_H, CARD_W, cardLayout, TRAIL_PATH, TRAIL_X } from '../cardLayout';
+import { CARD_H, CARD_W, cardLayout, TAG_FONT, TAG_ICON_W, TAG_LINE_H, TRAIL_PATH, TRAIL_X } from '../cardLayout';
 import type { DayRecap } from '../hooks/useDayRecap';
 import { hoursText, kmText } from '../trail';
 
@@ -23,17 +23,18 @@ interface RecapCardProps {
 /**
  * Day recap story card (prototype screen 15): the prototype's glowing trail (the same line for
  * every trip, react-native-svg, no map tiles) with the day's visited stops along it in visit
- * order, an emoji marker and full-name pill each (cardLayout.ts), the real km / stops / hours
- * out / weather, the trip and date, the group and the TripTrail mark.
+ * order, an emoji marker and full-name pill each, "Start · 08:30" / "End · 20:00" tags at the first
+ * and last stop (cardLayout.ts), the real km / stops / hours out / weather, the trip and date,
+ * the group and the TripTrail mark.
  * The ref is the view captured for Share / Download (square corners, 9:16).
  */
 export const RecapCard = forwardRef<View, RecapCardProps>(function RecapCard({ recap, width }, ref) {
   const s = width / CARD_W;
   const px = (n: number) => n * s;
-  // Worked out again only when the stops change (not on every clock tick).
-  const key = recap.stops.map((p) => `${p.id}:${p.name}:${p.category}`).join('|');
+  // Worked out again only when the stops or the start / end times change (not on every clock tick).
+  const key = [...recap.stops.map((p) => `${p.id}:${p.name}:${p.category}`), recap.ends.start, recap.ends.end].join('|');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const layout = useMemo(() => cardLayout(recap.stops), [key]);
+  const layout = useMemo(() => cardLayout(recap.stops, recap.ends), [key]);
   const w = recap.weather;
 
   return (
@@ -68,6 +69,7 @@ export const RecapCard = forwardRef<View, RecapCardProps>(function RecapCard({ r
         {/* Thin lines from a marker to its name when the name sits away from it. */}
         <G stroke={colors.white} strokeOpacity={0.7} strokeWidth={1}>
           {layout.labels.map((l) => (l.leader ? <Path key={`leader-${l.id}`} d={`M${l.leader.x1} ${l.leader.y1} L${l.leader.x2} ${l.leader.y2}`} /> : null))}
+          {layout.tags.map((t) => (t.leader ? <Path key={`tag-leader-${t.kind}`} d={`M${t.leader.x1} ${t.leader.y1} L${t.leader.x2} ${t.leader.y2}`} strokeDasharray="2 2" /> : null))}
         </G>
         {layout.markers.map((m) => (
           <Circle key={m.id} cx={m.x} cy={m.y} r={m.r} fill={colors.white} />
@@ -91,6 +93,24 @@ export const RecapCard = forwardRef<View, RecapCardProps>(function RecapCard({ r
             adjustsFontSizeToFit
             style={[styles.labelText, { fontSize: px(l.fontSize), lineHeight: px(l.lineHeight) }]}>
             {l.lines.join('\n')}
+          </Text>
+        </View>
+      ))}
+
+      {layout.tags.map((t) => (
+        <View
+          key={t.kind}
+          testID={`recap-tag-${t.kind}`}
+          style={[styles.tag, { left: px(t.x), top: px(t.y), width: px(t.w), height: px(t.h), borderRadius: px(t.h / 2), paddingLeft: px(5) }]}>
+          <View style={{ width: px(TAG_ICON_W - 2), alignItems: 'center' }}>
+            {t.kind === 'end' ? (
+              <Ionicons name="flag" size={px(7.5)} color={GOLD} />
+            ) : (
+              <View style={{ width: px(5), height: px(5), borderRadius: px(2.5), backgroundColor: MINT }} />
+            )}
+          </View>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.tagText, { fontSize: px(TAG_FONT), lineHeight: px(TAG_LINE_H) }]}>
+            {t.text}
           </Text>
         </View>
       ))}
@@ -150,6 +170,15 @@ const styles = StyleSheet.create({
   emoji: { position: 'absolute', textAlign: 'center', color: colors.text },
   label: { position: 'absolute', backgroundColor: 'rgba(20,40,79,0.7)', alignItems: 'center', justifyContent: 'center' },
   labelText: { fontFamily: fontFamily.bold, color: colors.white, textAlign: 'center' },
+  tag: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15,110,106,0.85)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(143,224,210,0.6)',
+  },
+  tagText: { fontFamily: fontFamily.semibold, color: colors.white },
   date: { fontFamily: fontFamily.bold, color: MINT, letterSpacing: 0.5 },
   title: { fontFamily: fontFamily.extrabold, color: colors.white, letterSpacing: -0.6 },
   meta: { fontFamily: fontFamily.regular, color: META },

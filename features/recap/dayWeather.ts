@@ -65,9 +65,9 @@ export const dayWeatherOf = (days: Record<string, WeatherSample[]>, tripId: stri
   tripId ? (days[key(tripId, day)] ?? []) : [];
 
 export interface WeatherSummary {
-  /** The day's highest, °C. */
+  /** The day's typical temperature (median while out), °C. */
   tempC: number;
-  /** "sunny", "mostly cloudy", "sunny, then rain", "mostly sunny, some rain". */
+  /** "cloudy" (one reading), "mostly cloudy", "mostly sunny, some rain". */
   words: string;
   kind: WeatherKind;
 }
@@ -93,29 +93,39 @@ function mostOf(list: WeatherSample[]): { sky: string; share: number; kind: Weat
   return { sky: top, share: c.n / list.length, kind: c.kind };
 }
 
-/**
- * The day in a few words, from its readings in time order (up to `until`, so Demo mode Reset
- * forgets later ones): "cloudy" (all day), "sunny, then rain" (it changed around the middle),
- * "mostly cloudy" (one sky most of the day), plus ", some rain" when it rained a bit.
- * Temperature: the highest real reading (the forecasts' if there were none). null = no readings.
- */
-export function weatherSummary(samples: WeatherSample[], until = Infinity): WeatherSummary | null {
-  const list = samples.filter((s) => s.at <= until).sort((a, b) => a.at - b.at);
-  if (list.length === 0) return null;
-  const real = list.filter((s) => s.actual);
-  const tempC = Math.max(...(real.length > 0 ? real : list).map((s) => s.tempC));
-  const all = mostOf(list);
-  const wet = list.some((s) => WET.includes(s.kind));
-  const withRain = (w: string) => (wet && !/rain|storm|snow/.test(w) ? `${w}, some rain` : w);
-  if (all.share === 1) return { tempC, words: all.sky, kind: all.kind };
+/** Which readings describe the day: from the first to the last position, and not after the (fake) time. */
+export interface SummaryWindow {
+  /** First position (ms); readings before it don't count, if any fall in the window. */
+  from?: number | null;
+  /** Last position (ms). */
+  to?: number | null;
+  /** now() — Demo mode Reset forgets later readings. */
+  until?: number;
+}
 
-  if (list.length >= 2) {
-    const half = Math.ceil(list.length / 2);
-    const early = mostOf(list.slice(0, half));
-    const late = mostOf(list.slice(half));
-    if (early.sky !== late.sky && early.share >= 0.6 && late.share >= 0.6) {
-      return { tempC, words: `${early.sky}, then ${late.sky}`, kind: late.kind };
-    }
-  }
-  return { tempC, words: withRain(all.share >= 0.5 ? `mostly ${all.sky}` : `${all.sky}, changeable`), kind: all.kind };
+const median = (v: number[]) => {
+  const s = [...v].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+};
+
+/**
+ * The day as a whole, from its readings while out (first to last position; all of the day's if
+ * none fall there): the typical temperature (median, rounded) and "mostly [most common sky]",
+ * plus ", some rain" if any rain was seen. One reading: just its sky ("cloudy").
+ * null = no readings.
+ */
+export function weatherSummary(samples: WeatherSample[], { from, to, until = Infinity }: SummaryWindow = {}): WeatherSummary | null {
+  const known = samples.filter((s) => s.at <= until).sort((a, b) => a.at - b.at);
+  // A reading counts for the hour it's in, so the hour the day started in counts too.
+  const out = known.filter((s) => (from == null || s.at + HOUR > from) && (to == null || s.at <= to));
+  const list = out.length > 0 ? out : known;
+  if (list.length === 0) return null;
+  const tempC = Math.round(median(list.map((s) => s.tempC)));
+  const top = mostOf(list);
+  if (list.length === 1) return { tempC, words: top.sky, kind: top.kind };
+  const wet = list.some((s) => WET.includes(s.kind));
+  // "partly cloudy" is already a mix: no "mostly" in front.
+  const main = top.sky.startsWith('partly') ? top.sky : `mostly ${top.sky}`;
+  return { tempC, words: wet && !/rain|storm|snow/.test(top.sky) ? `${main}, some rain` : main, kind: top.kind };
 }

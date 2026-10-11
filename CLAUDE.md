@@ -339,7 +339,13 @@ Time and location rule (built; follow it in every live-trip feature):
   stops one side, odd the other) when there's room, else moved into free space (e.g. above
   the arch, inside the loop) with a thin line from the marker's edge. Pills never cover each
   other, a marker or the line, lines don't run through pills, and everything stays inside the
-  card (pills from y 112 to the stats). Search: candidate spots per pill, the most constrained
+  card (pills from y 112 to the stats). Start / End tags (small teal pills, a mint dot for
+  Start, a gold flag for End): "Start · 08:30" by the first stop, "End · 20:00" by the last;
+  one stop: a single "Start · 08:30 – End · 20:00". Times (dayEnd.ts recapTimes): arriving at
+  the first stop visited and leaving the last (Demo: also the route's arrive / leave moments),
+  else the first / last position; no time known: just "Start" / "End". The tags go through
+  the same placement as the pills (they prefer the side of the line their stop's name doesn't
+  use), so they never cover a pill, a marker or the line. Search: candidate spots per pill, the most constrained
   pill first with backtracking over a lazily computed clash table; styles tried in turn: one
   line 9.5 → 8 px, then (crowded days) names over 16 characters on two lines 9 → 7 px, then
   6.5 / 6 px; then lines may cross. (Last resort: markers without names.) ~50 ms for 7 stops,
@@ -356,8 +362,13 @@ Time and location rule (built; follow it in every live-trip feature):
   ("3.4", "38"), stops visited, hours out = first to last position ("40m", "6.5h", "13h"),
   weather = what the Today card already fetched (useRecordDayWeather in the tabs layout saves
   it on the phone: the current weather and the reply's forecast hours, one per hour, a real
-  reading beats a forecast): highest real °C + a summary: "cloudy" (all day), "sunny, then
-  rain" (changed mid-day), "mostly cloudy", "mostly sunny, some rain"; left out if none. No
+  reading beats a forecast; the forecast hours are moved onto lib/clock's time, so Demo mode's
+  fake day collects them too, a few hours per fetch). Summary (dayWeather.ts weatherSummary)
+  over the readings while out (first to last position, the hour it started in counts; all of
+  the day's if none fall there): temperature = their median, rounded (typical, not highest);
+  words = "mostly [most common sky]" whenever there are several readings, plus ", some rain"
+  if any rain was seen ("partly cloudy" stays as it is, already a mix); one reading: just its
+  sky ("cloudy"). Left out if none. No
   positions: "–" for km and hours. Share your day = capture at 1080×1920 + share sheet;
   Download = gallery (Android 13+ needs no permission; older asks for storage after our own
   "Save to your gallery?" explanation; blocked -> Open settings).

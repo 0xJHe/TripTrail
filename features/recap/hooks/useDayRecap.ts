@@ -13,7 +13,7 @@ import { now, useNow } from '@/lib/clock';
 import { useDemo } from '@/lib/demo';
 import { sampleRoute, type DemoRoute } from '@/lib/location';
 import { fetchMyPositions } from '../api';
-import { openDayEndsAt, recapDateLine, recapTitle, visitedBy } from '../dayEnd';
+import { openDayEndsAt, recapDateLine, recapTimes, recapTitle, visitedBy } from '../dayEnd';
 import { dayWeatherOf, useDayWeather, weatherSummary } from '../dayWeather';
 import { hoursOutMs, smoothTrail, trailMeters, type Fix } from '../trail';
 
@@ -107,7 +107,10 @@ export function useDayRecap(day: number) {
     stops: visited.map((s) => ({ id: s.id, name: s.name, category: s.category, lat: s.lat!, lng: s.lng! })),
     meters: trailMeters(trail),
     outMs: hoursOutMs(fixes),
-    weather: weatherSummary(dayWeatherOf(weatherDays, tripId, day), time),
+    // The typical weather while out (first to last position).
+    weather: weatherSummary(dayWeatherOf(weatherDays, tripId, day), { from: fixes[0]?.at, to: fixes[fixes.length - 1]?.at, until: time }),
+    /** Start / End tags: first arrival and last departure, else first and last position. */
+    ends: recapTimes(visited, route?.events ?? [], fixes, time),
     people: memberAvatars(plan.members),
   };
 }

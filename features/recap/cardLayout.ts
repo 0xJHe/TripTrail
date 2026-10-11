@@ -5,8 +5,9 @@ import { stopEmoji } from './trail';
  * Where everything goes on the day recap card (screen 15), on a 300-wide 9:16 canvas. The trail
  * is always the prototype's line (same shape, every trip); the day's visited stops sit along it
  * in visit order, evenly spaced, the first at its start and the last at its end. Each stop's
- * full name goes in a pill on alternating sides of the line; pills never cover each other, a
- * marker or the line, and stay inside the card (smaller font only if they can't all fit).
+ * full name goes in a pill on alternating sides of the line, and small Start / End tags sit by
+ * the first and last stop; pills and tags never cover each other, a marker or the line, and
+ * stay inside the card (smaller font only if they can't all fit).
  */
 
 export const CARD_W = 300;
@@ -103,6 +104,7 @@ export interface CardLabel {
 export interface CardLayout {
   markers: CardMarker[];
   labels: CardLabel[];
+  tags: CardTag[];
 }
 
 interface Rect {
@@ -297,19 +299,30 @@ function envelope(r: Rect, l: Segment | null): Rect {
 
 const AREA: Rect = { x: EDGE, y: LABEL_TOP, w: CARD_W - 2 * EDGE, h: STATS_TOP - 4 - LABEL_TOP };
 
+/** Something to place by a marker: a stop's name pill or a Start / End tag. */
+interface Item {
+  /** The marker it belongs to. */
+  m: number;
+  w: number;
+  h: number;
+  /** Preferred side of the line (1 = the normal's side, -1 = the other). */
+  own: number;
+}
+
 /**
- * Places for marker i's pill, best first: straight out from the line on its own side (even stops
- * on one side, odd on the other), then a little further out or slid along the line, then the
- * other side. None covers a marker or the line, and all are inside the card.
+ * Places for an item, best first: straight out from the line on its own side, a little further
+ * out or slid along the line, then the other side; then anywhere else that's free (e.g. above
+ * the arch or inside the loop) with a line to the marker. None covers a marker or the line, and
+ * all are inside the card.
  */
-function spotsFor(i: number, markers: CardMarker[], normals: XY[], font: number, wrapAt: number) {
-  const m = markers[i];
-  const size = pillSize(m.name, font, wrapAt);
+function spotsFor(item: Item, markers: CardMarker[], normals: XY[]): Spot[] {
+  const m = markers[item.m];
+  const size = item;
   const dots: Rect[] = markers.map((o) => ({ x: o.x - o.r, y: o.y - o.r, w: o.r * 2, h: o.r * 2 }));
-  const n = normals[i];
+  const n = normals[item.m];
   const tx = -n.y;
   const ty = n.x;
-  const own = i % 2 === 0 ? 1 : -1;
+  const own = item.own;
   const near: (Spot & { score: number })[] = [];
   const far: (Spot & { score: number })[] = [];
   let out = near;
@@ -327,14 +340,13 @@ function spotsFor(i: number, markers: CardMarker[], normals: XY[], font: number,
     if (touchesLine(r)) return;
     if (dots.some((d) => hits(r, d, PAD))) return;
     const leader = leaderTo(m, r);
-    if (leader && dots.some((d, k) => k !== i && segmentHitsRect(leader, d))) return;
+    if (leader && dots.some((d, k) => k !== item.m && segmentHitsRect(leader, d))) return;
     const nx = clamp(m.x, r.x, r.x + r.w);
     const ny = clamp(m.y, r.y, r.y + r.h);
     // A line to the pill that crosses the trail is allowed, but looks busier.
     const overTrail = leader && crossesTrail(leader) ? 40 : 0;
     out.push({ r, leader, box: envelope(r, leader), score: Math.hypot(nx - m.x, ny - m.y) + extra + overTrail });
   };
-  // Straight out from the line on its own side, a little further out or slid along; then the other side.
   for (const side of [own, -own]) {
     const sx = n.x * side;
     const sy = n.y * side;
@@ -350,7 +362,6 @@ function spotsFor(i: number, markers: CardMarker[], normals: XY[], font: number,
       }
     }
   }
-  // Anywhere else that's free (e.g. the open space above the arch or inside the loop), with a line.
   out = far;
   const row = size.h + PAD;
   for (let y = AREA.y; y + size.h <= AREA.y + AREA.h; y += row) {
@@ -358,7 +369,7 @@ function spotsFor(i: number, markers: CardMarker[], normals: XY[], font: number,
     add(AREA.x + AREA.w - size.w / 2, y + size.h / 2, 30);
   }
   const best = (list: typeof near, k: number) => list.sort((a, b) => a.score - b.score).slice(0, k);
-  return { size, spots: [...best(near, NEAR_SPOTS), ...best(far, FAR_SPOTS)].sort((a, b) => a.score - b.score) };
+  return [...best(near, NEAR_SPOTS), ...best(far, FAR_SPOTS)].sort((a, b) => a.score - b.score);
 }
 
 /** 1 = the two spots overlap or a line runs through a pill; 2 = only their lines cross. */
@@ -369,14 +380,12 @@ function clashOf(p: Spot, q: Spot): number {
 }
 
 /**
- * One spot per pill so that none clash, or null. The pill with the fewest free spots goes next;
- * when one has none left, earlier pills try their next spot (bounded, so it stays instant).
+ * One spot per item so that none clash, or null. The item with the fewest free spots goes next;
+ * when one has none left, earlier items try their next spot (bounded, so it stays instant).
  */
-type Options = ReturnType<typeof spotsFor>[];
-
-function placeLabels(markers: CardMarker[], options: Options, font: number, avoidCrossing: boolean, budget: number): CardLabel[] | null {
-  if (options.some((o) => o.spots.length === 0)) return null;
-  const all = options.flatMap((o, m) => o.spots.map((s) => ({ m, s })));
+function place(options: Spot[][], avoidCrossing: boolean, budget: number): Spot[] | null {
+  if (options.some((o) => o.length === 0)) return null;
+  const all = options.flatMap((o, m) => o.map((s) => ({ m, s })));
   const n = all.length;
   const rows = new Map<number, Uint8Array>();
   const row = (k: number) => {
@@ -390,8 +399,8 @@ function placeLabels(markers: CardMarker[], options: Options, font: number, avoi
   };
   const limit = avoidCrossing ? 2 : 1;
   const blocked = new Int16Array(n);
-  const chosen = new Int32Array(markers.length).fill(-1);
-  const byMarker = markers.map((_, m) => all.map((x, k) => (x.m === m ? k : -1)).filter((k) => k >= 0));
+  const chosen = new Int32Array(options.length).fill(-1);
+  const byItem = options.map((_, m) => all.map((x, k) => (x.m === m ? k : -1)).filter((k) => k >= 0));
   let steps = 0;
   const mark = (k: number, d: number) => {
     const r = row(k);
@@ -402,7 +411,7 @@ function placeLabels(markers: CardMarker[], options: Options, font: number, avoi
     let next = -1;
     let free: number[] = [];
     for (const m of left) {
-      const f = byMarker[m].filter((k) => blocked[k] === 0);
+      const f = byItem[m].filter((k) => blocked[k] === 0);
       if (f.length === 0) return false;
       if (next < 0 || f.length < free.length) {
         next = m;
@@ -420,29 +429,76 @@ function placeLabels(markers: CardMarker[], options: Options, font: number, avoi
     chosen[next] = -1;
     return false;
   };
-  if (!search(markers.map((_, i) => i))) return null;
-  return markers.map((m, i) => {
-    const { r, leader } = all[chosen[i]].s;
-    const size = options[i].size;
-    return { id: m.id, name: m.name, lines: size.lines, ...r, fontSize: font, lineHeight: size.lineHeight, leader };
-  });
+  if (!search(options.map((_, i) => i))) return null;
+  return options.map((_, i) => all[chosen[i]].s);
 }
 
-/** Markers along the prototype's line for the stops visited (in visit order), with a name pill each. */
-export function cardLayout(stops: CardStop[]): CardLayout {
+// ---------- Start / End tags ----------
+
+export const TAG_FONT = 8;
+/** Room for the dot / flag before the words. */
+export const TAG_ICON_W = 10;
+export const TAG_LINE_H = 10.4;
+const TAG_PAD_Y = 2.5;
+
+export type TagKind = 'start' | 'end' | 'both';
+
+/** A small tag by the first / last marker: "Start · 08:30", "End · 20:00" (one stop: both in one). */
+export interface CardTag {
+  kind: TagKind;
+  text: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  leader: Segment | null;
+}
+
+/** When the day started and ended ("08:30"), or null when not known. */
+export interface DayEnds {
+  start: string | null;
+  end: string | null;
+}
+
+/** The tags' words: "Start · 08:30" / "End · 20:00", or "Start · 08:30 – End · 20:00" for a one-stop day. */
+export function tagTexts(stops: number, ends: DayEnds): { kind: TagKind; text: string; m: number }[] {
+  const start = ends.start ? `Start · ${ends.start}` : 'Start';
+  const end = ends.end ? `End · ${ends.end}` : 'End';
+  if (stops <= 0) return [];
+  if (stops === 1) return [{ kind: 'both', text: `${start} – ${end}`, m: 0 }];
+  return [
+    { kind: 'start', text: start, m: 0 },
+    { kind: 'end', text: end, m: stops - 1 },
+  ];
+}
+
+export const tagSize = (text: string) => ({ w: textWidth(text, TAG_FONT) + PILL_PAD_X * 2 + TAG_ICON_W, h: TAG_LINE_H + TAG_PAD_Y * 2 });
+
+/**
+ * Markers along the prototype's line for the stops visited (in visit order), a name pill each,
+ * and Start / End tags at the first and last stop.
+ */
+export function cardLayout(stops: CardStop[], ends: DayEnds = { start: null, end: null }): CardLayout {
   const n = stops.length;
   const spacing = n > 1 ? TRAIL_LENGTH / (n - 1) : TRAIL_LENGTH;
   const r = clamp(Math.floor(spacing / 2 - 3), MIN_MARKER_R, MARKER_R);
   const at = stopDistances(n).map(pointAlong);
   const markers: CardMarker[] = stops.map((s, i) => ({ id: s.id, name: s.name, emoji: stopEmoji(s), r, x: at[i].x, y: at[i].y }));
   const normals = at.map((p) => ({ x: p.nx, y: p.ny }));
+  // Names alternate sides of the line; a stop's tag prefers the side its name doesn't.
+  const side = (i: number) => (i % 2 === 0 ? 1 : -1);
+  const tags = tagTexts(n, ends).map((t) => ({ ...t, ...tagSize(t.text) }));
+  const tagSpots = tags.map((t) => spotsFor({ m: t.m, w: t.w, h: t.h, own: -side(t.m) }, markers, normals));
+  const tagArea = tags.reduce((sum, t) => sum + (t.w + PAD) * (t.h + PAD), 0);
+
   const fits = ({ font, wrapAt }: (typeof STYLES)[number]) =>
     stops.reduce((sum, s) => {
       const p = pillSize(s.name, font, wrapAt);
       return sum + (p.w + PAD) * (p.h + PAD);
-    }, 0) <=
+    }, tagArea) <=
     MAX_FILL * AREA.w * AREA.h;
-  const spots = new Map<(typeof STYLES)[number], Options>();
+  const sizes = new Map<(typeof STYLES)[number], ReturnType<typeof pillSize>[]>();
+  const spots = new Map<(typeof STYLES)[number], Spot[][]>();
   for (const avoidCrossing of [true, false]) {
     for (const budget of [QUICK_BUDGET, BUDGET]) {
       for (const style of STYLES) {
@@ -450,14 +506,35 @@ export function cardLayout(stops: CardStop[]): CardLayout {
         // The same spots serve every pass with this style.
         let options = spots.get(style);
         if (!options) {
-          options = markers.map((_, i) => spotsFor(i, markers, normals, style.font, style.wrapAt));
+          const pills = stops.map((s) => pillSize(s.name, style.font, style.wrapAt));
+          sizes.set(style, pills);
+          options = [...pills.map((p, i) => spotsFor({ m: i, w: p.w, h: p.h, own: side(i) }, markers, normals)), ...tagSpots];
           spots.set(style, options);
         }
-        const labels = placeLabels(markers, options, style.font, avoidCrossing, budget);
-        if (labels) return { markers, labels };
+        const chosen = place(options, avoidCrossing, budget);
+        if (!chosen) continue;
+        const pills = sizes.get(style)!;
+        return {
+          markers,
+          labels: markers.map((m, i) => ({
+            id: m.id,
+            name: m.name,
+            lines: pills[i].lines,
+            ...chosen[i].r,
+            fontSize: style.font,
+            lineHeight: pills[i].lineHeight,
+            leader: chosen[i].leader,
+          })),
+          tags: tags.map((t, k) => ({ kind: t.kind, text: t.text, ...chosen[n + k].r, leader: chosen[n + k].leader })),
+        };
       }
     }
   }
-  // A day too crowded for any of that: markers without names.
-  return { markers, labels: [] };
+  // A day too crowded for any of that: markers without names, and the tags if they fit.
+  const tagsOnly = place(tagSpots, false, BUDGET);
+  return {
+    markers,
+    labels: [],
+    tags: tagsOnly ? tags.map((t, k) => ({ kind: t.kind, text: t.text, ...tagsOnly[k].r, leader: tagsOnly[k].leader })) : [],
+  };
 }

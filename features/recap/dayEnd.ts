@@ -263,3 +263,25 @@ export function recapDateLine(day: number, days: number, date: string): string {
 export function recapTitle(day: number, days: number): string {
   return days <= 1 ? 'Your day' : `Day ${day} done`;
 }
+
+/**
+ * Start / End times on the recap card ("08:30", "20:00"): arriving at the first stop visited and
+ * leaving the last one (by time t; Demo mode: also the route's arrive / leave moments), else the
+ * first and last saved position. null when not known.
+ */
+export function recapTimes(
+  visited: Pick<Stop, 'id' | 'arrived_at' | 'left_at'>[],
+  moments: { kind: string; stopId?: string; at: number }[],
+  positions: { at: number }[],
+  t: number,
+): { start: string | null; end: string | null } {
+  const ms = (iso: string | null) => (iso && Date.parse(iso) <= t ? Date.parse(iso) : null);
+  const moment = (stopId: string | undefined, kinds: string[]) =>
+    moments.find((e) => e.stopId === stopId && kinds.includes(e.kind) && e.at <= t)?.at ?? null;
+  const first = visited[0];
+  const last = visited[visited.length - 1];
+  const start = (first && (ms(first.arrived_at) ?? moment(first.id, ['arrive']))) ?? positions[0]?.at ?? null;
+  const end = (last && (ms(last.left_at) ?? moment(last.id, ['leave', 'early']))) ?? positions[positions.length - 1]?.at ?? null;
+  const clock = (x: number | null) => (x == null ? null : clockOf(new Date(x).toISOString()));
+  return { start: clock(start), end: clock(end) };
+}

@@ -39,7 +39,8 @@ During the trip:
     stop (screen 8)
 12. Group map: positions + battery %, far-from-group alert, low-battery alert,
     auto-broadcast last known location under 15% (screen 11)
-13. Set meet point with directions + per-person ETA; Split & rejoin (screens 11, 12)
+13. Set meet point with directions + per-person ETA; Split & rejoin, group B can add
+    their own stops until the rejoin time (screens 11, 12)
 14. Pin spot: Spot / Vehicle, name, optional photo, shows on group map, Add to
     plan / Directions (screen 13)
 15. "We're done here" button (screens 6–9)
@@ -47,7 +48,7 @@ During the trip:
     options within budget and food needs (screen 10)
 17. Spend check on leaving any stop: "About RM 16 spent?" ✓ / Enter amount /
     Skip; bookings: "Spent anything extra at [stop]?" (screen 9)
-18. First-timer tip on arrival (screen 6)
+18. First-timer tip on arrival (screen 6); Settings > First-timer tips on/off (on by default)
 19. Done for today: planned vs actual, edit tomorrow, location off for the night,
     back on 1 h before tomorrow's first stop (screen 14)
 20. Day recap story card: route walked, stop emojis, km / stops / hours /
@@ -187,7 +188,8 @@ Time and location rule (built; follow it in every live-trip feature):
   useDemoReset). The bar at the
   top (+15 min, Next event, Reset) is features/demo/components/DemoBar.tsx.
 - Settings: the gear + "Settings" (SettingsButton) is in the header of every main
-  screen: Home, Plan, Today, Map, Group.
+  screen: Home, Plan, Today, Map, Group. Settings also has First-timer tips (on by default,
+  saved on the phone: features/today/tipsSetting.ts); off = no tip card on Today.
 
 ## Behaviour rules for you (the agent)
 
@@ -317,6 +319,28 @@ Time and location rule (built; follow it in every live-trip feature):
   its slot (min 15 min). Keep plan = decide_rain 'keep'.
   Cards stack on Today in this order: late, rain, early, spend.
 - Far from group: any member > 500 m from the group centroid -> amber alert.
+- Halal labels (features/planning/halal.ts, HalalLabels; stop edit screen + Day plan rows; no
+  API calls): food stops (category 'food') show "Halal-friendly · not verified" (small soft grey
+  tag, HalalTag, never green: nobody confirmed it) when anyone in the trip needs halal, in any
+  country; the running-early and rain cards use the same tag. Food stops in Malaysia (inMalaysia:
+  the saved address first, a country or Malaysian state in it, else the location inside rough
+  outlines of Peninsular Malaysia / Sabah + Sarawak, Singapore, southern Thailand and Brunei
+  kept out) also get a teal "Check halal status on JAKIM →" link: JAKIM's official Malaysia
+  Halal Portal search, Food premises, name pre-filled (jakimSearchUrl,
+  https://www.halal.gov.my/index.php?data=ZGlyZWN0b3J5L2luZGV4X2RpcmVjdG9yeTs7Ozs=&category=PE&cari=<name>).
+  Not outside Malaysia.
+- Split & rejoin, group B's own stops (features/group/splitStops.ts, `stops.split_id` ->
+  meet_points): during a split, group B's banner (SplitBanner) has "+ Add a stop" under "head
+  to X", opening the normal Add a stop screen with ?split=<id> (no day pick; must start and end
+  by the rejoin time, splitStopProblem). Group B can add several. useStops is the one filter
+  (canSeeStop): a split stop shows only to that split's group B, only once the split was set
+  (now(), so Demo Reset hides it), and after the split ends only the ones they visited (still
+  planned ones go: everyone continues the normal plan). So it is on group B's Plan and Today
+  (amber "Group B" tag, GroupBTag), only their phones tick it off, and only they get its spend
+  check ("· N of [group B size]"); group A's plan and Today never change. The running-late,
+  running-early and rain checks use mainPlan (split stops left out), so their new days never
+  move a group B stop. Demo mode: the replay follows group B's stops for a group B phone; the
+  late / early / rain moments are picked from the shared plan only.
 - Low battery: < 15% -> amber alert + write last known location to group.
 - Spend check (features/money/spend.ts, `spends` table, one row per person per stop
   per day): when the group leaves a stop (or taps "We're done here") -> each person is

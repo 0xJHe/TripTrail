@@ -87,7 +87,7 @@ export function DayPlanScreen() {
             </Txt>
           ) : null}
           {dayStops.map((s) => (
-            <StopRow key={s.id} stop={s} onPress={() => openStop(s.id)} />
+            <StopRow key={s.id} stop={s} needsHalal={plan.needsHalal} onPress={() => openStop(s.id)} />
           ))}
           <AddStopRow onPress={() => openStop('new')} />
         </View>

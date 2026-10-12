@@ -27,6 +27,7 @@ import { DoneRow, NextCard } from '../components/StopLines';
 import { TipCard } from '../components/TipCard';
 import { useToday } from '../hooks/useToday';
 import { longDate } from '../todayPlan';
+import { useTipsSetting } from '../tipsSetting';
 
 /**
  * Today card (prototype screen 6): Now, Next, Done, first-timer tip and the day's progress.
@@ -42,6 +43,7 @@ import { longDate } from '../todayPlan';
 export function TodayScreen() {
   const today = useToday();
   const [hiddenTip, setHiddenTip] = useState<string | null>(null);
+  const tipsOn = useTipsSetting((s) => s.enabled);
   const { trip, view } = today;
   const place = trip?.destination ?? trip?.name ?? '';
 
@@ -89,7 +91,8 @@ export function TodayScreen() {
   const keptGoing = dayEnd.mode === 'keep-going';
   // The stop the spend check asks about moves to Done once answered.
   const doneList = spend.stop ? done.filter((s) => s.id !== spend.stop!.id) : done;
-  const tip = now?.tip && hiddenTip !== now.id ? now.tip : null;
+  // First-timer tips can be turned off in Settings.
+  const tip = tipsOn && now?.tip && hiddenTip !== now.id ? now.tip : null;
   // The card is for view.next: the Next stop when at (or just left) a stop, the navy block's stop when on the way.
   const lateFor = today.late.alert ? view.next : null;
   // Running early is only ever for a stop without a late card (late wins), so never both.

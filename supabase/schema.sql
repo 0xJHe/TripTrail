@@ -166,6 +166,12 @@ create table meet_points (
 );
 create index meet_points_trip_idx on meet_points (trip_id, set_at desc);
 
+-- Split & rejoin: group B's own stops ("+ Add a stop" during a split). A stop with split_id
+-- belongs to that split's group B only (shown, ticked off and spend-checked only for them);
+-- null = the shared plan. Removing the split removes its stops.
+alter table stops add column split_id uuid references meet_points(id) on delete cascade;
+create index stops_split_idx on stops (split_id) where split_id is not null;
+
 -- "Done for today": one row per person per trip day. Reopening sets closed = false (an update,
 -- so Realtime reaches everyone). closed_at = the phone's now() (the fake time in Demo mode).
 create table day_closures (

@@ -10,11 +10,12 @@ import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { colors } from '@/lib/theme';
+import { HalalLabels } from '../components/HalalLabels';
 import { PlaceNameField } from '../components/PlaceNameField';
 import { useStopForm } from '../hooks/useStopForm';
 import { TimeField } from '../components/TimeField';
 import { END_BEFORE_START, endNotAfterStart, type StopKind } from '../stopForm';
-import { clockText, parseClock } from '../stops';
+import { clockOf, clockText, parseClock } from '../stops';
 
 const KINDS: { value: StopKind; label: string }[] = [
   { value: 'place', label: 'Place' },
@@ -34,24 +35,29 @@ function hourAfter(time: string): string | undefined {
   return start == null ? undefined : clockText(Math.min(start + 60, 23 * 60 + 59));
 }
 
-/** Edit a stop (name, time, price), delete it, or add a new one. */
+/**
+ * Edit a stop (name, time, price), delete it, or add a new one. Food stops: halal tag / JAKIM
+ * link. ?split=<id>: group B's own stop during that split (ends by the rejoin time, no day pick).
+ */
 export function StopFormScreen() {
-  const params = useLocalSearchParams<{ id: string; stopId: string; day?: string }>();
-  const { form, set, save, remove, isNew, days, near, missing, saving, error, timeError } = useStopForm(
-    params.id,
-    params.stopId,
-    Number(params.day) || 1,
-  );
+  const params = useLocalSearchParams<{ id: string; stopId: string; day?: string; split?: string }>();
+  const { form, set, save, remove, isNew, days, near, missing, saving, error, timeError, stop, needsHalal, isSplitStop, splitRejoinAt } =
+    useStopForm(params.id, params.stopId, Number(params.day) || 1, params.split || null);
 
   function confirmDelete() {
     if (!form) return;
-    Alert.alert('Delete this stop?', `"${form.name}" will be removed from Day ${form.day} for everyone.`, [
+    const who = isSplitStop ? 'for group B' : 'for everyone';
+    Alert.alert('Delete this stop?', `"${form.name}" will be removed from Day ${form.day} ${who}.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: remove },
     ]);
   }
 
-  const header = <NavyHeader title={isNew ? 'Add a stop' : 'Edit stop'} onBack={() => router.back()} />;
+  // Group B's own stop (during a split): only group B sees it, and it ends by the rejoin time.
+  const splitLine = isSplitStop
+    ? `Group B only${splitRejoinAt ? ` · ends by ${clockOf(splitRejoinAt)}, the rejoin time` : ''}`
+    : undefined;
+  const header = <NavyHeader title={isNew ? 'Add a stop' : 'Edit stop'} subtitle={splitLine} onBack={() => router.back()} />;
   if (!form) {
     return (
       <View style={styles.screen}>
@@ -87,6 +93,12 @@ export function StopFormScreen() {
           near={near}
           onChange={set}
         />
+        {stop ? (
+          <HalalLabels
+            stop={{ name: form.name, category: stop.category, address: form.place?.address ?? null, lat: form.place?.lat ?? null, lng: form.place?.lng ?? null }}
+            needsHalal={needsHalal}
+          />
+        ) : null}
 
         <Txt variant="sec">Time</Txt>
         <View style={styles.row}>
@@ -128,7 +140,7 @@ export function StopFormScreen() {
           </Pressable>
         ) : null}
 
-        {days > 1 ? (
+        {days > 1 && !isSplitStop ? (
           <>
             <Txt variant="sec">Day</Txt>
             <Chips>

@@ -2,6 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { Txt } from '@/components/ui/Txt';
+import { GroupBTag } from '@/features/group/components/GroupBTag';
 import { clockOf, priceLabel } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { colors, fontFamily } from '@/lib/theme';
@@ -64,6 +65,7 @@ function StopBody(props: Extract<NowCardProps, { stop: Stop }>) {
       <Txt variant="h22" color={colors.white}>
         {stop.name}
       </Txt>
+      {stop.split_id ? <GroupBTag onNavy /> : null}
       {stop.address ? (
         <Txt style={styles.meta} color={META}>
           {stop.address}

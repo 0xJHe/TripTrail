@@ -85,6 +85,8 @@ export interface Stop {
   note: string | null;
   /** Google place ID, when the stop was found in Google Places. */
   place_id: string | null;
+  /** Group B's own stop during this split (meet_points id); null = the shared plan. */
+  split_id?: string | null;
 }
 
 /** A stop before it is saved (no id yet). */
@@ -105,4 +107,5 @@ export type NewStop = Pick<
   | 'category'
   | 'address'
   | 'place_id'
->;
+> &
+  Partial<Pick<Stop, 'split_id'>>;

@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Txt } from '@/components/ui/Txt';
+import { HalalTag } from '@/features/planning/components/HalalLabels';
 import { clockOf, durationText } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { colors, fontFamily, formatMoney, shadow } from '@/lib/theme';
@@ -100,9 +101,7 @@ export function EarlyCard({ early, stop, left }: EarlyCardProps) {
                 <Txt variant="s11">{s.reason}</Txt>
                 <Txt variant="s11">{suggestionMeta(s)}</Txt>
                 {s.halalNote ? (
-                  <Txt variant="s11" color={colors.amberText}>
-                    Halal-friendly · not verified
-                  </Txt>
+                  <HalalTag />
                 ) : null}
               </View>
             </>

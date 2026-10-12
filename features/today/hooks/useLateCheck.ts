@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
+import { mainPlan } from '@/features/group/splitStops';
 import { useStops } from '@/features/planning/hooks/usePlanning';
 import { dayCount, planStart, sortStops } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
@@ -83,7 +84,7 @@ export function useLateCheck() {
     const t = trip.data;
     if (!tripId || !t || t.stage !== 'decided' || !stops.data || !alerts.data) return;
     if (!demo && permission !== 'granted') return;
-    const sorted = sortStops(stops.data);
+    const sorted = sortStops(mainPlan(stops.data));
     const view = todayView({
       stage: t.stage,
       start: planStart(t.start_date, sorted),

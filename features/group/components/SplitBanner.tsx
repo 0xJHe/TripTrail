@@ -1,10 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Txt } from '@/components/ui/Txt';
 import { clockOf } from '@/features/planning/stops';
+import { useOpenDay } from '@/features/recap/hooks/useOpenDay';
 import { useMyMember } from '@/features/trip/hooks/useTrip';
 import { useCurrentTrip } from '@/features/trip/store';
 import { useGroupLocation } from '@/lib/location';
@@ -16,6 +18,7 @@ import { countdownText, etaTo, meetDirectionsUrl, saveErrorText, splitTitle } fr
 /**
  * While the group is split (Split & rejoin, prototype screen 12): "Split · rejoin at [place]
  * at [time]" with a countdown, on the Map and Today tabs. Group B gets Directions.
+ * Group B also gets "+ Add a stop" (their own stops until the rejoin time, features/group/splitStops.ts).
  * "Back together" once both groups are within 50 m of the rejoin point.
  */
 export function SplitBanner() {
@@ -23,6 +26,7 @@ export function SplitBanner() {
   const me = useMyMember(tripId);
   const location = useGroupLocation();
   const { split, time, end } = useMeetPoints(tripId, me?.id ?? null);
+  const openDay = useOpenDay(tripId).day;
   const [closed, setClosed] = useState<string | null>(null);
   const [ending, setEnding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +65,12 @@ export function SplitBanner() {
   const at = row.rejoin_at ? Date.parse(row.rejoin_at) : null;
   const mode = location?.me ? etaTo(location.me, row).mode : 'walk';
   const directions = () => Linking.openURL(meetDirectionsUrl(row, mode)).catch(() => {});
+  // Group B's own stop: the normal Add a stop screen, ending by the rejoin time.
+  const addStop = () =>
+    router.push({
+      pathname: '/trip/[id]/stop/[stopId]',
+      params: { id: tripId!, stopId: 'new', day: String(openDay), split: row.id },
+    });
   const stop = async () => {
     setEnding(true);
     setError(null);
@@ -91,6 +101,20 @@ export function SplitBanner() {
           ? `You're in group B: head to ${name}${at != null ? `, arrive by ${clockOf(row.rejoin_at)}` : ''}.`
           : `Group A keeps the plan. Group B (${bNames}) meets you there.`}
       </Txt>
+      {inB && tripId && openDay >= 1 ? (
+        <Pressable
+          onPress={addStop}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel="Add a stop for group B"
+          style={({ pressed }) => [styles.add, pressed && { opacity: 0.6 }]}
+          testID="split-add-stop">
+          <Ionicons name="add" size={16} color={colors.tealDark} />
+          <Txt variant="b12" weight="bold" color={colors.tealDark}>
+            Add a stop
+          </Txt>
+        </Pressable>
+      ) : null}
       {error ? (
         <Txt variant="b12" color={colors.red}>
           {error}
@@ -128,6 +152,7 @@ const styles = StyleSheet.create({
   ico: { width: 26, height: 26, borderRadius: 8, backgroundColor: '#FDF3E1', alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: fontFamily.extrabold, fontSize: 14, lineHeight: 18, letterSpacing: -0.14 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  add: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', minHeight: 32 },
   row: { flexDirection: 'row', gap: 10 },
   half: { flex: 1 },
 });

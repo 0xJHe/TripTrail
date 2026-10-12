@@ -4,7 +4,7 @@ import { budgetSummary, groupBudget } from '@/features/money/budget';
 import { useSpends } from '@/features/money/hooks/useSpends';
 import { useMembers, useTrip } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
-import { answered } from '../optionFit';
+import { answered, someoneNeeds } from '../optionFit';
 import { dayCount, planStart, sortStops } from '../stops';
 import { useOptions, usePreferences, useStops } from './usePlanning';
 
@@ -36,6 +36,8 @@ export function useDayPlan(tripId: string | undefined) {
     days,
     start,
     budget,
+    /** Someone in the trip needs halal food (food stops show "Halal-friendly · not verified"). */
+    needsHalal: someoneNeeds(prefs.data ?? [], 'Halal'),
     loading: trip.isLoading || stops.isLoading,
     error: trip.error || stops.error,
     refetch: stops.refetch,

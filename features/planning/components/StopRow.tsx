@@ -4,19 +4,26 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Card } from '@/components/ui/Card';
 import { Chip } from '@/components/ui/Chip';
 import { Txt } from '@/components/ui/Txt';
+import { GroupBTag } from '@/features/group/components/GroupBTag';
 import { colors, fontFamily } from '@/lib/theme';
 import { priceLabel, timeLabel } from '../stops';
 import type { Stop } from '../types';
+import { HalalLabels } from './HalalLabels';
 
 const BOOKED_ICON = { flight: 'airplane', hotel: 'bed' } as const;
 
 interface StopRowProps {
   stop: Stop;
   onPress: () => void;
+  /** Someone in the trip needs halal food (food stops get the grey tag). */
+  needsHalal?: boolean;
 }
 
-/** One stop on the day's timeline (prototype .stop). Booked flights and hotels are navy. */
-export function StopRow({ stop, onPress }: StopRowProps) {
+/**
+ * One stop on the day's timeline (prototype .stop). Booked flights and hotels are navy. Food
+ * stops: halal tag / JAKIM link; group B's own stops (during a split): a "Group B" tag.
+ */
+export function StopRow({ stop, onPress, needsHalal = false }: StopRowProps) {
   const booked = stop.is_booked;
   const accent = booked ? colors.navy : colors.tealDark;
   const time = timeLabel(stop);
@@ -46,7 +53,9 @@ export function StopRow({ stop, onPress }: StopRowProps) {
                   </Txt>
                 </View>
               ) : null}
+              {stop.split_id ? <GroupBTag /> : null}
             </View>
+            <HalalLabels stop={stop} needsHalal={needsHalal} />
           </View>
           <Chip label="Edit" size="sm" ghost />
         </Card>

@@ -3,6 +3,7 @@ import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
 import { Txt } from '@/components/ui/Txt';
+import { GroupBTag } from '@/features/group/components/GroupBTag';
 import { clockOf, priceLabel } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { colors } from '@/lib/theme';
@@ -28,6 +29,7 @@ export function NextLine({ stop, weather }: { stop: Stop; weather: WeatherText |
       <View style={{ flex: 1 }}>
         <Txt variant="h14">{title}</Txt>
         <View style={styles.meta}>
+          {stop.split_id ? <GroupBTag /> : null}
           <Txt variant="s11">{priceLabel(stop)}</Txt>
           {weather ? (
             <>
@@ -61,6 +63,7 @@ export function DoneRow({ stop, cost, soFar }: { stop: Stop; cost: string; soFar
         <Txt variant="b12" color={colors.textMuted}>
           {`${clockOf(stop.planned_time)} ${stop.name}`.trim()} · {cost}
         </Txt>
+        {stop.split_id ? <GroupBTag /> : null}
         {soFar ? <Txt variant="s11">{soFar}</Txt> : null}
       </View>
       <Ionicons name="checkmark" size={18} color={colors.green} accessibilityLabel="Done" />

@@ -82,6 +82,13 @@ export async function fetchLatestLocations(tripId: string, memberIds: string[], 
 }
 
 /** The trip's latest meet points and splits (the current ones are picked by meetPoint.ts). */
+/** Every split of the trip, for group B's own stops (not only the newest 30 like fetchMeetPoints). */
+export async function fetchSplits(tripId: string): Promise<MeetPointRow[]> {
+  const { data, error } = await supabase.from('meet_points').select('*').eq('trip_id', tripId).eq('kind', 'split');
+  if (error) throw error;
+  return (data ?? []) as MeetPointRow[];
+}
+
 export async function fetchMeetPoints(tripId: string): Promise<MeetPointRow[]> {
   const { data, error } = await supabase
     .from('meet_points')

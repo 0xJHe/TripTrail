@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 
+import { useSplitRows } from '@/features/group/hooks/useSplitRows';
+import { stopGroupSize } from '@/features/group/splitStops';
 import type { Stop } from '@/features/planning/types';
 import { useMyMember } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
@@ -51,6 +53,7 @@ export function useSpendCheck(tripId: string | undefined, dayStops: Stop[], grou
   const [saving, setSaving] = useState<SpendAnswer['kind'] | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const stopId = stop?.id;
+  const splits = useSplitRows(dayStops.some((s) => s.split_id) ? tripId : undefined).data ?? [];
 
   const answer = useCallback(
     async (a: SpendAnswer) => {
@@ -88,8 +91,8 @@ export function useSpendCheck(tripId: string | undefined, dayStops: Stop[], grou
     note: failed && failed === stopId ? "Couldn't save that. Check the connection and try again." : null,
     /** "RM 18" once answered, else "~RM 16". */
     costOf: (s: Stop) => doneCostLabel(s, mine.get(s.id)),
-    /** "Spent so far RM 52 · 3 of 4" in a group trip. */
-    soFarOf: (s: Stop) => spentSoFarLabel(all, s.id, groupSize, isBookedStop(s)),
+    /** "Spent so far RM 52 · 3 of 4" in a group trip (group B's own stops: of group B). */
+    soFarOf: (s: Stop) => spentSoFarLabel(all, s.id, stopGroupSize(s, splits, groupSize), isBookedStop(s)),
   };
 }
 

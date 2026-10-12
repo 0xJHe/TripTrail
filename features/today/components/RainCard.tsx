@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Txt } from '@/components/ui/Txt';
+import { HalalTag } from '@/features/planning/components/HalalLabels';
 import { durationText } from '@/features/planning/stops';
 import { colors, fontFamily, formatMoney, shadow } from '@/lib/theme';
 import type { RainOption } from '@/supabase/functions/_shared/nearby';
@@ -49,9 +50,7 @@ export function RainCard({ rain }: { rain: RainState }) {
                 </Txt>
                 <Txt variant="s11">{rainOptionMeta(o)}</Txt>
                 {o.halalNote ? (
-                  <Txt variant="s11" color={colors.amberText}>
-                    Halal-friendly · not verified
-                  </Txt>
+                  <HalalTag />
                 ) : null}
               </View>
               <Button

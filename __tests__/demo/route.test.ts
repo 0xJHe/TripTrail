@@ -1,4 +1,5 @@
 import { buildDemoRoute, demoDays, demoTravelMin, FAR_M, pickDemoDay, type RouteStop } from '@/features/demo/route';
+import { mainPlan } from '@/features/group/splitStops';
 import { centroid, haversineMeters } from '@/lib/distance';
 import { eventsAround, rainSoonAt, sampleRoute, type DemoRoute } from '@/lib/location';
 
@@ -221,5 +222,22 @@ describe('pickDemoDay', () => {
     expect(pickDemoDay(stops, Date.parse(at(2, 8, 45)))).toBe(2);
     expect(pickDemoDay(stops, Date.parse(at(0, 9)))).toBe(1);
     expect(pickDemoDay([], null)).toBeNull();
+  });
+});
+
+describe('buildDemoRoute with a group B stop (Split & rejoin)', () => {
+  // Group B's own stop between Gurney Drive and Kek Lok Si; the moments come from the shared plan.
+  const bStop = { ...stop(1, 'Penang Peranakan Mansion', 5.4183, 100.3375, at(1, 13, 50), at(1, 14, 10)), split_id: 'sp1' };
+  const withB: (RouteStop & { split_id?: string | null })[] = [...stops, bStop];
+  const route = buildDemoRoute({ tripId: 't1', day: 1, stops: withB, base: mainPlan(withB), members, meId: 'm-me' })!;
+
+  it('walks group B through their own stop', () => {
+    expect(route.events.some((e) => e.kind === 'arrive' && e.stopId === bStop.id)).toBe(true);
+  });
+
+  it('never puts the late, early or rain moment on it', () => {
+    for (const kind of ['late', 'early', 'rain']) {
+      expect(route.events.filter((e) => e.kind === kind).map((e) => e.stopId)).not.toContain(bStop.id);
+    }
   });
 });

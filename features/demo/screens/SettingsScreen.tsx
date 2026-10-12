@@ -6,6 +6,7 @@ import { ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { Card } from '@/components/ui/Card';
 import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
+import { useTipsSetting } from '@/features/today/tipsSetting';
 import { useCurrentTrip } from '@/features/trip/store';
 import { useDemo } from '@/lib/demo';
 import { colors } from '@/lib/theme';
@@ -19,16 +20,37 @@ const MOMENTS: { icon: IconName; color: string; text: string }[] = [
   { icon: 'battery-dead', color: colors.amber, text: 'One member 900 m away with low battery' },
 ];
 
-/** Settings: the Demo mode switch. */
+/** Settings: the Demo mode and First-timer tips switches. */
 export function SettingsScreen() {
   const enabled = useDemo((s) => s.enabled);
   const setEnabled = useDemo((s) => s.setEnabled);
   const hasTrip = useCurrentTrip((s) => s.currentTripId != null);
+  const tipsOn = useTipsSetting((s) => s.enabled);
+  const setTipsOn = useTipsSetting((s) => s.setEnabled);
 
   return (
     <View style={styles.screen}>
       <NavyHeader title="Settings" onBack={() => (router.canGoBack() ? router.back() : router.replace('/home'))} />
       <ScrollView contentContainerStyle={styles.body}>
+        <Card style={styles.card}>
+          <View style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <Txt variant="h15">First-timer tips</Txt>
+              <Txt variant="s11" style={{ marginTop: 2 }}>
+                A short tip as you arrive at a stop, like &quot;cash only&quot;
+              </Txt>
+            </View>
+            <Switch
+              value={tipsOn}
+              onValueChange={setTipsOn}
+              trackColor={{ true: colors.teal, false: colors.disabled }}
+              thumbColor={colors.white}
+              accessibilityLabel="First-timer tips"
+              testID="tips-switch"
+            />
+          </View>
+        </Card>
+
         <Card style={styles.card}>
           <View style={styles.row}>
             <View style={{ flex: 1 }}>

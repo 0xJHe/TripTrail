@@ -1,4 +1,5 @@
 import type { ISODate } from './dates';
+import { placeCategory } from './foodStop';
 import { atClock, clockOf, dayDate, parseClock } from './stops';
 import type { NewStop, Stop } from './types';
 
@@ -11,6 +12,8 @@ export interface FormPlace {
   address: string | null;
   lat: number;
   lng: number;
+  /** Google place types of a place picked in this form (not saved; only to tell a food stop). */
+  types?: string[];
 }
 
 export interface StopFormValues {
@@ -88,7 +91,7 @@ export function endNotAfterStart(form: Times): boolean {
 export function readStopForm(
   form: StopFormValues,
   start: ISODate,
-  oldCategory: Stop['category'] = null,
+  old: { category: Stop['category']; name: string } | null = null,
 ): { ok: true; fields: StopFields } | { ok: false; error: string } {
   const name = form.name.trim();
   if (!name) return { ok: false, error: 'Give the stop a name.' };
@@ -106,7 +109,6 @@ export function readStopForm(
   if (!Number.isFinite(price) || price < 0) return { ok: false, error: 'Price should be a number, like 16.' };
 
   const booked = form.kind !== 'place';
-  const keepCategory = oldCategory && oldCategory !== 'flight' && oldCategory !== 'hotel' ? oldCategory : 'sight';
   const place = form.place;
   return {
     ok: true,
@@ -118,7 +120,8 @@ export function readStopForm(
       price,
       is_estimate: !booked && form.estimate,
       is_booked: booked,
-      category: booked ? (form.kind as 'flight' | 'hotel') : keepCategory,
+      // Place stops: food or not from Google's types of the picked place, else from the name.
+      category: booked ? (form.kind as 'flight' | 'hotel') : placeCategory(name, place?.types, old),
       address: place?.address ?? null,
       lat: place?.lat ?? null,
       lng: place?.lng ?? null,

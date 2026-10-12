@@ -114,7 +114,7 @@ export function DayRecapScreen() {
         ) : null}
         {recap.error ? (
           <View style={styles.note}>
-            <ErrorLine message={recap.error} />
+            <ErrorLine message={recap.error} onRetry={recap.refetch} />
           </View>
         ) : null}
       </View>

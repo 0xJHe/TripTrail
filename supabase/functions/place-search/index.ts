@@ -4,7 +4,8 @@
 // POST { tripId, action: 'autocomplete', input, sessionToken, near? }
 //   -> { suggestions: { placeId, name, detail }[] (max 5), limited }
 // POST { tripId, action: 'details', placeId, sessionToken }
-//   -> { place: { placeId, name, address, lat, lng } | null, limited }
+//   -> { place: { placeId, name, address, lat, lng, types? } | null, limited }
+//      (types = Google place types, same call, so the app can tell a food stop)
 // The app keeps one session token from the first letter typed until a place is
 // picked, so Google bills the typing and the pick as one session.
 // Only signed-in members of the trip may call it (Authorization: Bearer <user JWT>).

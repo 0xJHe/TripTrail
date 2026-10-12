@@ -6,6 +6,7 @@ import { useSplitRows } from '@/features/group/hooks/useSplitRows';
 import { splitEnded, splitStopProblem } from '@/features/group/splitStops';
 import { now } from '@/lib/clock';
 import { addStop, deleteStop, updateStop } from '../api';
+import { placeCategory } from '../foodStop';
 import { emptyForm, formFromStop, readStopForm, timeProblem, type StopFormValues } from '../stopForm';
 import { planningKeys } from './usePlanning';
 import { useDayPlan } from './useDayPlan';
@@ -56,7 +57,7 @@ export function useStopForm(tripId: string, stopId: string, day: number, splitId
     const problem = timeProblem(form);
     setTimeError(problem);
     if (problem) return;
-    const read = readStopForm(form, plan.start, stop?.category ?? null);
+    const read = readStopForm(form, plan.start, stop ? { category: stop.category, name: stop.name } : null);
     if (!read.ok) {
       setError(read.error);
       return;
@@ -99,6 +100,12 @@ export function useStopForm(tripId: string, stopId: string, day: number, splitId
     timeError,
     /** The stop being edited (null when adding). */
     stop,
+    /** The category the stop will be saved with (food or not worked out as it's typed / picked). */
+    category: form
+      ? form.kind === 'place'
+        ? placeCategory(form.name, form.place?.types, stop ? { category: stop.category, name: stop.name } : null)
+        : form.kind
+      : null,
     /** Someone in the trip needs halal food. */
     needsHalal: plan.needsHalal,
     /** Group B's own stop (added during a split). */

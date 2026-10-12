@@ -42,7 +42,7 @@ export function DayPlanScreen() {
   if (plan.loading || !trip) {
     return (
       <View style={[styles.screen, styles.center]}>
-        {plan.error ? <ErrorLine message="Couldn't load the plan." /> : <ActivityIndicator color={colors.teal} />}
+        {plan.error ? <ErrorLine message="Couldn't load the plan." onRetry={plan.refetch} /> : <ActivityIndicator color={colors.teal} />}
       </View>
     );
   }
@@ -91,7 +91,7 @@ export function DayPlanScreen() {
           ))}
           <AddStopRow onPress={() => openStop('new')} />
         </View>
-        {plan.error ? <ErrorLine message="Couldn't refresh the plan. Pull down to try again." /> : null}
+        {plan.error ? <ErrorLine message="Couldn't refresh the plan." onRetry={plan.refetch} /> : null}
       </ScrollView>
     </View>
   );

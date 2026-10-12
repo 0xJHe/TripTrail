@@ -67,7 +67,7 @@ export function ResultsScreen() {
       />
       {data.loading || !top ? (
         <View style={styles.center}>
-          {data.error ? <ErrorLine message="Couldn't load the results." /> : <ActivityIndicator color={colors.teal} />}
+          {data.error ? <ErrorLine message="Couldn't load the results." onRetry={data.refetch} /> : <ActivityIndicator color={colors.teal} />}
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.body}>

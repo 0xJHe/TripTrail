@@ -41,6 +41,10 @@ export function usePlanningData(tripId: string | undefined) {
     solo: memberList.length <= 1,
     loading,
     error,
+    /** Load again after an error (each part that failed). */
+    refetch: () => {
+      for (const q of [trip, members, prefs, options, votes]) if (q.error) q.refetch();
+    },
   };
 }
 

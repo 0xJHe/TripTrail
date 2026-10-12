@@ -79,7 +79,7 @@ export function HomeScreen() {
           Your trips
         </Txt>
         {trips.isLoading ? <ActivityIndicator color={colors.teal} style={{ marginTop: 8 }} /> : null}
-        {trips.error ? <ErrorLine message="Couldn't load your trips. Pull down to try again." /> : null}
+        {trips.error ? <ErrorLine message="Couldn't load your trips." onRetry={refetch} /> : null}
         {trips.data?.length === 0 ? (
           <Txt variant="s11">No trips yet. Start one, or join with a code a friend sent you.</Txt>
         ) : null}

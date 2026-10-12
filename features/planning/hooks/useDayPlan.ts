@@ -40,6 +40,7 @@ export function useDayPlan(tripId: string | undefined) {
     needsHalal: someoneNeeds(prefs.data ?? [], 'Halal'),
     loading: trip.isLoading || stops.isLoading,
     error: trip.error || stops.error,
-    refetch: stops.refetch,
+    // Pull to refresh / Try again: the stops, and the trip too if that is what failed.
+    refetch: () => Promise.all([stops.refetch(), trip.error ? trip.refetch() : null]),
   };
 }

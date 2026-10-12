@@ -63,7 +63,7 @@ export function TodayScreen() {
     return (
       <Frame title="Today">
         <View style={styles.center}>
-          {today.error ? <ErrorLine message="Couldn't load today's plan." /> : <ActivityIndicator color={colors.teal} />}
+          {today.error ? <ErrorLine message="Couldn't load today's plan." onRetry={today.refetch} /> : <ActivityIndicator color={colors.teal} />}
         </View>
       </Frame>
     );
@@ -164,7 +164,7 @@ export function TodayScreen() {
         {tip && now ? <TipCard tip={tip} onClose={() => setHiddenTip(now.id)} /> : null}
 
         <DayProgress done={done.length} total={view.total} pace={view.pace} />
-        {today.error ? <ErrorLine message="Couldn't refresh. Pull down to try again." /> : null}
+        {today.error ? <ErrorLine message="Couldn't refresh." onRetry={today.refetch} /> : null}
       </ScrollView>
       {keptGoing ? <DayEndBar end={dayEnd} /> : null}
     </Frame>

@@ -170,6 +170,20 @@ describe('Add a stop search', () => {
     expect(header(g.requests[0], 'X-Goog-FieldMask')).toBe(FIELDS.details);
     expect((await placeDetails(g.deps, 'ChIJkek', 'session-2')).calls).toBe(0);
   });
+
+  it('gets the place types in the same call, primary type first', async () => {
+    const g = fakeGoogle([{ body: { ...kekLokSi, id: 'ChIJkopi', primaryType: 'coffee_shop', types: ['cafe', 'coffee_shop', 'food', 'establishment'] } }]);
+    const found = await placeDetails(g.deps, 'ChIJkopi', 'session-1');
+    expect(FIELDS.details).toBe('id,displayName,formattedAddress,location,types,primaryType');
+    expect(found.calls).toBe(1);
+    expect(found.value?.types).toEqual(['coffee_shop', 'cafe', 'food', 'establishment']);
+    expect(g.requests).toHaveLength(1);
+  });
+
+  it('leaves types out when Google sends none', async () => {
+    const g = fakeGoogle([{ body: kekLokSi }]);
+    expect((await placeDetails(g.deps, 'ChIJkek', 'session-1')).value).not.toHaveProperty('types');
+  });
 });
 
 describe('refreshPlacePhoto', () => {

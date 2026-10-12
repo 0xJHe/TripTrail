@@ -78,7 +78,7 @@ export function TripOptionsScreen() {
       <View style={[styles.body, { paddingBottom: insets.bottom + 16 }]}>
         {data.loading || !data.trip ? (
           <View style={styles.center}>
-            {data.error ? <ErrorLine message="Couldn't load the trip options." /> : <ActivityIndicator color={colors.teal} />}
+            {data.error ? <ErrorLine message="Couldn't load the trip options." onRetry={data.refetch} /> : <ActivityIndicator color={colors.teal} />}
           </View>
         ) : gen.waiting ? (
           <WaitingForAnswers

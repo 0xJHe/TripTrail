@@ -7,12 +7,13 @@ import {
   useFonts,
 } from '@expo-google-fonts/inter';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { Stack, type ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { CrashScreen } from '@/components/ui/CrashScreen';
 import { DemoFrame } from '@/features/demo/components/DemoFrame';
 // Registers the background location handler (sharing with the screen off) before any screen.
 import '@/features/group/backgroundShare';
@@ -24,6 +25,23 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 10_000, retry: 1 } },
 });
+
+/**
+ * Expo Router's error boundary for every route under this layout: an error in any screen shows
+ * "Something went wrong" + Try again (re-renders it) instead of closing the app.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  useEffect(() => {
+    console.error('Screen error:', error);
+    SplashScreen.hideAsync().catch(() => {});
+  }, [error]);
+  return (
+    <>
+      <StatusBar style="dark" />
+      <CrashScreen retry={retry} />
+    </>
+  );
+}
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({

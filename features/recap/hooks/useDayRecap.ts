@@ -95,7 +95,7 @@ export function useDayRecap(day: number) {
     tripId,
     trip: plan.trip,
     loading: plan.loading || (!demo && positions.isLoading && positions.fetchStatus !== 'idle'),
-    error: positions.error ? "Couldn't load your route. Check the connection and open the recap again." : null,
+    error: positions.error ? "Couldn't load your route. Check the connection." : null,
     refetch: positions.refetch,
     isDay,
     day,

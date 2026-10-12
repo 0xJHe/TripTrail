@@ -92,7 +92,7 @@ describe('stop form', () => {
   });
 
   it('keeps a guessed price as an estimate for places', () => {
-    const read = readStopForm({ ...form, kind: 'place', name: 'Chulia Street', price: '~16', estimate: true }, '2026-10-12', 'food');
+    const read = readStopForm({ ...form, kind: 'place', name: 'Chulia Street', price: '~16', estimate: true }, '2026-10-12', { category: 'food', name: 'Chulia Street' });
     expect(read.ok && read.fields).toMatchObject({ is_booked: false, is_estimate: true, category: 'food', price: 16 });
   });
 

@@ -30,7 +30,11 @@ export function PlaceNameField({ tripId, name, place, placeholder, search, near,
     setQuery(null);
     onChange({ name: s.name });
     const found = await places.pick(s);
-    if (found) onChange({ name: found.name || s.name, place: { placeId: found.placeId, address: found.address, lat: found.lat, lng: found.lng } });
+    if (found) {
+      const place: FormPlace = { placeId: found.placeId, address: found.address, lat: found.lat, lng: found.lng };
+      if (found.types?.length) place.types = found.types;
+      onChange({ name: found.name || s.name, place });
+    }
   }
 
   return (

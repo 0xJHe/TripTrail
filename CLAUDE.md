@@ -201,6 +201,12 @@ Time and location rule (built; follow it in every live-trip feature):
   saying done. Do not leave TODOs for the core flow.
 - Sample data first, real API second. Every screen must render (an empty state or
   sample data) when tables are empty.
+- Errors: app/_layout.tsx exports Expo Router's ErrorBoundary, so a screen that throws shows
+  "Something went wrong" + Try again (components/ui/CrashScreen.tsx) instead of closing the app.
+  Every "Couldn't load…" line is an ErrorLine with onRetry (a "Try again" button that refetches
+  what failed); ErrorLine without onRetry is for problems that aren't about loading.
+- Android permissions (app.json): location + POST_NOTIFICATIONS only. No RECORD_AUDIO
+  (expo-image-picker's microphonePermission: false keeps it out).
 - Gemini: ask for JSON only, validate with zod, retry once, then fall back to
   sample data. Never crash on a bad AI response. Always through the model chain
   (see "Gemini model chain" below), never one fixed model.
@@ -330,6 +336,18 @@ Time and location rule (built; follow it in every live-trip feature):
   inside rough outlines of Peninsular Malaysia / Sabah + Sarawak (Singapore, southern Thailand
   and Brunei kept out). Where: Day plan rows and Edit stop = tag + link; running-early and rain
   cards = the tag only (their halalNote: a food place and someone needs halal), never the link.
+- Food stops added or edited by hand (features/planning/foodStop.ts placeCategory, used by
+  readStopForm and the Edit stop halal preview; no button): a Google place picked in the form ->
+  its types, from the same place-search 'details' call that gets the address and location
+  (field mask adds types,primaryType, same Place Details tier; cache key place2:<id>). The first
+  specific type decides (primary first), so a hotel listing "restaurant" stays a hotel: restaurant,
+  any *_restaurant, cafe, coffee_shop, bakery, food_court, meal_takeaway, dessert_shop etc. ->
+  'food'. No Google types (typed by hand, or an old place) -> the name: restaurant, restoran,
+  café, kopitiam, mamak, nasi, mee, laksa, hawker, food court, bakery, breakfast / lunch /
+  dinner... -> 'food'. Not food: a 'food' stop becomes 'sight', other categories stay; an edited
+  stop whose name didn't change and no new place keeps its category (AI "Line Clear"). Types are
+  never saved; only the category. Food stops then get the 🍜 marker, spend checks and the halal
+  tag + "Check halal status →" link like AI food stops. Flights / hotels stay booked.
 - Split & rejoin, group B's own stops (features/group/splitStops.ts, `stops.split_id` ->
   meet_points): during a split, group B's banner (SplitBanner) has "+ Add a stop" under "head
   to X", opening the normal Add a stop screen with ?split=<id> (no day pick; must start and end
@@ -387,7 +405,12 @@ Time and location rule (built; follow it in every live-trip feature):
   sharing your location with your group" (features/group/backgroundShare.ts; the task stops
   itself when the window ends); once the last stop is finished it becomes "Still sharing your
   location" / "Tap Done for today in TripTrail when you're finished" (restarted while the app
-  is open). Otherwise every 45 s while the app is open. Battery
+  is open). Android 13+ hides that notification until notifications are allowed: once background
+  sharing runs (all-the-time granted, in the window), the same BackgroundAskCard explains ("Show
+  when you're sharing?") and asks for POST_NOTIFICATIONS once per phone
+  (features/group/notificationAccess.ts, RN PermissionsAndroid, no extra library); a yes restarts
+  the updates so the notice shows (backgroundShare.ts restartBackgroundNotice); Not now / a no is
+  remembered. Otherwise every 45 s while the app is open. Battery
   dropping below 15% saves straight away. Demo mode never writes positions (the map uses
   the demo route's members). Others' positions: newest row per member, live by Realtime.
 - Group map (screen 11, features/group): member circles with initial + battery %, day's

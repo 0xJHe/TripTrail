@@ -180,6 +180,8 @@ export interface PickedPlace {
   address: string | null;
   lat: number;
   lng: number;
+  /** Google place types (e.g. "restaurant"), to tell a food stop. Missing from older function versions. */
+  types?: string[];
 }
 
 /** Up to 5 real places matching what's typed (Google Places via the place-search function). */

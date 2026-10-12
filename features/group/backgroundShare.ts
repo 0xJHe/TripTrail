@@ -73,6 +73,17 @@ export async function startBackgroundSharing(config: ShareConfig): Promise<boole
   return startBackgroundUpdates(NOTICES[notice]);
 }
 
+/**
+ * Start the running updates again so Android shows their notification (after notifications were
+ * allowed on Android 13+; one posted before that stays hidden). Nothing when not sharing.
+ */
+export async function restartBackgroundNotice(): Promise<void> {
+  const config = await readConfig();
+  if (!config) return;
+  await stopBackgroundUpdates();
+  await startBackgroundUpdates(NOTICES[config.notice ?? 'sharing']);
+}
+
 /** Stop sharing in the background (outside the window, Done for today, Demo mode, permission taken away). */
 export async function stopBackgroundSharing(): Promise<void> {
   await AsyncStorage.removeItem(CONFIG_KEY).catch(() => {});

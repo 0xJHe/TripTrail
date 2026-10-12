@@ -16,7 +16,8 @@ export const FIELDS = {
   stop: 'places.id,places.displayName,places.formattedAddress,places.location',
   photo: 'places.id,places.photos',
   autocomplete: 'suggestions.placePrediction.placeId,suggestions.placePrediction.structuredFormat',
-  details: 'id,displayName,formattedAddress,location',
+  // types / primaryType are in the same Place Details tier as displayName: no extra cost.
+  details: 'id,displayName,formattedAddress,location,types,primaryType',
   placePhotos: 'id,photos',
 } as const;
 
@@ -34,6 +35,8 @@ export interface PlaceInfo {
   address: string | null;
   lat: number;
   lng: number;
+  /** Google place types (details only, primary type first), e.g. ["restaurant", "food"]. */
+  types?: string[];
 }
 
 export interface PlacePhoto {
@@ -78,7 +81,8 @@ export const cacheKeys = {
   stop: (query: string, near?: LatLng | null) => `stop:${normalizeKey(query)}${nearKey(near)}`,
   photo: (landmark: string) => `photo:${normalizeKey(landmark)}`,
   autocomplete: (input: string, near?: LatLng | null) => `auto:${normalizeKey(input)}${nearKey(near)}`,
-  details: (placeId: string) => `place:${placeId}`,
+  // place2: details now include the place types (older cached rows have none).
+  details: (placeId: string) => `place2:${placeId}`,
   freshPhoto: (placeId: string) => `photo-fresh:${placeId}`,
 };
 
@@ -107,7 +111,20 @@ async function call(deps: GoogleDeps, url: string, fieldMask: string | null, bod
   return res.json();
 }
 
-type Raw = { id?: string; displayName?: { text?: string }; formattedAddress?: string; location?: { latitude?: number; longitude?: number } };
+type Raw = {
+  id?: string;
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  location?: { latitude?: number; longitude?: number };
+  types?: string[];
+  primaryType?: string;
+};
+
+/** primaryType first, then the rest; nothing when Google sent no types (not asked for). */
+function placeTypes(p: Raw): { types?: string[] } {
+  const all = [p.primaryType, ...(p.types ?? [])].filter((t): t is string => typeof t === 'string' && !!t);
+  return all.length ? { types: [...new Set(all)] } : {};
+}
 
 function toPlace(p: Raw | undefined): PlaceInfo | null {
   if (!p?.id || p.location?.latitude == null || p.location?.longitude == null) return null;
@@ -117,6 +134,7 @@ function toPlace(p: Raw | undefined): PlaceInfo | null {
     address: p.formattedAddress ?? null,
     lat: p.location.latitude,
     lng: p.location.longitude,
+    ...placeTypes(p),
   };
 }
 

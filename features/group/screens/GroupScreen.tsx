@@ -47,7 +47,7 @@ export function GroupScreen() {
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 24 }]}
         refreshControl={<RefreshControl refreshing={false} onRefresh={g.refetch} tintColor={colors.teal} />}>
         {g.loading ? <ActivityIndicator color={colors.teal} style={{ marginTop: 16 }} /> : null}
-        {g.error ? <ErrorLine message="Couldn't load the group. Pull down to try again." /> : null}
+        {g.error ? <ErrorLine message="Couldn't load the group." onRetry={g.refetch} /> : null}
         {g.trip ? (
           <>
             <Txt variant="lbl">Members</Txt>

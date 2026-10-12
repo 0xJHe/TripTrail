@@ -65,7 +65,13 @@ export function PreferencesScreen() {
       {!t || !prefs.isSuccess ? (
         <View style={styles.center}>
           {trip.error || prefs.error ? (
-            <ErrorLine message="Couldn't load this trip. Check your internet and try again." />
+            <ErrorLine
+              message="Couldn't load this trip. Check your internet."
+              onRetry={() => {
+                if (trip.error) trip.refetch();
+                if (prefs.error) prefs.refetch();
+              }}
+            />
           ) : (
             <ActivityIndicator color={colors.teal} />
           )}

@@ -41,7 +41,7 @@ function hourAfter(time: string): string | undefined {
  */
 export function StopFormScreen() {
   const params = useLocalSearchParams<{ id: string; stopId: string; day?: string; split?: string }>();
-  const { form, set, save, remove, isNew, days, near, missing, saving, error, timeError, stop, needsHalal, isSplitStop, splitRejoinAt } =
+  const { form, set, save, remove, isNew, days, near, missing, saving, error, timeError, needsHalal, category, isSplitStop, splitRejoinAt } =
     useStopForm(params.id, params.stopId, Number(params.day) || 1, params.split || null);
 
   function confirmDelete() {
@@ -93,9 +93,9 @@ export function StopFormScreen() {
           near={near}
           onChange={set}
         />
-        {stop ? (
+        {form.kind === 'place' ? (
           <HalalLabels
-            stop={{ name: form.name, category: stop.category, address: form.place?.address ?? null, lat: form.place?.lat ?? null, lng: form.place?.lng ?? null }}
+            stop={{ name: form.name, category, address: form.place?.address ?? null, lat: form.place?.lat ?? null, lng: form.place?.lng ?? null }}
             needsHalal={needsHalal}
           />
         ) : null}

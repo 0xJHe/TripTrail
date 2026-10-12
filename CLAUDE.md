@@ -256,8 +256,11 @@ Time and location rule (built; follow it in every live-trip feature):
   Directions + Pin spot side by side (equal width). Directions opens Google Maps (no API
   call). Every directions link in the app (Today, Next card pin, pins, meet point, split &
   rejoin) goes through one helper, features/today/directions.ts (useDirections /
-  directionsUrl): https://www.google.com/maps/dir/?api=1&destination=<lat>,<lng>, plus
-  destination_place_id when the stop has a Google place ID. Never a travelmode, so Maps
+  directionsUrl): https://www.google.com/maps/dir/?api=1&destination=..., plus
+  destination_place_id when the stop has a Google place ID. Destination: a stop with a name
+  and an address (or a place ID) = "name, address" (or just the name), so Maps shows it by
+  name; pins and meet points = <lat>,<lng> (Maps URLs can't label a coordinate, so a dropped
+  pin); no position = whatever name / address there is. Never a travelmode, so Maps
   picks and the person can switch car / motorbike / transit / walking. Real mode: no
   origin (Maps uses the phone's location); Demo mode: origin = the demo group's centre
   (lib/location getGroupLocation). Demo mode: the route has an "On the way to [next]" event (kind

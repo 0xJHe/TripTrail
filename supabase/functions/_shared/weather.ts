@@ -48,7 +48,10 @@ export interface WeatherReply {
    * call), so the app can tell whether rain is coming within the hour (rainWithin).
    */
   soon?: HourWeather[];
-  /** True if anything was left out because the trip's 30 weather calls today are used up. */
+  /**
+   * True if anything was left out because a daily limit was reached: the trip's 30 weather
+   * calls today, or Google's own daily quota.
+   */
   limited: boolean;
   /** Real Google requests made for this reply. */
   weatherCalls: number;
@@ -137,11 +140,21 @@ async function get(deps: WeatherDeps, path: string, p: LatLng, extra = ''): Prom
     `${WEATHER_URL}/${path}?key=${encodeURIComponent(deps.apiKey)}` +
     `&location.latitude=${c.lat}&location.longitude=${c.lng}&unitsSystem=METRIC&languageCode=en${extra}`;
   const res = await deps.fetch(url);
-  if (!res.ok) throw new Error(`Google Weather ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) {
+    const text = (await res.text()).slice(0, 200);
+    const error = new Error(`Google Weather ${res.status}: ${text}`);
+    // Google's own daily quota (429, not the per-minute one) counts as our daily limit.
+    if (res.status === 429 && !/per\s*minute|perminute/i.test(text)) Object.assign(error, { limited: true });
+    throw error;
+  }
   return res.json();
 }
 
-type Saved<T> = { at: number; value: T | null };
+/** The error was Google's own daily quota running out. */
+const quotaHit = (e: unknown) => (e as { limited?: unknown } | null)?.limited === true;
+
+/** `limited` = saved because the daily limit was reached, so other phones say so too. */
+type Saved<T> = { at: number; value: T | null; limited?: boolean };
 
 function fresh<T>(deps: WeatherDeps, hit: unknown): hit is Saved<T> {
   const at = (hit as Saved<T> | undefined)?.at;
@@ -155,13 +168,13 @@ function fresh<T>(deps: WeatherDeps, hit: unknown): hit is Saved<T> {
  */
 async function lookup<T>(deps: WeatherDeps, key: string, fetchIt: () => Promise<T | null>): Promise<WeatherLookup<T>> {
   const hit = await deps.cacheGet(key);
-  if (fresh<T>(deps, hit)) return { value: hit.value, limited: false, calls: 0 };
+  if (fresh<T>(deps, hit)) return { value: hit.value, limited: !!hit.limited, calls: 0 };
 
   if (!(await deps.claim(key))) {
     for (let waited = 0; waited < WAIT_FOR_OTHER_MS; waited += WAIT_STEP_MS) {
       await deps.wait(WAIT_STEP_MS);
       const saved = await deps.cacheGet(key);
-      if (fresh<T>(deps, saved)) return { value: saved.value, limited: false, calls: 0 };
+      if (fresh<T>(deps, saved)) return { value: saved.value, limited: !!saved.limited, calls: 0 };
     }
     return { value: null, limited: false, calls: 0 }; // the other phone is slow: skip this time
   }
@@ -172,7 +185,9 @@ async function lookup<T>(deps: WeatherDeps, key: string, fetchIt: () => Promise<
       value = await fetchIt();
     } catch (e) {
       // Save the failure too, so a broken key or outage isn't retried (and paid for) by every phone.
-      await deps.cacheSet(key, { at: deps.now(), value: null } satisfies Saved<T>);
+      const limited = quotaHit(e);
+      await deps.cacheSet(key, { at: deps.now(), value: null, ...(limited ? { limited } : {}) } satisfies Saved<T>);
+      if (limited) return { value: null, limited, calls: 1 };
       throw e;
     }
     await deps.cacheSet(key, { at: deps.now(), value } satisfies Saved<T>);

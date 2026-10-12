@@ -42,8 +42,11 @@ export interface LateAlert {
   /** now() when the check found them late (the fake time in Demo mode). */
   checked_at: string;
   travel_min: number;
-  /** demo = Demo mode: the time until the replay reaches the stop. */
-  travel_source: 'estimate' | 'google' | 'demo';
+  /**
+   * demo = Demo mode: the time until the replay reaches the stop. limited = the free estimate,
+   * because a free daily limit stopped the Google check ("Estimated · free daily limit...").
+   */
+  travel_source: 'estimate' | 'google' | 'demo' | 'limited';
   starts_at: string | null;
   /** The suggested new day (simple rules). */
   plan: NewDay;
@@ -77,6 +80,8 @@ export interface EarlyAlert {
   travel_min: number;
   /** The nearby place; null = nothing fits ("Enjoy the extra time"). */
   suggestion: NearbySuggestion | null;
+  /** No suggestion because a free daily limit was reached ("Suggestions paused · ..."). Column added in migration 017. */
+  limited?: boolean;
   /** offer = "Go to next stop" was tapped: asking whether to move the next stop earlier. */
   status: 'open' | 'offer' | 'added' | 'moved' | 'kept';
   added_stop_id: string | null;
@@ -89,7 +94,7 @@ export interface EarlyAlert {
 /** What a phone saves when the group has 30+ min to spare. */
 export type NewEarlyAlert = Pick<
   EarlyAlert,
-  'stop_id' | 'trip_id' | 'day_number' | 'left_stop_id' | 'left_at' | 'checked_at' | 'spare_min' | 'travel_min' | 'suggestion'
+  'stop_id' | 'trip_id' | 'day_number' | 'left_stop_id' | 'left_at' | 'checked_at' | 'spare_min' | 'travel_min' | 'suggestion' | 'limited'
 >;
 
 /** Row in `rain_alerts`: the group's one rain card for an outdoor stop. */
@@ -104,6 +109,8 @@ export interface RainAlert {
   rain_in_min: number;
   /** Up to 3 indoor places, nearest first; empty = "consider moving it". */
   options: RainOption[];
+  /** No options because a free daily limit was reached ("Suggestions paused · ..."). Column added in migration 017. */
+  limited?: boolean;
   status: 'open' | 'swapped' | 'kept';
   picked: RainOption | null;
   /** The stop added when the group was already at the outdoor stop. */
@@ -134,4 +141,4 @@ export type RainOriginal = Pick<
 >;
 
 /** What a phone saves when rain is coming at an outdoor stop. */
-export type NewRainAlert = Pick<RainAlert, 'stop_id' | 'trip_id' | 'day_number' | 'checked_at' | 'rain_in_min' | 'options'>;
+export type NewRainAlert = Pick<RainAlert, 'stop_id' | 'trip_id' | 'day_number' | 'checked_at' | 'rain_in_min' | 'options' | 'limited'>;

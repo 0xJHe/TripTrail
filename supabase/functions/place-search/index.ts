@@ -1,5 +1,10 @@
 // place-search: Google Places search for "Add a stop".
-// Cache first, max 60 Google calls per trip per day (shared with the other functions).
+// Cache first. Its own daily counter: one search session (one session token, from the
+// first letters typed until a place is picked or the screen closes) counts as 1 of
+// 60 sessions per trip per day (take_api_call 'place_search'), however many letters are
+// typed; the Google calls inside sessions only go through a 600-a-day backstop
+// ('place_search_calls'). Separate from the 60 Google calls for itinerary place lookups
+// and photos. Google's own daily quota running out also gives `limited`.
 //
 // POST { tripId, action: 'autocomplete', input, sessionToken, near? }
 //   -> { suggestions: { placeId, name, detail }[] (max 5), limited }
@@ -12,8 +17,15 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-import { cors, googleDeps, json, requireMember } from '../_shared/edge.ts';
-import { autocomplete, placeDetails, type LatLng } from '../_shared/google.ts';
+import { cors, googleDeps, json, requireMember, takeApiCall } from '../_shared/edge.ts';
+import {
+  autocomplete,
+  DAILY_SEARCH_CALLS,
+  DAILY_SEARCH_SESSIONS,
+  placeDetails,
+  searchSessionTakeCall,
+  type LatLng,
+} from '../_shared/google.ts';
 
 const MIN_LETTERS = 3;
 
@@ -51,7 +63,19 @@ Deno.serve(async (req) => {
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
     auth: { persistSession: false },
   });
-  const google = googleDeps(admin, googleKey, who.tripId, log);
+  // The session is remembered as a google_cache row: only the first insert of a key wins.
+  const sessionKey = `search-session:${who.tripId}:${sessionToken}`;
+  const google = {
+    ...googleDeps(admin, googleKey, who.tripId, log),
+    takeCall: searchSessionTakeCall({
+      firstUse: async () => !(await admin.from('google_cache').insert({ key: sessionKey, kind: 'search-session', data: {} })).error,
+      forget: async () => {
+        await admin.from('google_cache').delete().eq('key', sessionKey);
+      },
+      takeSession: () => takeApiCall(admin, who.tripId, 'place_search', DAILY_SEARCH_SESSIONS, log),
+      takeSearchCall: () => takeApiCall(admin, who.tripId, 'place_search_calls', DAILY_SEARCH_CALLS, log),
+    }),
+  };
 
   try {
     if (body.action === 'autocomplete') {

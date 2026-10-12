@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { LimitNote } from '@/components/ui/LimitNote';
 import { Txt } from '@/components/ui/Txt';
 import type { WeatherKind } from '@/supabase/functions/_shared/weather';
 import { colors } from '@/lib/theme';
@@ -25,6 +26,7 @@ const WET: WeatherKind[] = ['rain', 'storm', 'snow'];
 
 /** Icon + "32° · sunny · light breeze". `onNavy` = inside the Now block. */
 export function WeatherLine({ weather, onNavy }: { weather: WeatherText; onNavy?: boolean }) {
+  if (weather.paused) return <LimitNote text={weather.text} onDark={onNavy} />;
   const wet = WET.includes(weather.kind);
   const sunny = weather.kind === 'sunny' || weather.kind === 'partly';
   // Blue = weather (rain); on navy a lighter blue so it can be seen.

@@ -42,7 +42,10 @@ export interface EtaReply {
   /** Travel minutes from Google; null = use the free estimate. */
   minutes: number | null;
   source: 'google' | null;
-  /** True if Google was skipped because the trip's 20 Routes calls today are used up. */
+  /**
+   * True if Google was skipped because a daily limit was reached: the trip's 20 Routes
+   * calls today, or Google's own daily quota.
+   */
   limited: boolean;
   /** Real Google requests made for this reply. */
   routesCalls: number;
@@ -152,13 +155,20 @@ export async function routeMinutes(deps: EtaDeps, from: LatLng, to: LatLng): Pro
       ...(walk ? { travelMode: 'WALK' } : { travelMode: 'DRIVE', routingPreference: 'TRAFFIC_UNAWARE' }),
     }),
   });
-  if (!res.ok) throw new Error(`Google Routes ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) {
+    const text = (await res.text()).slice(0, 200);
+    const error = new Error(`Google Routes ${res.status}: ${text}`);
+    // Google's own daily quota (429, not the per-minute one) counts as our daily limit.
+    if (res.status === 429 && !/per\s*minute|perminute/i.test(text)) Object.assign(error, { limited: true });
+    throw error;
+  }
   const body = await res.json();
   const seconds = parseDuration(body?.routes?.[0]?.duration);
   return seconds == null ? null : Math.max(1, Math.ceil(seconds / 60));
 }
 
-type Saved = { at: number; minutes: number | null };
+/** `limited` = saved because Google's daily quota ran out, so other phones say so too. */
+type Saved = { at: number; minutes: number | null; limited?: boolean };
 
 function fresh(deps: EtaDeps, hit: unknown): hit is Saved {
   const at = (hit as Saved | undefined)?.at;
@@ -166,8 +176,8 @@ function fresh(deps: EtaDeps, hit: unknown): hit is Saved {
 }
 
 const none = (limited = false, routesCalls = 0): EtaReply => ({ minutes: null, source: null, limited, routesCalls });
-const found = (minutes: number | null, routesCalls: number): EtaReply =>
-  minutes == null ? none(false, routesCalls) : { minutes, source: 'google', limited: false, routesCalls };
+const found = (minutes: number | null, routesCalls: number, limited = false): EtaReply =>
+  minutes == null ? none(limited, routesCalls) : { minutes, source: 'google', limited: false, routesCalls };
 
 /**
  * Real travel time for one check of one stop. Saved answer first; otherwise one request
@@ -183,13 +193,13 @@ export async function etaFor(
   const key = etaKey(req.stopId, req.kind);
   try {
     const hit = await deps.cacheGet(key);
-    if (fresh(deps, hit)) return found(hit.minutes, 0);
+    if (fresh(deps, hit)) return found(hit.minutes, 0, !!hit.limited);
 
     if (!(await deps.claim(key))) {
       for (let waited = 0; waited < WAIT_FOR_OTHER_MS; waited += WAIT_STEP_MS) {
         await deps.wait(WAIT_STEP_MS);
         const saved = await deps.cacheGet(key);
-        if (fresh(deps, saved)) return found(saved.minutes, 0);
+        if (fresh(deps, saved)) return found(saved.minutes, 0, !!saved.limited);
       }
       return none(); // the other phone is slow: use the free estimate this time
     }
@@ -200,9 +210,10 @@ export async function etaFor(
         minutes = await routeMinutes(deps, req.from, req.to);
       } catch (e) {
         // Save the failure too, so a broken key or outage isn't retried (and paid for) by every phone.
-        await deps.cacheSet(key, { at: deps.now(), minutes: null } satisfies Saved);
+        const limited = (e as { limited?: unknown } | null)?.limited === true;
+        await deps.cacheSet(key, { at: deps.now(), minutes: null, ...(limited ? { limited } : {}) } satisfies Saved);
         onError(e);
-        return none(false, 1);
+        return none(limited, 1);
       }
       await deps.cacheSet(key, { at: deps.now(), minutes } satisfies Saved);
       return found(minutes, 1);

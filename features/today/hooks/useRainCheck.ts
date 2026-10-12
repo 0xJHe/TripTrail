@@ -110,6 +110,7 @@ export function useRainCheck() {
       const from = loc?.center ?? { lat: stop.lat, lng: stop.lng };
       const starts = new Date(slotStart(stop, at));
       let options: RainOption[] = [];
+      let limited = false;
       try {
         const reply = await fetchRainOptions(tripId, {
           stopId: stop.id,
@@ -117,12 +118,13 @@ export function useRainCheck() {
           localMinutes: starts.getHours() * 60 + starts.getMinutes(),
         });
         options = reply.options;
+        limited = reply.limited;
       } catch (e) {
         console.warn('Rain options failed, showing the card without any:', e instanceof Error ? e.message : e);
       }
       // Demo mode: made-up indoor places when Google fails or finds nothing, so the card always has options.
       if (options.length === 0 && demo) options = demoRainOptions(from);
-      await raiseRainAlert(rainAlertFor({ tripId, stop, now: at, rainIn, options }));
+      await raiseRainAlert(rainAlertFor({ tripId, stop, now: at, rainIn, options, limited }));
       queryClient.invalidateQueries({ queryKey: rainKeys.alerts(tripId) });
     };
     check()

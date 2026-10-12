@@ -430,8 +430,10 @@ create policy "pin photos delete last member" on storage.objects for delete to a
 
 -- Running late (migrations 005, 006).
 -- Paid API calls per trip per day (Malaysia time), by kind: 'routes' (max 20, eta
--- function) and 'nearby' (max 10, nearby-suggestion function). Separate from the Places
--- and weather counters. Only the Edge Functions use it (service role): RLS on, no policies.
+-- function), 'nearby' (max 10, nearby-suggestion function), 'place_search' (max 60 search
+-- sessions, place-search function: one session token = 1, however many letters) and
+-- 'place_search_calls' (max 600 Google calls inside those sessions, a backstop). Separate
+-- from the Places and weather counters. Only the Edge Functions use it (service role): RLS on, no policies.
 create table if not exists api_usage (
   trip_id uuid references trips(id) on delete cascade,
   day date not null,
@@ -465,7 +467,7 @@ create table if not exists late_alerts (
   day_number int not null,
   checked_at timestamptz not null, -- now() of the check (the fake time in Demo mode)
   travel_min int not null,
-  travel_source text not null,     -- estimate | google | demo
+  travel_source text not null,     -- estimate | google | demo | limited (estimate: a daily limit stopped Google)
   starts_at timestamptz,           -- the stop's planned start when checked
   plan jsonb not null,             -- the suggested new day
   status text not null default 'open', -- open | accepted | kept
@@ -561,6 +563,7 @@ create table if not exists early_alerts (
   spare_min int not null,          -- next stop's start - now - travel
   travel_min int not null,         -- free straight-line estimate (25 km/h)
   suggestion jsonb,                -- the nearby place; null = "Enjoy the extra time"
+  limited boolean not null default false, -- no suggestion because a free daily limit was reached (migration 017)
   status text not null default 'open', -- open | offer (asked to move the next stop) | added | moved | kept
   added_stop_id uuid references stops(id) on delete set null,
   original jsonb,                  -- times of the stops changed, before (Demo mode Reset puts them back)
@@ -677,6 +680,7 @@ create table if not exists rain_alerts (
   checked_at timestamptz not null, -- now() of the check (the fake time in Demo mode)
   rain_in_min int not null,        -- minutes from checked_at until the rain
   options jsonb not null default '[]'::jsonb, -- up to 3 indoor places; [] = "consider moving it"
+  limited boolean not null default false, -- no options because a free daily limit was reached (migration 017)
   status text not null default 'open', -- open | swapped | kept
   picked jsonb,                    -- the option swapped in
   added_stop_id uuid references stops(id) on delete set null, -- at the stop already: the new stop

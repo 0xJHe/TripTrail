@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { Linking, StyleSheet, View } from 'react-native';
 
+import { limitText } from '@/components/ui/LimitNote';
 import { Txt } from '@/components/ui/Txt';
 import { fontFamily } from '@/lib/theme';
 import { useOptionPhoto } from '../hooks/useOptionPhoto';
@@ -13,7 +14,7 @@ import { Scene } from './Scene';
  * if that fails too, the drawing stays.
  */
 export function OptionPicture({ tripId, plan, banner }: { tripId: string; plan: OptionPlan; banner?: boolean }) {
-  const { photo, onError } = useOptionPhoto(tripId, plan);
+  const { photo, limited, onError } = useOptionPhoto(tripId, plan);
   return (
     <View style={StyleSheet.absoluteFill}>
       <Scene kind={plan.scene} banner={banner} />
@@ -38,8 +39,10 @@ export function OptionPicture({ tripId, plan, banner }: { tripId: string; plan: 
             </Txt>
           ) : null}
         </>
-      ) : plan.photoLimited ? (
-        <Txt style={styles.credit}>No photo today (Google limit)</Txt>
+      ) : limited ? (
+        <Txt style={[styles.credit, styles.limit]} testID="photo-limit-note">
+          {limitText('Drawing instead of a photo')}
+        </Txt>
       ) : null}
     </View>
   );
@@ -61,4 +64,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     overflow: 'hidden',
   },
+  // Under the drawing, across the bottom: the calm daily-limit note.
+  limit: { left: 6, maxWidth: undefined, textAlign: 'center' },
 });

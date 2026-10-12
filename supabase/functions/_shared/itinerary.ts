@@ -159,7 +159,7 @@ interface FoundPlace {
 }
 
 /** Shown with the sample plan when every Gemini model is used up for today. */
-export const AI_USED_UP_PLAN_NOTE = "Our free AI has reached today's limit, so this is a sample plan you can edit.";
+export const AI_USED_UP_PLAN_NOTE = 'Sample plan you can edit · free daily limit reached, resets tomorrow';
 
 /** 'busy' / 'used-up' when the Gemini model chain gave up (geminiChain.ts AiBusyError / AiUsedUpError). */
 function chainStopOf(e: unknown): 'busy' | 'used-up' | null {
@@ -370,7 +370,7 @@ export function fitToBudget(stops: StopDraft[], budget: number): StopDraft[] {
   return out;
 }
 
-export const GOOGLE_LIMIT_NOTE = "Google's daily limit for this trip was reached, so some places use approximate locations.";
+export const GOOGLE_LIMIT_NOTE = 'Some places use approximate locations · free daily limit reached, resets tomorrow';
 
 function kmBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const rad = (d: number) => (d * Math.PI) / 180;
@@ -445,7 +445,7 @@ export async function planItinerary(input: ItineraryInput, deps: PlannerDeps): P
     // Only Google's addresses are real; drop Gemini's search text.
     stops: placed.stops.map((s) => (s.placeId ? s : { ...s, address: null, placeId: null })),
     source,
-    note: notes.filter(Boolean).join(' ') || null,
+    note: notes.filter(Boolean).join('\n') || null, // one note per line (the app shows each)
     googleCalls: placed.calls,
   };
 }

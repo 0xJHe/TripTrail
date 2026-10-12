@@ -7,6 +7,7 @@ import {
   findStopPlace,
   placeDetails,
   refreshPlacePhoto,
+  searchSessionTakeCall,
   type GoogleDeps,
 } from '@/supabase/functions/_shared/google';
 
@@ -244,5 +245,78 @@ describe('refreshPlacePhoto', () => {
   it('throws on a Google error (the function then answers with an error)', async () => {
     const g = fakeGoogle([{ status: 403, body: { error: 'denied' } }]);
     await expect(refreshPlacePhoto(g.deps, 'ChIJwat', t0)).rejects.toThrow('Google 403');
+  });
+});
+
+const dailyQuota = { status: 429, body: { error: { status: 'RESOURCE_EXHAUSTED', message: "Quota exceeded for quota metric 'Requests' and limit 'Requests per day'" } } };
+const perMinute = { status: 429, body: { error: { status: 'RESOURCE_EXHAUSTED', message: "Quota exceeded for quota metric 'Requests' and limit 'Requests per minute'" } } };
+
+describe("Google's own daily quota", () => {
+  it('counts as a daily limit: limited, and nothing cached so it is tried again tomorrow', async () => {
+    const g = fakeGoogle([dailyQuota]);
+    expect(await findStopPlace(g.deps, 'Kek Lok Si Temple, Penang')).toMatchObject({ value: null, limited: true });
+    expect(g.cache.size).toBe(0);
+    const p = fakeGoogle([dailyQuota]);
+    expect(await findLandmarkPhoto(p.deps, 'Wat Arun, Bangkok')).toMatchObject({ value: null, limited: true });
+    const a = fakeGoogle([dailyQuota]);
+    expect(await autocomplete(a.deps, 'kek lok', 'session-1')).toMatchObject({ value: null, limited: true });
+  });
+
+  it('a per-minute 429 is an ordinary failure, not a daily limit', async () => {
+    const g = fakeGoogle([perMinute]);
+    await expect(findStopPlace(g.deps, 'Kek Lok Si Temple, Penang')).rejects.toThrow('Google 429');
+  });
+});
+
+describe('place search sessions', () => {
+  function counter(sessionsLeft: number, callsLeft = 600) {
+    const seen = new Set<string>();
+    let sessions = 0;
+    let calls = 0;
+    const takeFor = (token: string) =>
+      searchSessionTakeCall({
+        firstUse: async () => (seen.has(token) ? false : (seen.add(token), true)),
+        forget: async () => {
+          seen.delete(token);
+        },
+        takeSession: async () => (sessions < sessionsLeft ? (sessions++, true) : false),
+        takeSearchCall: async () => (calls < callsLeft ? (calls++, true) : false),
+      });
+    return { takeFor, sessions: () => sessions, calls: () => calls, seen };
+  }
+
+  it('counts a whole session (every pause in typing, then the pick) as 1 search', async () => {
+    const c = counter(60);
+    for (let request = 0; request < 6; request++) expect(await c.takeFor('tok-a')()).toBe(true); // one request each
+    expect(c.sessions()).toBe(1);
+    expect(c.calls()).toBe(6);
+    expect(await c.takeFor('tok-b')()).toBe(true); // Add a stop opened again: a new session
+    expect(c.sessions()).toBe(2);
+  });
+
+  it('once the day\'s sessions are used up a new session is limited and not remembered as counted', async () => {
+    const c = counter(1);
+    expect(await c.takeFor('tok-a')()).toBe(true);
+    expect(await c.takeFor('tok-b')()).toBe(false);
+    expect(c.seen.has('tok-b')).toBe(false);
+    expect(await c.takeFor('tok-a')()).toBe(true); // the session already counted carries on
+  });
+
+  it('the Google calls inside sessions have a backstop', async () => {
+    const c = counter(60, 2);
+    const take = c.takeFor('tok-a');
+    expect(await take()).toBe(true);
+    expect(await take()).toBe(true);
+    expect(await take()).toBe(false);
+  });
+
+  it('a session served from the cache is never counted', async () => {
+    const c = counter(60);
+    const g = fakeGoogle([{ body: { suggestions: [] } }]);
+    const cachedOnly = { ...g.deps, takeCall: c.takeFor('tok-a') };
+    await autocomplete(cachedOnly, 'kek lok', 'tok-a');
+    const other = { ...g.deps, takeCall: c.takeFor('tok-b') };
+    expect(await autocomplete(other, 'kek lok', 'tok-b')).toMatchObject({ limited: false, calls: 0 });
+    expect(c.sessions()).toBe(1);
   });
 });

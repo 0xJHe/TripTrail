@@ -133,6 +133,7 @@ export function useLateCheck() {
 /**
  * Free estimate; Google's real time instead when the estimate is close to (or past) the start.
  * Demo mode: the replay's own time to get there (it knows when the group arrives), no Google.
+ * 'limited' = the estimate, because a free daily limit stopped the Google check.
  */
 async function travelMinutes(
   tripId: string,
@@ -149,6 +150,7 @@ async function travelMinutes(
   try {
     const eta = await fetchEta(tripId, next.id, kind, from);
     if (eta.minutes != null) return { travelMin: eta.minutes, source: 'google' };
+    if (eta.limited) return { travelMin: estimate, source: 'limited' };
   } catch (e) {
     console.warn('eta failed, using the estimate:', e instanceof Error ? e.message : e);
   }

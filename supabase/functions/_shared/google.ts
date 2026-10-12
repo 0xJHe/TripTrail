@@ -6,8 +6,15 @@
 // the cache is always checked first, and nothing is looked up twice.
 
 export const PLACES_URL = 'https://places.googleapis.com/v1';
-/** Max Google calls per trip per day, across all Edge Functions. */
+/** Max Google calls per trip per day for itinerary place lookups and photos. */
 export const DAILY_GOOGLE_LIMIT = 60;
+/**
+ * Place search ("Add a stop") has its own counter: one search session (typing until a
+ * place is picked or the screen closes, one session token) counts as 1 of these a day.
+ */
+export const DAILY_SEARCH_SESSIONS = 60;
+/** Backstop on the Google calls inside those sessions (one per pause in typing). */
+export const DAILY_SEARCH_CALLS = 600;
 export const PHOTO_MAX_WIDTH = 800;
 export const MAX_SUGGESTIONS = 5;
 
@@ -99,6 +106,55 @@ function bias(near?: LatLng | null, radius = 30000) {
   return near ? { locationBias: { circle: { center: { latitude: near.lat, longitude: near.lng }, radius } } } : {};
 }
 
+/**
+ * Google's own daily quota for the key ran out (429 RESOURCE_EXHAUSTED). A per-minute
+ * 429 is not a daily limit: that one is an ordinary failure.
+ */
+export function isDailyQuota(status: number, text: string): boolean {
+  return status === 429 && !/per\s*minute|perminute/i.test(text);
+}
+
+/** Thrown when Google's own daily quota is used up; the lookup reports `limited`. */
+export class GoogleLimitError extends Error {
+  readonly limited = true;
+}
+
+/** A lookup that hit Google's own daily quota gives `limited`, like our own limit (not cached). */
+async function orLimited<T>(p: Promise<Lookup<T>>): Promise<Lookup<T>> {
+  try {
+    return await p;
+  } catch (e) {
+    if (e instanceof GoogleLimitError) return { value: null, limited: true, calls: 1 };
+    throw e;
+  }
+}
+
+/**
+ * takeCall for place search. The first Google call of a search session counts the
+ * session as 1 of the day's DAILY_SEARCH_SESSIONS; every call (that one too) also goes
+ * through the DAILY_SEARCH_CALLS backstop. `firstUse` = true the first time this session
+ * is seen (and remembers it); `forget` undoes that when the day's sessions are used up,
+ * so the session isn't treated as counted.
+ */
+export function searchSessionTakeCall(d: {
+  firstUse: () => Promise<boolean>;
+  forget: () => Promise<void>;
+  takeSession: () => Promise<boolean>;
+  takeSearchCall: () => Promise<boolean>;
+}): () => Promise<boolean> {
+  let session: Promise<boolean> | null = null;
+  return async () => {
+    session ??= (async () => {
+      if (!(await d.firstUse())) return true; // counted earlier in this session
+      if (await d.takeSession()) return true;
+      await d.forget();
+      return false;
+    })();
+    if (!(await session)) return false;
+    return d.takeSearchCall();
+  };
+}
+
 async function call(deps: GoogleDeps, url: string, fieldMask: string | null, body?: unknown): Promise<any> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Goog-Api-Key': deps.apiKey };
   if (fieldMask) headers['X-Goog-FieldMask'] = fieldMask;
@@ -107,7 +163,11 @@ async function call(deps: GoogleDeps, url: string, fieldMask: string | null, bod
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`Google ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) {
+    const text = (await res.text()).slice(0, 200);
+    if (isDailyQuota(res.status, text)) throw new GoogleLimitError(`Google ${res.status}: ${text}`);
+    throw new Error(`Google ${res.status}: ${text}`);
+  }
   return res.json();
 }
 
@@ -138,8 +198,21 @@ function toPlace(p: Raw | undefined): PlaceInfo | null {
   };
 }
 
-/** Cache first; else one or more Google calls (each counted); the result is cached, even "nothing found". */
-async function cached<T>(
+/**
+ * Cache first; else one or more Google calls (each counted); the result is cached, even
+ * "nothing found". Google's own daily quota running out gives `limited`.
+ */
+function cached<T>(
+  deps: GoogleDeps,
+  key: string,
+  kind: string,
+  calls: number,
+  fetchIt: () => Promise<T | null>,
+): Promise<Lookup<T>> {
+  return orLimited(cachedLookup(deps, key, kind, calls, fetchIt));
+}
+
+async function cachedLookup<T>(
   deps: GoogleDeps,
   key: string,
   kind: string,
@@ -182,7 +255,11 @@ async function photoLink(deps: GoogleDeps, placeId: string, photo: RawPhoto): Pr
 }
 
 /** One photo (max 800 px wide) of a landmark, with the photographer credit. 2 calls: search + photo URL. */
-export async function findLandmarkPhoto(deps: GoogleDeps, landmark: string): Promise<Lookup<PlacePhoto>> {
+export function findLandmarkPhoto(deps: GoogleDeps, landmark: string): Promise<Lookup<PlacePhoto>> {
+  return orLimited(landmarkPhoto(deps, landmark));
+}
+
+async function landmarkPhoto(deps: GoogleDeps, landmark: string): Promise<Lookup<PlacePhoto>> {
   const key = cacheKeys.photo(landmark);
   const hit = await deps.cacheGet(key);
   if (hit !== undefined) return { value: (hit as { value: PlacePhoto | null }).value, limited: false, calls: 0 };
@@ -207,7 +284,11 @@ export async function findLandmarkPhoto(deps: GoogleDeps, landmark: string): Pro
  * working after a while. 2 calls: place details (photos only) + photo URL.
  * Reused for FRESH_PHOTO_MINUTES; the old cached link is never trusted here.
  */
-export async function refreshPlacePhoto(deps: GoogleDeps, placeId: string, now = Date.now()): Promise<Lookup<PlacePhoto>> {
+export function refreshPlacePhoto(deps: GoogleDeps, placeId: string, now = Date.now()): Promise<Lookup<PlacePhoto>> {
+  return orLimited(freshPlacePhoto(deps, placeId, now));
+}
+
+async function freshPlacePhoto(deps: GoogleDeps, placeId: string, now: number): Promise<Lookup<PlacePhoto>> {
   const key = cacheKeys.freshPhoto(placeId);
   const hit = (await deps.cacheGet(key)) as { value: PlacePhoto | null; at?: number } | undefined;
   if (hit && typeof hit.at === 'number' && now - hit.at < FRESH_PHOTO_MINUTES * 60_000) {

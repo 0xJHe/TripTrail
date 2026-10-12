@@ -173,3 +173,16 @@ describe('etaFor (Google Routes)', () => {
     expect((await etaFor(g.deps, req)).minutes).toBe(10);
   });
 });
+
+describe("eta and Google's own daily quota", () => {
+  it('says limited (the late card says "Estimated · free daily limit...") and saves that for the group', async () => {
+    const g = fakeRoutes([{ status: 429, body: { error: { status: 'RESOURCE_EXHAUSTED', message: "limit 'Requests per day'" } } }]);
+    expect(await etaFor(g.deps, req)).toMatchObject({ minutes: null, limited: true });
+    expect(await etaFor(g.deps, req)).toMatchObject({ minutes: null, limited: true, routesCalls: 0 });
+  });
+
+  it('a per-minute 429 or another error is not a limit', async () => {
+    const g = fakeRoutes([{ status: 429, body: { error: { message: "limit 'Requests per minute'" } } }]);
+    expect(await etaFor(g.deps, req)).toMatchObject({ minutes: null, limited: false });
+  });
+});

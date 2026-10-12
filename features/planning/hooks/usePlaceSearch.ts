@@ -13,7 +13,8 @@ export function newSessionToken(): string {
 
 /**
  * Search real places as the name is typed: 500 ms after typing stops, at
- * least 3 letters, at most 5 results. One session token until a place is picked.
+ * least 3 letters, at most 5 results. One session token until a place is picked (or the
+ * screen closes): place-search counts the whole session as 1 of the trip's 60 a day.
  * `query` null = don't search (e.g. the name was just filled in by a pick).
  */
 export function usePlaceSearch(tripId: string, query: string | null, near: { lat: number; lng: number } | null) {

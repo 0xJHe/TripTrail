@@ -267,6 +267,27 @@ Time and location rule (built; follow it in every live-trip feature):
   'travel') between every leave and the next arrival, 3+ min after the leave event (which
   is where the leave is noticed) and no earlier than halfway; none when the stops are too
   close for the leave to be noticed on the way.
+- Daily limits (free tiers) and their notes: Google Places for itinerary place lookups and
+  option photos 60 calls per trip per day (take_google_call); place search ("Add a stop") its
+  own counter, 60 search SESSIONS per trip per day (api_usage 'place_search'; one session
+  token, from the first letters until a place is picked or the screen closes, counts once
+  however many letters; only sessions that reach Google count, cache hits are free; a
+  600-a-day backstop on the Google calls inside sessions, 'place_search_calls'; the app keeps
+  the 500 ms wait and 3-letter minimum, and the stop can always be saved by typing the name);
+  weather 30, Routes 20, nearby searches 10 per trip per day; Google's own daily quota (a 429
+  that isn't per-minute) counts as a limit too; every Gemini model used up = a limit. When a
+  limit (and only a limit, never another error) made a feature fall back, it shows one calm
+  grey line with a pause icon, components/ui/LimitNote.tsx, ending in
+  "· free daily limit reached, resets tomorrow" (LIMIT_REACHED / limitText):
+  "Weather paused · …" (instead of hiding the weather line), "Estimated · …" under the late
+  card's tiles (late_alerts.travel_source 'limited'), "Suggestions paused · …" on the early and
+  rain cards (early_alerts / rain_alerts.limited, migration 017, only written when true),
+  "Drawing instead of a photo · …" on an option card, "Sample trips · …", "Sample plan you can
+  edit · …", "Some places use approximate locations · …" (function notes, one per line;
+  planning's Notes shows limit lines as LimitNote, others as the amber NoteLine), "Place search
+  paused · …" + "You can still type the name." Saved answers (weather, eta, nearby picks) keep
+  `limited`, so every phone of the group says the same. "Our AI is busy right now" stays for
+  per-minute busy.
 - Running late (features/today/late.ts, supabase/functions/_shared/eta.ts + newDay.ts):
   check the next stop once ~30 min before it starts and once when the group leaves
   a stop if the next starts in < 30 min (max 2 checks, one card per stop, shared
@@ -303,7 +324,8 @@ Time and location rule (built; follow it in every live-trip feature):
   anything over today's budget left (lowest daily budget − today's stops); must-have
   types first, then nearest; meals only at meal times; halal -> "Halal-friendly ·
   not verified"; price from the place type; must leave >= 20 min there. Nothing
-  usable from both searches / Google fails -> "Enjoy the extra time".
+  usable from both searches / Google fails -> "Enjoy the extra time" (a daily limit: plus
+  "Suggestions paused · free daily limit reached, resets tomorrow" instead of the reason).
   Add this = new stop now, length spare − walk there − walk on (max 60, min 15);
   later stops move only if needed. Go to next stop = offer to move the next stop
   earlier by the spare (5-min steps, never booked stops); decide_early RPC.
@@ -318,7 +340,8 @@ Time and location rule (built; follow it in every live-trip feature):
   stops. Once per stop (rain_alerts, shared, Realtime). Headline "Rain at [stop] in
   40 min" (blue stripe + umbrella icon), "Nearby, indoor, within budget", up to 3
   options nearest first (name, walk/ride time, ~price, Go) and a Keep plan link.
-  Nothing found -> "Rain coming at [stop] — consider moving it" + Keep plan only.
+  Nothing found -> "Rain coming at [stop] — consider moving it" + Keep plan only (a daily
+  limit: "Suggestions paused · free daily limit reached, resets tomorrow" above it).
   Options: nearby-suggestion function with kind 'rain' (_shared/nearby.ts
   rainOptionsFor), the running-early search code and rules: indoor types only
   (museum, art gallery, mall, aquarium, cinema, café; restaurants only near a meal

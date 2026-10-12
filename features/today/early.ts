@@ -76,7 +76,10 @@ export function earlyCheck(input: {
   return { aheadMin, spareMin: Math.floor(spareMinutes(now, travelMin, startsAt)) };
 }
 
-/** The early card to save. */
+/**
+ * The early card to save. `limited` (a daily limit left it without a suggestion) is only
+ * written when true, so the row also saves before migration 017 adds the column.
+ */
 export function earlyAlertFor(input: {
   tripId: string;
   left: Pick<Stop, 'id' | 'left_at'> | null;
@@ -85,8 +88,10 @@ export function earlyAlertFor(input: {
   travelMin: number;
   spareMin: number;
   suggestion: NearbySuggestion | null;
+  limited?: boolean;
 }): NewEarlyAlert {
   const { tripId, left, next, now, travelMin, spareMin, suggestion } = input;
+  const limited = !suggestion && !!input.limited;
   return {
     stop_id: next.id,
     trip_id: tripId,
@@ -97,6 +102,7 @@ export function earlyAlertFor(input: {
     spare_min: spareMin,
     travel_min: travelMin,
     suggestion,
+    ...(limited ? { limited } : {}),
   };
 }
 

@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
+import { LimitNote } from '@/components/ui/LimitNote';
 import { Txt } from '@/components/ui/Txt';
 import { HalalTag } from '@/features/planning/components/HalalLabels';
 import { durationText } from '@/features/planning/stops';
@@ -62,6 +63,11 @@ export function RainCard({ rain }: { rain: RainState }) {
               />
             </View>
           ))}
+        </>
+      ) : alert.limited ? (
+        <>
+          <LimitNote what="Suggestions paused" />
+          <Txt variant="b12">You could move {stop.name} to another time on the Plan tab.</Txt>
         </>
       ) : (
         <Txt variant="b12">Nothing indoor nearby fits the budget. You could move {stop.name} to another time on the Plan tab.</Txt>

@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
+import { LimitNote } from '@/components/ui/LimitNote';
 import { Txt } from '@/components/ui/Txt';
 import { colors, radius, shadow } from '@/lib/theme';
 import type { PlaceSuggestion } from '../api';
@@ -15,14 +16,22 @@ interface PlaceSuggestionsProps {
 
 /** Real places matching the typed name, under the Name field. */
 export function PlaceSuggestions({ suggestions, searching, limited, failed, onPick }: PlaceSuggestionsProps) {
-  if (limited || failed) {
+  if (limited) {
+    return (
+      <View style={styles.limited}>
+        <LimitNote what="Place search paused" />
+        <Txt variant="s11" style={styles.typeName}>
+          You can still type the name.
+        </Txt>
+      </View>
+    );
+  }
+  if (failed) {
     return (
       <View style={styles.note}>
         <Ionicons name="information-circle-outline" size={14} color={colors.amberText} />
         <Txt variant="s11" color={colors.amberText} style={{ flex: 1 }}>
-          {limited
-            ? "Place search is paused until tomorrow (Google's daily limit). You can still type the name."
-            : "Couldn't search places right now. You can still type the name."}
+          Couldn't search places right now. You can still type the name.
         </Txt>
       </View>
     );
@@ -59,4 +68,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingHorizontal: 12, paddingVertical: 8 },
   divider: { borderTopWidth: 1, borderTopColor: colors.border },
   note: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  limited: { gap: 1 },
+  typeName: { marginLeft: 19 },
 });

@@ -3,7 +3,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { OptionPhoto } from '@/lib/ai';
-import { refreshOptionPhoto } from '@/features/planning/api';
+import { refreshOptionPhoto, type PhotoRefresh } from '@/features/planning/api';
 import { useOptionPhoto } from '@/features/planning/hooks/useOptionPhoto';
 import { freshPhoto, photoPlaceId, resetPhotoRefresh } from '@/features/planning/photoRefresh';
 import type { OptionPlan } from '@/features/planning/types';
@@ -43,17 +43,17 @@ describe('photoPlaceId', () => {
 
 describe('freshPhoto', () => {
   it('asks the Edge Function only once per photo per session', async () => {
-    refresh.mockResolvedValue(newPhoto);
-    expect(await freshPhoto('trip-1', 'ChIJkek')).toEqual(newPhoto);
-    expect(await freshPhoto('trip-1', 'ChIJkek')).toEqual(newPhoto);
+    refresh.mockResolvedValue({ photo: newPhoto, limited: false });
+    expect(await freshPhoto('trip-1', 'ChIJkek')).toEqual({ photo: newPhoto, limited: false });
+    expect(await freshPhoto('trip-1', 'ChIJkek')).toEqual({ photo: newPhoto, limited: false });
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(refresh).toHaveBeenCalledWith('trip-1', 'ChIJkek');
   });
 
   it('gives null on failure and does not try that photo again', async () => {
     refresh.mockRejectedValue(new Error('Edge Function returned 502'));
-    expect(await freshPhoto('trip-1', 'ChIJkek')).toBeNull();
-    expect(await freshPhoto('trip-1', 'ChIJkek')).toBeNull();
+    expect(await freshPhoto('trip-1', 'ChIJkek')).toEqual({ photo: null, limited: false });
+    expect(await freshPhoto('trip-1', 'ChIJkek')).toEqual({ photo: null, limited: false });
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 });
@@ -66,17 +66,17 @@ describe('useOptionPhoto', () => {
   });
 
   it('swaps in a fresh link when the saved one fails', async () => {
-    let reply!: (p: OptionPhoto | null) => void;
+    let reply!: (p: PhotoRefresh) => void;
     refresh.mockReturnValue(new Promise((resolve) => (reply = resolve)));
     const { result } = await renderHook(() => useOptionPhoto('trip-1', plan()));
     await act(async () => result.current.onError());
     expect(result.current.photo).toBeNull(); // drawing while it asks
-    await act(async () => reply(newPhoto));
+    await act(async () => reply({ photo: newPhoto, limited: false }));
     await waitFor(() => expect(result.current.photo).toEqual(newPhoto));
   });
 
   it('keeps the drawing if the fresh link fails too, with no second refresh', async () => {
-    refresh.mockResolvedValue(newPhoto);
+    refresh.mockResolvedValue({ photo: newPhoto, limited: false });
     const { result } = await renderHook(() => useOptionPhoto('trip-1', plan()));
     await act(async () => result.current.onError());
     await waitFor(() => expect(result.current.photo).toEqual(newPhoto));
@@ -85,12 +85,29 @@ describe('useOptionPhoto', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the drawing when the refresh fails or the limit is reached', async () => {
-    refresh.mockResolvedValue(null);
+  it('keeps the drawing when the refresh finds no photo, with no limit note', async () => {
+    refresh.mockResolvedValue({ photo: null, limited: false });
     const { result } = await renderHook(() => useOptionPhoto('trip-1', plan()));
     await act(async () => result.current.onError());
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
     expect(result.current.photo).toBeNull();
+    expect(result.current.limited).toBe(false);
+  });
+
+  it('says the daily limit kept the drawing when the refresh hit it', async () => {
+    refresh.mockResolvedValue({ photo: null, limited: true });
+    const { result } = await renderHook(() => useOptionPhoto('trip-1', plan()));
+    expect(result.current.limited).toBe(false); // the saved photo shows
+    await act(async () => result.current.onError());
+    await waitFor(() => expect(result.current.limited).toBe(true));
+    expect(result.current.photo).toBeNull();
+  });
+
+  it('says the daily limit kept the drawing when the options were made without photos', async () => {
+    const limited = await renderHook(() => useOptionPhoto('trip-1', plan({ photo: null, photoLimited: true })));
+    expect(limited.result.current.limited).toBe(true);
+    const none = await renderHook(() => useOptionPhoto('trip-1', plan({ photo: null, photoLimited: false })));
+    expect(none.result.current.limited).toBe(false);
   });
 
   it('keeps the drawing without asking when there is no place ID', async () => {
@@ -101,7 +118,7 @@ describe('useOptionPhoto', () => {
   });
 
   it('a second card for the same photo (Results screen) reuses the first refresh', async () => {
-    refresh.mockResolvedValue(newPhoto);
+    refresh.mockResolvedValue({ photo: newPhoto, limited: false });
     const swipe = await renderHook(() => useOptionPhoto('trip-1', plan()));
     await act(async () => swipe.result.current.onError());
     await waitFor(() => expect(swipe.result.current.photo).toEqual(newPhoto));

@@ -90,15 +90,20 @@ export function slotStart(stop: Pick<Stop, 'status' | 'planned_time'>, time: num
   return stop.status === 'arrived' || !stop.planned_time ? time : Math.max(time, Date.parse(stop.planned_time));
 }
 
-/** The rain card to save. */
+/**
+ * The rain card to save. `limited` (a daily limit left it without options) is only written
+ * when true, so the row also saves before migration 017 adds the column.
+ */
 export function rainAlertFor(input: {
   tripId: string;
   stop: Pick<Stop, 'id' | 'day_number'>;
   now: number;
   rainIn: number;
   options: RainOption[];
+  limited?: boolean;
 }): NewRainAlert {
   const { tripId, stop, now, rainIn, options } = input;
+  const limited = options.length === 0 && !!input.limited;
   return {
     stop_id: stop.id,
     trip_id: tripId,
@@ -106,6 +111,7 @@ export function rainAlertFor(input: {
     checked_at: iso(now),
     rain_in_min: rainIn,
     options,
+    ...(limited ? { limited } : {}),
   };
 }
 

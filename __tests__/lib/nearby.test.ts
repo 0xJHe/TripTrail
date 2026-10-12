@@ -366,3 +366,18 @@ describe('the wider second search', () => {
     expect(await nearbyFor(g.deps, request())).toEqual({ suggestion: null, limited: true, placesCalls: 1 });
   });
 });
+
+describe('nearbyFor and daily limits', () => {
+  it('no searches left today: limited, and the other phones read the saved limited answer', async () => {
+    const g = fakeGoogle([], { limit: 0 });
+    expect(await nearbyFor(g.deps, request())).toMatchObject({ suggestion: null, limited: true });
+    expect(await nearbyFor(g.deps, request())).toMatchObject({ suggestion: null, limited: true, placesCalls: 0 });
+  });
+
+  it("Google's own daily quota counts as a limit; other errors don't", async () => {
+    const quota = fakeGoogle([{ status: 429, body: { error: { message: "limit 'Requests per day'" } } }]);
+    expect(await nearbyFor(quota.deps, request())).toMatchObject({ suggestion: null, limited: true });
+    const broken = fakeGoogle([{ status: 500, body: { error: 'oops' } }]);
+    expect(await nearbyFor(broken.deps, request())).toMatchObject({ suggestion: null, limited: false });
+  });
+});

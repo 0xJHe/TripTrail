@@ -19,7 +19,7 @@ import { tripEntryRoute } from '@/features/trip/routes';
 import { useCurrentTrip } from '@/features/trip/store';
 import { colors } from '@/lib/theme';
 import { AddStopRow } from '../components/AddStopRow';
-import { NoteLine } from '../components/NoteLine';
+import { Notes } from '../components/NoteLine';
 import { StopRow } from '../components/StopRow';
 import { formatRange } from '../dates';
 import { useDayPlan } from '../hooks/useDayPlan';
@@ -85,7 +85,7 @@ export function DayPlanScreen() {
             <Chip key={d} label={`Day ${d}`} selected={d === day} onPress={() => setPicked(d)} />
           ))}
         </Chips>
-        {note ? <NoteLine text={note} /> : null}
+        {note ? <Notes text={note} /> : null}
         {locked ? <DayFinishedNote /> : null}
         {recapDays.has(day) ? <RecapLink day={day} /> : null}
         <BudgetBar summary={plan.budget}>

@@ -31,7 +31,16 @@ export function skyAt(kind: WeatherKind, condition: string, hour: number): Weath
 export interface WeatherText {
   text: string;
   kind: WeatherKind;
+  /** No weather because a free daily limit was reached (shown as a calm pause note). */
+  paused?: boolean;
 }
+
+/** Shown instead of hiding the line when the weather was skipped because of a daily limit. */
+export const WEATHER_PAUSED: WeatherText = {
+  text: 'Weather paused · free daily limit reached, resets tomorrow',
+  kind: 'cloudy',
+  paused: true,
+};
 
 /**
  * "32° · sunny · light breeze". Demo rain replaces the sky: "29° · rain", "29° · rain soon".

@@ -128,6 +128,7 @@ export function useEarlyCheck() {
       const { spareMin } = early;
       const clock = new Date(at);
       let suggestion: NearbySuggestion | null = null;
+      let limited = false;
       try {
         const reply = await fetchNearby(tripId, {
           stopId: next.id,
@@ -136,12 +137,13 @@ export function useEarlyCheck() {
           localMinutes: clock.getHours() * 60 + clock.getMinutes(),
         });
         suggestion = reply.suggestion;
+        limited = reply.limited;
       } catch (e) {
         console.warn('nearby-suggestion failed, showing the card without one:', e instanceof Error ? e.message : e);
       }
       // Demo mode: a made-up nearby place when Google fails or finds nothing, so the card always has one.
       if (!suggestion && demo) suggestion = demoSuggestion(loc.center);
-      await raiseEarlyAlert(earlyAlertFor({ tripId, left, next, now: at, travelMin, spareMin, suggestion }));
+      await raiseEarlyAlert(earlyAlertFor({ tripId, left, next, now: at, travelMin, spareMin, suggestion, limited }));
       queryClient.invalidateQueries({ queryKey: earlyKeys.alerts(tripId) });
     };
     check()

@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet, View } from 'react-native';
 
+import { isLimitText, LimitNote } from '@/components/ui/LimitNote';
 import { Txt } from '@/components/ui/Txt';
 import { colors } from '@/lib/theme';
 
@@ -13,6 +14,22 @@ export function NoteLine({ text }: { text: string }) {
         {text}
       </Txt>
     </View>
+  );
+}
+
+/**
+ * A note from the Edge Functions, one line each: a daily-limit line ("Sample trips · free
+ * daily limit reached, resets tomorrow") is the calm LimitNote, anything else a NoteLine.
+ */
+export function Notes({ text }: { text: string }) {
+  const lines = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  return (
+    <>
+      {lines.map((line, i) => (isLimitText(line) ? <LimitNote key={i} text={line} /> : <NoteLine key={i} text={line} />))}
+    </>
   );
 }
 

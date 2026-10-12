@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
+import { LimitNote } from '@/components/ui/LimitNote';
 import { Txt } from '@/components/ui/Txt';
 import { HalalTag } from '@/features/planning/components/HalalLabels';
 import { clockOf, durationText } from '@/features/planning/stops';
@@ -108,7 +109,11 @@ export function EarlyCard({ early, stop, left }: EarlyCardProps) {
               <Txt variant="h14" style={styles.optTitle}>
                 Enjoy the extra time
               </Txt>
-              <Txt variant="s11">Nothing nearby fits the time and budget, so take it easy on the way.</Txt>
+              {alert.limited ? (
+                <LimitNote what="Suggestions paused" />
+              ) : (
+                <Txt variant="s11">Nothing nearby fits the time and budget, so take it easy on the way.</Txt>
+              )}
             </View>
           )}
           <View style={styles.buttons}>

@@ -108,7 +108,7 @@ export interface NearbyRequest {
 export interface NearbyReply {
   /** null = nothing fits (or Google failed): "Enjoy the extra time". */
   suggestion: NearbySuggestion | null;
-  /** True if the search was skipped because today's 10 searches are used up. */
+  /** True if the search was skipped because a daily limit was reached (today's 10 searches, or Google's own quota). */
   limited: boolean;
   /** Real Google requests made for this reply. */
   placesCalls: number;
@@ -341,7 +341,8 @@ export const nearbyKeys = {
   rain: (stopId: string) => `rain-pick:${stopId}`,
 };
 
-type Saved<T> = { at: number; value: T };
+/** `limited` = an empty answer because a daily limit was reached, so other phones say so too. */
+type Saved<T> = { at: number; value: T; limited?: boolean };
 
 const isEmpty = (value: unknown) => value == null || (Array.isArray(value) && value.length === 0);
 
@@ -388,7 +389,13 @@ export async function searchNearby(
       locationRestriction: { circle: { center: { latitude: centre.lat, longitude: centre.lng }, radius: radiusM } },
     }),
   });
-  if (!res.ok) throw new Error(`Google Places ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) {
+    const text = (await res.text()).slice(0, 200);
+    const error = new Error(`Google Places ${res.status}: ${text}`);
+    // Google's own daily quota (429, not the per-minute one) counts as our daily limit.
+    if (res.status === 429 && !/per\s*minute|perminute/i.test(text)) Object.assign(error, { limited: true });
+    throw error;
+  }
   return toPlaces(await res.json());
 }
 
@@ -416,7 +423,7 @@ async function areaPlaces(
     return { places, limited: false, calls: 1 };
   } catch (e) {
     onError(e);
-    return { places: null, limited: false, calls: 1 };
+    return { places: null, limited: (e as { limited?: unknown } | null)?.limited === true, calls: 1 };
   }
 }
 
@@ -471,7 +478,8 @@ type Answer<T> = { value: T; limited: boolean; calls: number };
  * One answer per stop for the whole group: the saved one if fresh; otherwise this request
  * finds it and saves it, while any other request for the same key waits a few seconds and
  * reads that (or gives up with `none`: the other phone is slow). Never throws: any failure
- * gives `none`.
+ * gives `none`. `limited` only comes with an empty answer (a daily limit left it empty),
+ * and is saved with it so the other phones get it too.
  */
 async function onePerStop<T>(
   deps: NearbyDeps,
@@ -480,23 +488,24 @@ async function onePerStop<T>(
   find: () => Promise<Answer<T>>,
   onError: (e: unknown) => void,
 ): Promise<Answer<T>> {
-  const saved = (value: T): Answer<T> => ({ value, limited: false, calls: 0 });
+  const saved = (value: T, limited = false): Answer<T> => ({ value, limited: limited && isEmpty(value), calls: 0 });
   try {
     const hit = await deps.cacheGet(key);
-    if (fresh<T>(deps, hit)) return saved(hit.value);
+    if (fresh<T>(deps, hit)) return saved(hit.value, !!hit.limited);
 
     if (!(await deps.claim(key))) {
       for (let waited = 0; waited < WAIT_FOR_OTHER_MS; waited += WAIT_STEP_MS) {
         await deps.wait(WAIT_STEP_MS);
         const other = await deps.cacheGet(key);
-        if (fresh<T>(deps, other)) return saved(other.value);
+        if (fresh<T>(deps, other)) return saved(other.value, !!other.limited);
       }
       return saved(none);
     }
     try {
       const found = await find();
-      await deps.cacheSet(key, { at: deps.now(), value: found.value } satisfies Saved<T>);
-      return found;
+      const limited = found.limited && isEmpty(found.value);
+      await deps.cacheSet(key, { at: deps.now(), value: found.value, ...(limited ? { limited } : {}) } satisfies Saved<T>);
+      return { ...found, limited };
     } finally {
       await deps.release(key);
     }

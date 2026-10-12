@@ -3,6 +3,7 @@ import type { ComponentProps } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
+import { LimitNote } from '@/components/ui/LimitNote';
 import { Txt } from '@/components/ui/Txt';
 import { clockOf, durationText } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
@@ -50,6 +51,7 @@ export function LateCard({ late, stop, time, next }: LateCardProps) {
           <Tile icon="car-outline" label="Travel" value={durationText(alert.travel_min)} />
           <Tile icon="calendar-outline" label="Starts" value={clockOf(stop.planned_time)} />
         </View>
+        {alert.travel_source === 'limited' ? <LimitNote what="Estimated" /> : null}
 
         <NewDayList plan={plan} />
 

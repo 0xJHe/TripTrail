@@ -214,12 +214,19 @@ export async function getPlace(
 
 /**
  * A new link for an option's Google photo (old links stop working after a while).
- * Counted in the trip's 60 Google calls a day. Null = no photo (or the limit was reached).
+ * Counted in the trip's 60 Google calls a day. photo null = no photo; `limited` = because
+ * a daily limit was reached.
  */
-export async function refreshOptionPhoto(tripId: string, placeId: string): Promise<OptionPhoto | null> {
+export async function refreshOptionPhoto(tripId: string, placeId: string): Promise<PhotoRefresh> {
   const { data, error } = await supabase.functions.invoke<{ photo: OptionPhoto | null; limited: boolean }>('refresh-photo', {
     body: { tripId, placeId },
   });
   if (error) throw error;
-  return data?.photo?.url ? data.photo : null;
+  return { photo: data?.photo?.url ? data.photo : null, limited: !data?.photo?.url && !!data?.limited };
+}
+
+export interface PhotoRefresh {
+  photo: OptionPhoto | null;
+  /** No photo because a free daily limit was reached. */
+  limited: boolean;
 }

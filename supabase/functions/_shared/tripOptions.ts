@@ -287,7 +287,7 @@ const MIN_OPTIONS = 4;
 const MAX_OPTIONS = 5;
 
 /** Shown with the sample options when every Gemini model is used up for today. */
-export const AI_USED_UP_NOTE = "Our free AI has reached today's limit, so these are sample trips";
+export const AI_USED_UP_NOTE = 'Sample trips · free daily limit reached, resets tomorrow';
 
 /** 'busy' / 'used-up' when the Gemini model chain gave up (geminiChain.ts AiBusyError / AiUsedUpError). */
 export function chainStopOf(e: unknown): 'busy' | 'used-up' | null {
@@ -295,7 +295,8 @@ export function chainStopOf(e: unknown): 'busy' | 'used-up' | null {
   return s === 'busy' || s === 'used-up' ? s : null;
 }
 
-const joinNotes = (...notes: (string | null)[]) => notes.filter(Boolean).join('. ') || null;
+/** One note per line (the app shows each on its own). */
+const joinNotes = (...notes: (string | null)[]) => notes.filter(Boolean).join('\n') || null;
 
 export interface OptionsDeps {
   /** Ask Gemini (the model chain); `attempt` is 0 or 1. Null when there's no API key. */

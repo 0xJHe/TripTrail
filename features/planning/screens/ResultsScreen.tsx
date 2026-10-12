@@ -13,7 +13,7 @@ import { colors } from '@/lib/theme';
 import { agreedOption, choiceLine, choosersByOption } from '../choice';
 import { AiBusyCard } from '../components/AiBusyCard';
 import { ChooseBar } from '../components/ChooseBar';
-import { NoteLine } from '../components/NoteLine';
+import { Notes } from '../components/NoteLine';
 import { RunnerUpRow } from '../components/RunnerUpRow';
 import { WinnerCard } from '../components/WinnerCard';
 import { useChooseTrip } from '../hooks/useChooseTrip';
@@ -85,7 +85,7 @@ export function ResultsScreen() {
             </Card>
           ) : null}
           {busy && !decided ? <AiBusyCard what="day plan" /> : null}
-          {!decided && options[0]?.plan_json.fitNote ? <NoteLine text={options[0].plan_json.fitNote} /> : null}
+          {!decided && options[0]?.plan_json.fitNote ? <Notes text={options[0].plan_json.fitNote} /> : null}
           <WinnerCard result={top} members={members} tag={tag} chosen={myChoice === top.option.id} footer={footer(top)} />
           {others.length ? <Txt variant="lbl">Other trips</Txt> : null}
           {others.map((r) => (

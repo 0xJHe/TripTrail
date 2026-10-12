@@ -278,3 +278,20 @@ describe('rain within the hour (rain backup, no extra weather call)', () => {
     expect(hoursBetween(hours, t, t + 60 * MIN).map((h) => h.start)).toEqual(['2026-10-12T04:00:00Z', '2026-10-12T05:00:00Z']);
   });
 });
+
+describe("weather and Google's own daily quota", () => {
+  const dailyQuota = { status: 429, body: { error: { status: 'RESOURCE_EXHAUSTED', message: "limit 'Requests per day'" } } };
+
+  it('says limited (the app shows "Weather paused") and other phones read that too', async () => {
+    const g = fakeWeather([dailyQuota]);
+    const errors: unknown[] = [];
+    expect(await weatherFor(g.deps, { now: kekLokSi, next: null }, (e) => errors.push(e))).toMatchObject({ now: null, limited: true });
+    expect(errors).toHaveLength(0);
+    expect(await weatherFor(g.deps, { now: kekLokSi, next: null })).toMatchObject({ now: null, limited: true, weatherCalls: 0 });
+  });
+
+  it('any other Google error is not a limit', async () => {
+    const g = fakeWeather([{ status: 500, body: { error: 'oops' } }]);
+    expect(await weatherFor(g.deps, { now: kekLokSi, next: null })).toMatchObject({ now: null, limited: false });
+  });
+});

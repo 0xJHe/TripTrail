@@ -14,10 +14,9 @@ interface PinRowProps {
   pin: PinWithPhoto;
   by: string;
   distance: string | null;
-  /** null = today isn't a trip day, so it can't be added. */
+  /** Opens Add a stop with the pin filled in; null = today isn't a trip day, so it can't be added. */
   onAdd: (() => void) | null;
   added: boolean;
-  adding: boolean;
   /** Open the photo full screen. */
   onPhoto: () => void;
   /** null = not my pin, so no delete. */
@@ -29,7 +28,7 @@ interface PinRowProps {
  * One pin in "Pinned so far today": spots can be added to the plan, every pin has directions,
  * the photo opens full screen, and my own pins can be deleted.
  */
-export function PinRow({ pin, by, distance, onAdd, added, adding, onPhoto, onDelete, deleting }: PinRowProps) {
+export function PinRow({ pin, by, distance, onAdd, added, onPhoto, onDelete, deleting }: PinRowProps) {
   const openDirections = useDirections();
   const title = pinTitle(pin);
   const spot = pin.type === 'spot';
@@ -71,17 +70,13 @@ export function PinRow({ pin, by, distance, onAdd, added, adding, onPhoto, onDel
             </View>
           ) : onAdd ? (
             <Pressable
-              onPress={adding ? undefined : onAdd}
+              onPress={onAdd}
               accessibilityRole="button"
               accessibilityLabel={`Add ${title} to today's plan`}
               style={({ pressed }) => [styles.pill, pressed && { opacity: 0.85 }]}>
-              {adding ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <Txt style={styles.pillText} color={colors.white}>
-                  Add to plan
-                </Txt>
-              )}
+              <Txt style={styles.pillText} color={colors.white}>
+                Add to plan
+              </Txt>
             </Pressable>
           ) : null}
         </>

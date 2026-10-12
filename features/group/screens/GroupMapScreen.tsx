@@ -22,6 +22,7 @@ import { ZoomControls } from '../components/ZoomControls';
 import { useDeletePin } from '../hooks/useDeletePin';
 import { useGroupMap } from '../hooks/useGroupMap';
 import { useMeetPick } from '../hooks/useMeetPick';
+import { usePinPlan } from '../hooks/usePinPlan';
 import { MIN_DELTA } from '../groupMap';
 import { saveErrorText } from '../meetPoint';
 import { canDeletePin, pinDistance, pinTitle } from '../pins';
@@ -49,6 +50,7 @@ export function GroupMapScreen() {
   const [photoId, setPhotoId] = useState<string | null>(null);
   const removal = useDeletePin(g.tripId, (p) => setPinId((id) => (id === p.id ? null : id)));
   const pick = useMeetPick(g.dayStops, g.pins, g.gather);
+  const pinPlan = usePinPlan(g.tripId);
   const { meet, split } = g.gather;
   const showMeet = meet && !(meet.state === 'together' && closedMeet === meet.row.id) ? meet : null;
   // Once the group has chosen a meet point or a split, only its card shows until it ends.
@@ -168,6 +170,8 @@ export function GroupMapScreen() {
               distance={pinDistance(selected, meAt)}
               onClose={() => setPinId(null)}
               onPhoto={() => setPhotoId(selected.id)}
+              onAdd={pinPlan.planDay != null ? () => pinPlan.add(selected) : null}
+              added={pinPlan.inPlan(selected)}
               onDelete={canDeletePin(selected, g.meId) ? () => removal.ask(selected) : null}
               deleting={removal.deleting === selected.id}
               error={removal.error}

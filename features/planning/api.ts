@@ -159,6 +159,15 @@ export async function updateStop(id: string, patch: StopPatch): Promise<void> {
   if (error) throw error;
 }
 
+/** "Shift later stops": new times for the stops moved to make room (everyone sees them live). */
+export async function shiftStops(moves: { id: string; planned_time: string; planned_end: string | null }[]): Promise<void> {
+  const results = await Promise.all(
+    moves.map((m) => supabase.from('stops').update({ planned_time: m.planned_time, planned_end: m.planned_end }).eq('id', m.id)),
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
+}
+
 /**
  * Take a stop out of the plan. It's marked "dropped" rather than deleted so the
  * change reaches everyone live (Realtime can't filter deletes by trip).

@@ -14,6 +14,8 @@ export interface FormPlace {
   lng: number;
   /** Google place types of a place picked in this form (not saved; only to tell a food stop). */
   types?: string[];
+  /** The location of a pin added to the plan (Pin spot), not a Google place. */
+  pinned?: boolean;
 }
 
 export interface StopFormValues {

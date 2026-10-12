@@ -1,4 +1,5 @@
-import { canDeletePin, dropLabel, photoPath, pinDistance, pinInPlan, pinName, pinsToday, pinTitle, pinToStop } from '@/features/group/pins';
+import { canDeletePin, dropLabel, photoPath, pinDistance, pinInPlan, pinName, pinsToday, pinForm, pinStopRoute, pinTitle } from '@/features/group/pins';
+import { readStopForm } from '@/features/planning/stopForm';
 import type { Pin } from '@/features/group/types';
 import { offsetMeters } from '@/lib/distance';
 
@@ -56,20 +57,27 @@ describe('pinsToday', () => {
 });
 
 describe('Add to plan', () => {
-  it('makes a stop today, at the next quarter hour, 30 min, free, at the pin', () => {
-    const stop = pinToStop(pin(), 2, 5, new Date(2026, 9, 12, 15, 7));
-    expect(stop).toMatchObject({
-      day_number: 2,
-      position: 5,
-      name: 'Cendol stall',
-      lat: here.lat,
-      lng: here.lng,
-      planned_time: new Date(2026, 9, 12, 15, 15).toISOString(),
-      planned_end: new Date(2026, 9, 12, 15, 45).toISOString(),
-      price: 0,
-      is_booked: false,
-      category: 'sight',
+  it('opens Add a stop for the day with the pin', () => {
+    expect(pinStopRoute('t1', 'p1', 2)).toEqual({
+      pathname: '/trip/[id]/stop/[stopId]',
+      params: { id: 't1', stopId: 'new', day: '2', pin: 'p1' },
     });
+  });
+
+  it("fills the form with the pin's name and location, times left for the person to pick", () => {
+    const form = pinForm(pin(), 2);
+    expect(form).toMatchObject({ kind: 'place', day: 2, name: 'Cendol stall', time: '', endTime: '', price: '' });
+    expect(form.place).toEqual({ placeId: null, address: null, lat: here.lat, lng: here.lng, pinned: true });
+  });
+
+  it('saves at the pin, food or not from the name, and then counts as in the plan', () => {
+    const read = readStopForm({ ...pinForm(pin({ name: 'Line Clear nasi kandar' }), 1), time: '15:00', endTime: '15:30' }, '2026-10-12');
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.fields).toMatchObject({ day_number: 1, name: 'Line Clear nasi kandar', lat: here.lat, lng: here.lng, category: 'food', is_booked: false });
+    expect(pinInPlan(pin({ name: 'Line Clear nasi kandar' }), [{ ...read.fields, status: 'planned' }])).toBe(true);
+    const spot = readStopForm({ ...pinForm(pin({ name: 'Viewpoint' }), 1), time: '15:00', endTime: '15:30' }, '2026-10-12');
+    expect(spot.ok && spot.fields.category).toBe('sight');
   });
 
   it('knows when a pin is already in the plan', () => {

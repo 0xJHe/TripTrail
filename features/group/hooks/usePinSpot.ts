@@ -2,10 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { useMemo, useState } from 'react';
 
-import { addStop } from '@/features/planning/api';
 import { useDayPlan } from '@/features/planning/hooks/useDayPlan';
-import { planningKeys } from '@/features/planning/hooks/usePlanning';
-import { useFinishedDays } from '@/features/recap/hooks/useFinishedDays';
 import { useMyMember } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
 import { useCurrentTrip } from '@/features/trip/store';
@@ -13,8 +10,9 @@ import { now, useNow } from '@/lib/clock';
 import { haversineMeters } from '@/lib/distance';
 import { getGroupLocation, useGroupLocation } from '@/lib/location';
 import { addPin, fetchPins, uploadPinPhoto } from '../api';
-import { photoPath, pinInPlan, pinName, pinsToday, pinToStop } from '../pins';
-import type { Pin, PinType } from '../types';
+import { photoPath, pinName, pinsToday } from '../pins';
+import type { PinType } from '../types';
+import { usePinPlan } from './usePinPlan';
 
 export const pinKeys = { pins: (tripId: string) => ['pins', tripId] as const };
 
@@ -22,7 +20,7 @@ export const pinKeys = { pins: (tripId: string) => ['pins', tripId] as const };
 const NEAR_STOP_M = 300;
 const PICK: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.5, allowsEditing: false };
 
-/** Everything the Pin spot screen needs: the form, today's pins (live), drop / add to plan. */
+/** Everything the Pin spot screen needs: the form, today's pins (live), drop, and Add to plan (opens Add a stop). */
 export function usePinSpot() {
   const tripId = useCurrentTrip((s) => s.currentTripId) ?? undefined;
   const plan = useDayPlan(tripId);
@@ -37,14 +35,11 @@ export function usePinSpot() {
   const [name, setName] = useState('');
   const [photo, setPhoto] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
-  const [adding, setAdding] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dropped, setDropped] = useState<string | null>(null);
 
-  // "Add to plan" goes on today's trip day (the open day), never on one finished for me: after
-  // closing a day kept open past midnight, the calendar day; none when no trip day is open.
-  const planDay = useFinishedDays(tripId, plan.days).addDay;
-  const dayStops = useMemo(() => plan.stops.filter((s) => s.day_number === planDay), [plan.stops, planDay]);
+  const pinPlan = usePinPlan(tripId);
+  const { dayStops } = pinPlan;
   const here = location?.me ?? location?.center ?? null;
   // For the header: "Near Kek Lok Si Temple".
   const nearStop = useMemo(() => {
@@ -97,21 +92,6 @@ export function usePinSpot() {
     }
   }
 
-  async function addToPlan(pin: Pin) {
-    if (!tripId || planDay == null) return;
-    setAdding(pin.id);
-    setError(null);
-    try {
-      const position = Math.max(-1, ...dayStops.map((s) => s.position)) + 1;
-      await addStop(tripId, pinToStop(pin, planDay, position, now()));
-      await queryClient.invalidateQueries({ queryKey: planningKeys.stops(tripId) });
-    } catch {
-      setError("Couldn't add it to the plan. Try again.");
-    } finally {
-      setAdding(null);
-    }
-  }
-
   const memberName = (id: string) =>
     id === me?.id ? 'You' : (plan.members.find((m) => m.id === id)?.display_name ?? 'Someone');
 
@@ -125,15 +105,14 @@ export function usePinSpot() {
     nearStop,
     pins: pinsToday(pins.data ?? [], time),
     pinsLoading: pins.isLoading,
-    inPlan: (pin: Pin) => pinInPlan(pin, dayStops),
-    planDay,
+    inPlan: pinPlan.inPlan,
+    planDay: pinPlan.planDay,
     memberName,
     form: { type, setType, name, setName, photo, setPhoto, pickPhoto },
     drop,
     dropping,
     dropped,
-    addToPlan,
-    adding,
+    addToPlan: pinPlan.add,
     error,
   };
 }

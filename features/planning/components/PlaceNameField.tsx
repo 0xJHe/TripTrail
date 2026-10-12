@@ -62,7 +62,7 @@ export function PlaceNameField({ tripId, name, place, placeholder, search, near,
         <View style={styles.place}>
           <Ionicons name="location" size={14} color={colors.tealDark} />
           <Txt variant="s11" style={{ flex: 1 }} numberOfLines={2}>
-            {place.address ?? 'Location from the plan'}
+            {place.address ?? (place.pinned ? 'Location of the pin' : 'Location from the plan')}
           </Txt>
           <Pressable
             onPress={() => onChange({ place: null })}

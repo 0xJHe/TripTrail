@@ -11,6 +11,7 @@ import { Txt } from '@/components/ui/Txt';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { colors } from '@/lib/theme';
 import { HalalLabels } from '../components/HalalLabels';
+import { OverlapWarning } from '../components/OverlapWarning';
 import { PlaceNameField } from '../components/PlaceNameField';
 import { dayFinishedText, useStopForm } from '../hooks/useStopForm';
 import { TimeField } from '../components/TimeField';
@@ -39,11 +40,13 @@ function hourAfter(time: string): string | undefined {
  * Edit a stop (name, time, price), delete it, or add a new one. Food stops: halal tag / JAKIM
  * link. ?split=<id>: group B's own stop during that split (ends by the rejoin time, no day pick).
  * Only days not finished for this person can be picked; a finished day's stop is read-only.
+ * ?pin=<id>: a pin's Add to plan (name + location filled in). Times overlapping another stop
+ * show a warning with Shift later stops instead of saving.
  */
 export function StopFormScreen() {
-  const params = useLocalSearchParams<{ id: string; stopId: string; day?: string; split?: string }>();
-  const { form, set, save, remove, isNew, openDays, locked, near, missing, saving, error, timeError, needsHalal, category, isSplitStop, splitRejoinAt } =
-    useStopForm(params.id, params.stopId, Number(params.day) || 1, params.split || null);
+  const params = useLocalSearchParams<{ id: string; stopId: string; day?: string; split?: string; pin?: string }>();
+  const { form, set, save, shiftAndSave, remove, isNew, openDays, locked, near, missing, saving, error, timeError, overlap, needsHalal, category, isSplitStop, splitRejoinAt } =
+    useStopForm(params.id, params.stopId, Number(params.day) || 1, params.split || null, params.pin || null);
 
   function confirmDelete() {
     if (!form) return;
@@ -121,6 +124,7 @@ export function StopFormScreen() {
           />
         </View>
         {timeLine ? <ErrorLine message={timeLine} /> : null}
+        {overlap && !timeLine ? <OverlapWarning overlap={overlap} onShift={shiftAndSave} saving={saving} /> : null}
 
         <Txt variant="sec">Price per person</Txt>
         <Field

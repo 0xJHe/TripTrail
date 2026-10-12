@@ -366,6 +366,25 @@ Time and location rule (built; follow it in every live-trip feature):
   inside rough outlines of Peninsular Malaysia / Sabah + Sarawak (Singapore, southern Thailand
   and Brunei kept out). Where: Day plan rows and Edit stop = tag + link; running-early and rain
   cards = the tag only (their halalNote: a food place and someone needs halal), never the link.
+- Overlapping stops (features/planning/overlap.ts checkOverlap, useStopForm, OverlapWarning):
+  Add a stop / Edit stop checks the new times against every other timed stop on that day in
+  this person's view (useStops, so group B's own stops too during a split; dropped and untimed
+  stops ignored; an edit only when its times or day changed, so fixing a price never gets stuck).
+  Overlap -> nothing saved; under the times a small amber warning "This overlaps with [stop]
+  ([start]–[end])." (the first overlapping stop by start time) and one button, Shift later
+  stops: moves the overlapping stop and every later non-booked stop on that day later by just
+  enough so nothing overlaps (gaps soak it up, lengths kept, no end time stays none), for
+  everyone, live (planning/api.ts shiftStops, then the stop is saved). Booked stops never move:
+  a booked stop overlapping or in the way -> "Booked stops can't move, please pick another
+  time." instead of the button. A stop that would end at or after midnight -> "Not enough time
+  left today, please pick another time." instead of the button. Changing a time or the day hides
+  the warning.
+- Add to plan on a pin (Pin spot list PinRow and the map's pin card PinSheet, spots only;
+  features/group/hooks/usePinPlan.ts, pins.ts pinForm / pinStopRoute): opens the normal Add a
+  stop screen (?pin=<id>) for the open day (addDay above), filled with the pin's name and exact
+  location ("Location of the pin"); the person picks the start and end time; food or not from
+  the name as for any typed stop; the overlap check applies. Saved with the pin's name and
+  position, the pin shows "In plan" (pinInPlan: same name within 5 m).
 - Food stops added or edited by hand (features/planning/foodStop.ts placeCategory, used by
   readStopForm and the Edit stop halal preview; no button): a Google place picked in the form ->
   its types, from the same place-search 'details' call that gets the address and location
@@ -430,7 +449,7 @@ Time and location rule (built; follow it in every live-trip feature):
   form (the selected Plan tab day, the open day from Today's + Add more stops, tomorrow from the
   Done for today screen); the Day chips only offer days not finished for me, and saving,
   deleting or moving a stop on a finished day is refused ("Day N is finished, so its plan can't
-  be changed."). Pin spot's Add to plan: the open day, or the calendar day once the open day is
+  be changed."). A pin's Add to plan: the open day, or the calendar day once the open day is
   finished for me (closed after Keep going past midnight), else hidden. Running early's Add
   this and rain's Go stay on the day of the stop they change. Enforced in the app only (RLS
   doesn't know who closed what).

@@ -82,7 +82,6 @@ export function PinSpotScreen() {
                 distance={pinDistance(pin, p.here)}
                 onAdd={p.planDay != null ? () => p.addToPlan(pin) : null}
                 added={p.inPlan(pin)}
-                adding={p.adding === pin.id}
                 onPhoto={() => setPhotoId(pin.id)}
                 onDelete={canDeletePin(pin, p.meId) ? () => removal.ask(pin) : null}
                 deleting={removal.deleting === pin.id}

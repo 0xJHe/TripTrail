@@ -1,14 +1,12 @@
 import { todayISO } from '@/features/planning/dates';
+import { emptyForm, type StopFormValues } from '@/features/planning/stopForm';
 import { durationText } from '@/features/planning/stops';
-import type { NewStop, Stop } from '@/features/planning/types';
+import type { Stop } from '@/features/planning/types';
 import { haversineMeters, type LatLng } from '@/lib/distance';
 import type { Pin, PinType } from './types';
 
-const MIN = 60_000;
 /** Walking speed used for "9 min walk" (same as the demo route). */
 const WALK_M_PER_MIN = 80;
-/** A pin added to the plan gets this long. */
-const PIN_STOP_MINUTES = 30;
 /** Same place as a stop if this close (a pin added to the plan keeps its exact position). */
 const SAME_PLACE_M = 5;
 
@@ -65,27 +63,17 @@ export function pinInPlan(pin: Pin, dayStops: Pick<Stop, 'name' | 'lat' | 'lng' 
   );
 }
 
-/** The stop "Add to plan" makes: today, starting at the next quarter hour, 30 min, free. */
-export function pinToStop(pin: Pin, day: number, position: number, now: Date): NewStop {
-  const quarter = 15 * MIN;
-  const start = Math.ceil(now.getTime() / quarter) * quarter;
-  return {
-    day_number: day,
-    position,
-    name: pinTitle(pin),
-    lat: pin.lat,
-    lng: pin.lng,
-    planned_time: new Date(start).toISOString(),
-    planned_end: new Date(start + PIN_STOP_MINUTES * MIN).toISOString(),
-    price: 0,
-    is_estimate: true,
-    is_booked: false,
-    is_outdoor: false,
-    tip: null,
-    category: 'sight',
-    address: null,
-    place_id: null,
-  };
+/**
+ * "Add to plan" opens the normal Add a stop form with this: the pin's name and exact position
+ * (food or not from the name, as for any typed stop); the person picks the times.
+ */
+export function pinForm(pin: Pin, day: number): StopFormValues {
+  return { ...emptyForm(day), name: pinTitle(pin), place: { placeId: null, address: null, lat: pin.lat, lng: pin.lng, pinned: true } };
+}
+
+/** The Add a stop screen for a pin, on the given day. */
+export function pinStopRoute(tripId: string, pinId: string, day: number) {
+  return { pathname: '/trip/[id]/stop/[stopId]', params: { id: tripId, stopId: 'new', day: String(day), pin: pinId } } as const;
 }
 
 /** A random file name for a pin photo (no crypto needed). */

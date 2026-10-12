@@ -93,7 +93,7 @@ export function useGroupMap() {
     notice,
     allowLocation,
     gather,
-    /** I closed today (Done for today): the banner with Reopen today. */
-    closedDay: closures.mine ? { reopen: closures.reopen, saving: closures.saving, error: closures.error } : null,
+    /** I closed today (Done for today): the "You've closed today" banner. */
+    closedDay: closures.mine,
   };
 }

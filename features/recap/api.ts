@@ -10,8 +10,8 @@ export async function fetchDayClosures(tripId: string): Promise<DayClosure[]> {
 }
 
 /**
- * Close (or reopen) this person's day. One row per person per day; reopening keeps the row
- * with closed = false (an update, which Realtime sends to everyone filtered by trip_id).
+ * Close this person's day (Done for today, final). One row per person per day; closing again
+ * after a Demo mode Reset updates the row (Realtime sends it to everyone filtered by trip_id).
  */
 export async function saveDayClosure(row: DayClosure): Promise<void> {
   const { error } = await supabase.from('day_closures').upsert(row, { onConflict: 'member_id,day_number' });

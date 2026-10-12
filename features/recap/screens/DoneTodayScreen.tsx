@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import { BOTTOM_BAR_SPACE, BottomBar } from '@/components/ui/BottomBar';
 import { Button } from '@/components/ui/Button';
@@ -18,7 +18,8 @@ import { useDoneToday } from '../hooks/useDoneToday';
 /**
  * Done for today (prototype screen 14): how today went (planned vs actual), tomorrow's stops
  * to edit, who has closed their day, and Done for today, which switches this phone's location
- * sharing off until 1 hour before tomorrow's first stop.
+ * sharing off until 1 hour before tomorrow's first stop. It is final (the day becomes read-only
+ * for this person), so it asks first: "Finish today?" with Finish / Cancel.
  */
 export function DoneTodayScreen() {
   const d = useDoneToday();
@@ -45,6 +46,12 @@ export function DoneTodayScreen() {
     );
   }
 
+  const confirmDone = () =>
+    Alert.alert('Finish today?', "You won't be able to change today's plan after this.", [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Finish', onPress: d.done },
+    ]);
+
   const note = d.tomorrow
     ? `Tapping Done switches your location off for the night. It turns back on 1 hour before tomorrow's first stop${d.backAt ? ` (${d.backAt})` : ''}.`
     : "Tapping Done switches your location off. That's the last day of the trip.";
@@ -67,7 +74,7 @@ export function DoneTodayScreen() {
         {d.error ? <ErrorLine message={d.error} /> : null}
       </ScrollView>
       <BottomBar>
-        <Button label="Done for today" onPress={d.done} loading={d.saving} testID="done-for-today" />
+        <Button label="Done for today" onPress={confirmDone} loading={d.saving} testID="done-for-today" />
       </BottomBar>
     </View>
   );

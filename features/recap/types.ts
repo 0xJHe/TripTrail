@@ -3,9 +3,9 @@ export interface DayClosure {
   trip_id: string;
   member_id: string;
   day_number: number;
-  /** false = reopened ("tapped by mistake"). Kept as an update so Realtime reaches everyone. */
+  /** Always true now (Done for today is final); false only on old rows from when a day could be reopened. */
   closed: boolean;
-  /** now() when closed (the fake time in Demo mode, so Reset reopens the day). */
+  /** now() when closed (the fake time in Demo mode, so Reset undoes it). */
   closed_at: string;
 }
 

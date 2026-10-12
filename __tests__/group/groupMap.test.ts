@@ -48,7 +48,7 @@ describe('members who closed their day (Done for today)', () => {
     const marked = markDone(group, new Set(['d']));
     expect(marked.filter((m) => m.done).map((m) => m.id)).toEqual(['d']);
     expect(markDone(marked, new Set(['d']))[3]).toBe(marked[3]);
-    // Reopened: back to normal.
+    // Closure undone (Demo mode Reset): back to normal.
     expect(markDone(marked, new Set())[3].done).toBe(false);
   });
 

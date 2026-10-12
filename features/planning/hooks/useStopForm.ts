@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { useSplitRows } from '@/features/group/hooks/useSplitRows';
 import { splitEnded, splitStopProblem } from '@/features/group/splitStops';
+import { useFinishedDays } from '@/features/recap/hooks/useFinishedDays';
 import { now } from '@/lib/clock';
 import { addStop, deleteStop, updateStop } from '../api';
 import { placeCategory } from '../foodStop';
@@ -14,7 +15,11 @@ import { useDayPlan } from './useDayPlan';
 /**
  * Add a stop (stopId "new") or edit / delete an existing one. splitId = group B's own stop
  * during that split ("+ Add a stop" on the split banner): it must end by the rejoin time.
+ * A stop is saved on the day picked in the form (the day it was opened for); a day finished
+ * for this person (Done for today, or the next day has started) can't get, lose or change stops.
  */
+export const dayFinishedText = (day: number) => `Day ${day} is finished, so its plan can't be changed.`;
+
 export function useStopForm(tripId: string, stopId: string, day: number, splitId: string | null = null) {
   const queryClient = useQueryClient();
   const plan = useDayPlan(tripId);
@@ -22,6 +27,9 @@ export function useStopForm(tripId: string, stopId: string, day: number, splitId
   const stop = isNew ? null : (plan.stops.find((s) => s.id === stopId) ?? null);
   const splitOf = isNew ? splitId : (stop?.split_id ?? null);
   const splits = useSplitRows(splitOf ? tripId : undefined);
+  const finished = useFinishedDays(tripId, plan.days);
+  // The day the stop is on (editing) or was opened for (adding): finished = read-only.
+  const locked = finished.isFinished(stop?.day_number ?? day);
   const split = splitOf ? (splits.data?.find((r) => r.id === splitOf) ?? null) : null;
   const [form, setForm] = useState<StopFormValues | null>(isNew ? emptyForm(day) : null);
   const [saving, setSaving] = useState(false);
@@ -54,6 +62,11 @@ export function useStopForm(tripId: string, stopId: string, day: number, splitId
 
   function save() {
     if (!form) return;
+    const closedDay = locked ? (stop?.day_number ?? day) : finished.isFinished(form.day) ? form.day : null;
+    if (closedDay != null) {
+      setError(dayFinishedText(closedDay));
+      return;
+    }
     const problem = timeProblem(form);
     setTimeError(problem);
     if (problem) return;
@@ -83,7 +96,11 @@ export function useStopForm(tripId: string, stopId: string, day: number, splitId
     );
   }
 
-  const remove = () => (stop ? run(() => deleteStop(stop.id)) : undefined);
+  const remove = () => {
+    if (!stop) return;
+    if (locked) return setError(dayFinishedText(stop.day_number));
+    return run(() => deleteStop(stop.id));
+  };
 
   return {
     form,
@@ -91,7 +108,10 @@ export function useStopForm(tripId: string, stopId: string, day: number, splitId
     save,
     remove,
     isNew,
-    days: plan.days,
+    /** Days the stop can go on: the ones not finished for this person. */
+    openDays: Array.from({ length: plan.days }, (_, i) => i + 1).filter((d) => !finished.isFinished(d)),
+    /** The stop's day (or the day it was opened for) is finished: read-only. */
+    locked,
     /** Middle of the plan's stops, to search places nearby. */
     near: centre(plan.stops),
     missing: !isNew && !plan.loading && !stop,

@@ -5,7 +5,7 @@ import { useMyMember } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
 import { now, useNow } from '@/lib/clock';
 import { fetchDayClosures, saveDayClosure } from '../api';
-import { closedIds } from '../dayEnd';
+import { closedIds, myClosedDays } from '../dayEnd';
 import type { DayClosure } from '../types';
 
 export const closureKeys = {
@@ -14,7 +14,8 @@ export const closureKeys = {
 
 /**
  * Who has closed a trip day ("2 of 4 have closed their day"), live with Realtime, and this
- * person's Done for today / reopen. Closures after the fake time don't count (Demo mode Reset).
+ * person's Done for today (final: no reopen). Closures after the fake time don't count (Demo
+ * mode Reset undoes them).
  */
 export function useDayClosures(tripId: string | undefined, day: number) {
   const queryClient = useQueryClient();
@@ -30,11 +31,13 @@ export function useDayClosures(tripId: string | undefined, day: number) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const save = useCallback(
-    async (isClosed: boolean): Promise<boolean> => {
+  const myDays = useMemo(() => myClosedDays(query.data ?? [], me?.id, time), [query.data, me?.id, time]);
+
+  const close = useCallback(
+    async (): Promise<boolean> => {
       if (!tripId || !me || day < 1) return false;
       const key = closureKeys.closures(tripId);
-      const row: DayClosure = { trip_id: tripId, member_id: me.id, day_number: day, closed: isClosed, closed_at: now().toISOString() };
+      const row: DayClosure = { trip_id: tripId, member_id: me.id, day_number: day, closed: true, closed_at: now().toISOString() };
       setSaving(true);
       setError(null);
       // Show it straight away (location sharing stops on this phone at once).
@@ -64,8 +67,9 @@ export function useDayClosures(tripId: string | undefined, day: number) {
     /** This person closed this day. */
     mine: !!me && closed.has(me.id),
     ready: query.isSuccess || !tripId,
-    close: () => save(true),
-    reopen: () => save(false),
+    /** Days this person has closed (finished for them). */
+    myDays,
+    close,
     saving,
     error,
   };

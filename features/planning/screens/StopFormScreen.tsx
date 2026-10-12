@@ -12,7 +12,7 @@ import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { colors } from '@/lib/theme';
 import { HalalLabels } from '../components/HalalLabels';
 import { PlaceNameField } from '../components/PlaceNameField';
-import { useStopForm } from '../hooks/useStopForm';
+import { dayFinishedText, useStopForm } from '../hooks/useStopForm';
 import { TimeField } from '../components/TimeField';
 import { END_BEFORE_START, endNotAfterStart, type StopKind } from '../stopForm';
 import { clockOf, clockText, parseClock } from '../stops';
@@ -38,10 +38,11 @@ function hourAfter(time: string): string | undefined {
 /**
  * Edit a stop (name, time, price), delete it, or add a new one. Food stops: halal tag / JAKIM
  * link. ?split=<id>: group B's own stop during that split (ends by the rejoin time, no day pick).
+ * Only days not finished for this person can be picked; a finished day's stop is read-only.
  */
 export function StopFormScreen() {
   const params = useLocalSearchParams<{ id: string; stopId: string; day?: string; split?: string }>();
-  const { form, set, save, remove, isNew, days, near, missing, saving, error, timeError, needsHalal, category, isSplitStop, splitRejoinAt } =
+  const { form, set, save, remove, isNew, openDays, locked, near, missing, saving, error, timeError, needsHalal, category, isSplitStop, splitRejoinAt } =
     useStopForm(params.id, params.stopId, Number(params.day) || 1, params.split || null);
 
   function confirmDelete() {
@@ -76,6 +77,7 @@ export function StopFormScreen() {
     <KeyboardAvoidingView style={styles.screen} behavior="padding">
       {header}
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        {locked ? <ErrorLine message={dayFinishedText(form.day)} /> : null}
         <Txt variant="sec">What is it?</Txt>
         <Chips>
           {KINDS.map((k) => (
@@ -140,11 +142,11 @@ export function StopFormScreen() {
           </Pressable>
         ) : null}
 
-        {days > 1 && !isSplitStop ? (
+        {!locked && !isSplitStop && (openDays.length > 1 || !openDays.includes(form.day)) ? (
           <>
             <Txt variant="sec">Day</Txt>
             <Chips>
-              {Array.from({ length: days }, (_, i) => i + 1).map((d) => (
+              {openDays.map((d) => (
                 <Chip key={d} label={`Day ${d}`} selected={form.day === d} onPress={() => set({ day: d })} />
               ))}
             </Chips>
@@ -153,7 +155,7 @@ export function StopFormScreen() {
 
         {error ? <ErrorLine message={error} /> : null}
 
-        {!isNew ? (
+        {!isNew && !locked ? (
           <Pressable onPress={confirmDelete} accessibilityRole="button" style={styles.delete} testID="delete-stop">
             <Ionicons name="trash-outline" size={18} color={colors.red} />
             <Txt variant="h14" color={colors.red}>
@@ -162,9 +164,11 @@ export function StopFormScreen() {
           </Pressable>
         ) : null}
       </ScrollView>
-      <BottomBar>
-        <Button label={isNew ? 'Add stop' : 'Save'} onPress={save} loading={saving} testID="save-stop" />
-      </BottomBar>
+      {locked ? null : (
+        <BottomBar>
+          <Button label={isNew ? 'Add stop' : 'Save'} onPress={save} loading={saving} testID="save-stop" />
+        </BottomBar>
+      )}
     </KeyboardAvoidingView>
   );
 }

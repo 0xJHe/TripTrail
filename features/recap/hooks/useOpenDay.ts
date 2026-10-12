@@ -38,6 +38,8 @@ export function useOpenDay(tripId: string | undefined) {
 
   return {
     day,
+    /** Today's date as a trip day (0 or less = before the trip), even while the day before is kept open. */
+    calendarDay,
     /** Kept open from the day before, past midnight. */
     pastMidnight: day > 0 && day < calendarDay,
     /** "Keep going" was tapped for this day. */

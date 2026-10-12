@@ -14,14 +14,16 @@ const BOOKED_ICON = { flight: 'airplane', hotel: 'bed' } as const;
 
 interface StopRowProps {
   stop: Stop;
-  onPress: () => void;
+  /** Opens Edit stop; left out on a finished day (read-only: no Edit). */
+  onPress?: () => void;
   /** Someone in the trip chose halal (food stops get the grey tag, + the JAKIM link in Malaysia). */
   needsHalal?: boolean;
 }
 
 /**
  * One stop on the day's timeline (prototype .stop). Booked flights and hotels are navy. Food
- * stops: halal tag / JAKIM link; group B's own stops (during a split): a "Group B" tag.
+ * stops: halal tag / JAKIM link; group B's own stops (during a split): a "Group B" tag. Without
+ * onPress (a finished day) it can't be tapped and has no Edit chip.
  */
 export function StopRow({ stop, onPress, needsHalal = false }: StopRowProps) {
   const booked = stop.is_booked;
@@ -34,8 +36,9 @@ export function StopRow({ stop, onPress, needsHalal = false }: StopRowProps) {
       <View style={[styles.dot, { borderColor: booked ? colors.navy : colors.teal }]} />
       <Pressable
         onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel={`${time} ${stop.name}, ${priceLabel(stop)}${booked ? ', booked' : ''}. Edit`}
+        disabled={!onPress}
+        accessibilityRole={onPress ? 'button' : undefined}
+        accessibilityLabel={`${time} ${stop.name}, ${priceLabel(stop)}${booked ? ', booked' : ''}${onPress ? '. Edit' : ''}`}
         style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.85 }]}>
         <Card style={styles.card}>
           <View style={{ flex: 1 }}>
@@ -57,7 +60,7 @@ export function StopRow({ stop, onPress, needsHalal = false }: StopRowProps) {
             </View>
             <HalalLabels stop={stop} needsHalal={needsHalal} />
           </View>
-          <Chip label="Edit" size="sm" ghost />
+          {onPress ? <Chip label="Edit" size="sm" ghost /> : null}
         </Card>
       </Pressable>
     </View>

@@ -35,7 +35,7 @@ const FIT_PADDING: EdgePadding = { top: 48, right: 72, bottom: 56, left: 48 };
  * Set meet point (tap the map or pick a stop / pin) and Split & rejoin (screen 12) from the card,
  * only while someone is far from the group; once one is chosen, only its card shows until it ends.
  * Done for today: members who closed their day are grey ("Done for today") and left out of the
- * alerts; after closing my own day, a banner at the top with Reopen today.
+ * alerts; after closing my own day, a banner at the top ("You've closed today").
  */
 export function GroupMapScreen() {
   const g = useGroupMap();
@@ -144,9 +144,7 @@ export function GroupMapScreen() {
           ))}
         </MapView>
         {g.loading ? <ActivityIndicator style={styles.loading} color={colors.teal} /> : null}
-        {g.closedDay ? (
-          <DayClosedBanner onReopen={g.closedDay.reopen} saving={g.closedDay.saving} error={g.closedDay.error} />
-        ) : null}
+        {g.closedDay ? <DayClosedBanner /> : null}
         <ZoomControls onCentre={fit} onZoom={zoom} />
       </View>
 

@@ -6,8 +6,8 @@ import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import type { DayEndState } from '../hooks/useDayEnd';
 
 /**
- * Today tab after Done for today: location off for the night, the day's recap story card
- * (screen 15), and a way back if it was a mistake.
+ * Today tab after Done for today: location off for the night and the day's recap story card
+ * (screen 15). Done for today is final, so there is no way to reopen the day.
  */
 export function DayClosed({ end, day }: { end: DayEndState; day: number }) {
   const text = end.lastDay
@@ -26,7 +26,6 @@ export function DayClosed({ end, day }: { end: DayEndState; day: number }) {
           onPress: () => router.push({ pathname: '/recap', params: { day: String(day) } }),
           testID: 'see-day-recap',
         }}
-        secondary={{ label: end.saving ? 'Reopening…' : 'Reopen today', onPress: end.reopen }}
       />
       {end.error ? (
         <View style={{ paddingHorizontal: 32, paddingBottom: 24 }}>

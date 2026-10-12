@@ -41,7 +41,6 @@ export function useDayEnd(tripId: string | undefined, day: number, dayStops: Sto
     openDone: () => router.push('/done-today'),
     keepGoing,
     addStop,
-    reopen: closures.reopen,
     saving: closures.saving,
     error: closures.error,
   };

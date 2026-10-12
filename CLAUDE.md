@@ -391,10 +391,26 @@ Time and location rule (built; follow it in every live-trip feature):
   60 min after it starts) the Today tab shows "That's every stop for today" with Done for
   today / Keep going. Keep going (saved on the phone, keepGoing.ts) pins Done for today and
   + Add more stops to the bottom; an added stop opens the day again until it is finished.
-  Done for today saves the member's row (closed, closed_at = now(); reopen = closed false,
-  an update so Realtime reaches everyone; rows after the fake time don't count, so Reset
-  reopens), stops this phone's sharing and GPS reads, and the Today tab says "Day closed.
-  See you tomorrow" with Reopen today. "2 of 4 have closed their day" is live.
+  The Done for today button on the Done for today screen first asks "Finish today? You won't
+  be able to change today's plan after this." (Finish / Cancel). Finish saves the member's row
+  (closed, closed_at = now(); rows after the fake time don't count, so Demo mode Reset undoes
+  it and the demo can be replayed), stops this phone's sharing and GPS reads, and the Today tab
+  says "Day closed. See you tomorrow" + See your day recap. Done for today is FINAL: no Reopen
+  today anywhere (Today or the map). "2 of 4 have closed their day" is live.
+- Finished days are read-only (dayEnd.ts dayFinishedFor / addDayFor, hooks/useFinishedDays.ts,
+  per person): a day is finished for me once I tapped Done for today on it, and for everyone
+  once the next trip day has started (useOpenDay's open day, so a member who tapped Keep going
+  and hasn't closed can still add to the day until it ends by itself); after the trip every day
+  is. Plan tab: opens on the open day (not Day 1); a finished day shows a small "Day finished"
+  note, keeps its Day recap link and "+ Add spend", and has no Add a stop and no Edit (StopRow
+  without onPress). Add / Edit stop (useStopForm): the stop is saved on the day picked in the
+  form (the selected Plan tab day, the open day from Today's + Add more stops, tomorrow from the
+  Done for today screen); the Day chips only offer days not finished for me, and saving,
+  deleting or moving a stop on a finished day is refused ("Day N is finished, so its plan can't
+  be changed."). Pin spot's Add to plan: the open day, or the calendar day once the open day is
+  finished for me (closed after Keep going past midnight), else hidden. Running early's Add
+  this and rain's Go stay on the day of the stop they change. Enforced in the app only (RLS
+  doesn't know who closed what).
 - Which trip day it is: ALWAYS from useOpenDay (features/recap/hooks/useOpenDay.ts), never
   tripDayOn() directly in live-trip features. Normally the calendar day. After Keep going the
   day carries on past midnight (Today, stops, + Add more stops, sharing) until Done for today;
@@ -429,7 +445,7 @@ Time and location rule (built; follow it in every live-trip feature):
   today" instead of "last seen", and are left out of the group centre, the far-from-group
   and low-battery alerts (so Split & rejoin too) and the meet point's "everyone's here"
   check. After closing my own day: a banner at the top of the map "You've closed today ·
-  location sharing is off" with Reopen today (DayClosedBanner).
+  location sharing is off" (DayClosedBanner; no reopen).
 - Group tab (no prototype screen; features/group GroupScreen, groupList.ts, useGroupList):
   members in join order, avatar + name, "You" and "Organiser" tags (organiser = trips.created_by,
   else the earliest joiner; trip/members.ts organiserId). Status line: location ("Sharing

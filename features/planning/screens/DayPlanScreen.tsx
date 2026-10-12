@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
@@ -10,6 +11,7 @@ import { SettingsButton } from '@/features/demo/components/SettingsButton';
 import { BudgetBar } from '@/features/money/components/BudgetBar';
 import { ExtraSpends } from '@/features/money/components/ExtraSpends';
 import { RecapLink } from '@/features/recap/components/RecapLink';
+import { useFinishedDays } from '@/features/recap/hooks/useFinishedDays';
 import { useRecapDays } from '@/features/recap/hooks/useRecapDays';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { memberCountLabel } from '@/features/trip/members';
@@ -23,18 +25,26 @@ import { formatRange } from '../dates';
 import { useDayPlan } from '../hooks/useDayPlan';
 import { dayDate } from '../stops';
 
-/** Day plan (prototype screen 5): day tabs, budget bar, timeline of stops. */
+/**
+ * Day plan (prototype screen 5): day tabs, budget bar, timeline of stops. Opens on today's trip
+ * day (the open day). A day finished for this person (Done for today, or the next day has
+ * started) is read-only: "Day finished", no Add a stop, no Edit; its Day recap link stays.
+ */
 export function DayPlanScreen() {
   const tripId = useCurrentTrip((s) => s.currentTripId) ?? undefined;
   const plan = useDayPlan(tripId);
   // Set after building, e.g. when Google's daily limit was reached.
   const { note } = useLocalSearchParams<{ note?: string }>();
-  const [picked, setPicked] = useState(1);
+  const [picked, setPicked] = useState<number | null>(null);
   const { trip, days, start } = plan;
-  const day = Math.min(picked, days);
+  const decided = trip?.stage === 'decided' ? tripId : undefined;
+  const finished = useFinishedDays(decided, days);
+  // Until a day tab is tapped: today's trip day (Day 1 before the trip, the last day after it).
+  const day = Math.max(1, Math.min(picked ?? (finished.openDay || 1), days));
+  const locked = finished.isFinished(day);
   const dayStops = plan.stops.filter((s) => s.day_number === day);
   // Finished days get a "Day recap" link (story card, screen 15).
-  const recapDays = useRecapDays(trip?.stage === 'decided' ? tripId : undefined, days);
+  const recapDays = useRecapDays(decided, days);
 
   if (!tripId || (!plan.loading && !trip)) {
     return <Empty title="No trip open" text="Open a trip from your trips list to see its plan." />;
@@ -76,6 +86,7 @@ export function DayPlanScreen() {
           ))}
         </Chips>
         {note ? <NoteLine text={note} /> : null}
+        {locked ? <DayFinishedNote /> : null}
         {recapDays.has(day) ? <RecapLink day={day} /> : null}
         <BudgetBar summary={plan.budget}>
           <ExtraSpends tripId={trip.id} day={day} />
@@ -87,12 +98,22 @@ export function DayPlanScreen() {
             </Txt>
           ) : null}
           {dayStops.map((s) => (
-            <StopRow key={s.id} stop={s} needsHalal={plan.needsHalal} onPress={() => openStop(s.id)} />
+            <StopRow key={s.id} stop={s} needsHalal={plan.needsHalal} onPress={locked ? undefined : () => openStop(s.id)} />
           ))}
-          <AddStopRow onPress={() => openStop('new')} />
+          {locked ? null : <AddStopRow onPress={() => openStop('new')} />}
         </View>
         {plan.error ? <ErrorLine message="Couldn't refresh the plan." onRetry={plan.refetch} /> : null}
       </ScrollView>
+    </View>
+  );
+}
+
+/** Small grey line on a finished day: its plan can't be changed any more. */
+function DayFinishedNote() {
+  return (
+    <View style={styles.finished} testID="day-finished">
+      <Ionicons name="lock-closed-outline" size={14} color={colors.textMuted} />
+      <Txt variant="s11">Day finished</Txt>
     </View>
   );
 }
@@ -116,4 +137,5 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   body: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 32, gap: 8 },
   note: { marginLeft: 26, marginBottom: 8 },
+  finished: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });

@@ -2,12 +2,15 @@ import type { Spend } from '@/features/money/types';
 import type { Stop } from '@/features/planning/types';
 import {
   activeTripDay,
+  addDayFor,
   closedCountLabel,
   closedIds,
   dayEndMode,
   dayFinished,
+  dayFinishedFor,
   dayReview,
   keptGoingWindow,
+  myClosedDays,
   NO_STOPS_START_HOUR,
   openDayEndsAt,
   sharingBackAt,
@@ -109,7 +112,7 @@ describe('when the end-of-day card shows', () => {
     expect(dayEndMode({ finished: true, keptGoing: false, closed: false })).toBe('ask');
     expect(dayEndMode({ finished: true, keptGoing: true, closed: false })).toBe('keep-going');
     expect(dayEndMode({ finished: true, keptGoing: true, closed: true })).toBe('closed');
-    // Reopened and stops added: back to Now / Next, nothing at the bottom.
+    // Kept going and stops added: back to Now / Next, nothing at the bottom.
     expect(dayEndMode({ finished: false, keptGoing: true, closed: false })).toBe('hidden');
   });
 });
@@ -140,7 +143,7 @@ describe('who has closed their day', () => {
   });
   const rows = [row('a', 1, at(22)), row('b', 1, at(22, 30), false), row('c', 1, at(23, 30)), row('d', 2, at(22))];
 
-  it('counts closed rows for the day, not reopened ones or ones after the (fake) time', () => {
+  it('counts closed rows for the day, not old reopened rows or ones after the (fake) time', () => {
     expect([...closedIds(rows, 1, ms(23))]).toEqual(['a']);
     expect([...closedIds(rows, 1, ms(23, 45))].sort()).toEqual(['a', 'c']);
     expect([...closedIds(rows, 2, ms(23))]).toEqual(['d']);
@@ -149,6 +152,46 @@ describe('who has closed their day', () => {
   it('labels the count', () => {
     expect(closedCountLabel(2, 4)).toBe('2 of 4 have closed their day');
     expect(closedCountLabel(1, 1)).toBe("You've closed your day");
+  });
+
+  it("lists the days I've closed, so Demo Reset (clock back) undoes them", () => {
+    const mine = [row('a', 1, at(22)), row('a', 2, at(22, 0, 13)), row('b', 3, at(22))];
+    expect([...myClosedDays(mine, 'a', ms(23, 0, 13))].sort()).toEqual([1, 2]);
+    expect([...myClosedDays(mine, 'a', ms(21))]).toEqual([]);
+    expect([...myClosedDays(mine, null, ms(23, 0, 13))]).toEqual([]);
+  });
+});
+
+describe('finished days are read-only', () => {
+  const none = new Set<number>();
+
+  it('finishes a day once I tap Done for today on it, for me only', () => {
+    expect(dayFinishedFor({ day: 1, openDay: 1, closedDays: new Set([1]) })).toBe(true);
+    // Someone else (no closure of their own) can still change Day 1 that evening.
+    expect(dayFinishedFor({ day: 1, openDay: 1, closedDays: none })).toBe(false);
+  });
+
+  it('finishes it for everyone once the next trip day starts (the open-day rule)', () => {
+    expect(dayFinishedFor({ day: 1, openDay: 2, closedDays: none })).toBe(true);
+    expect(dayFinishedFor({ day: 2, openDay: 2, closedDays: none })).toBe(false);
+    expect(dayFinishedFor({ day: 3, openDay: 2, closedDays: none })).toBe(false);
+    // Kept going past midnight: still Day 1 for that person, so they can still add to it.
+    expect(dayFinishedFor({ day: 1, openDay: 1, closedDays: none })).toBe(false);
+    // Before the trip nothing is finished; after it (open day past the last) every day is.
+    expect(dayFinishedFor({ day: 1, openDay: 0, closedDays: none })).toBe(false);
+    expect(dayFinishedFor({ day: 3, openDay: 4, closedDays: none })).toBe(true);
+  });
+
+  it('adds a stop made now (Add to plan) to the open day, never a finished one', () => {
+    expect(addDayFor({ openDay: 2, calendarDay: 2, days: 3, closedDays: none })).toBe(2);
+    // Keep going past midnight: Day 1 is still open for me.
+    expect(addDayFor({ openDay: 1, calendarDay: 2, days: 3, closedDays: none })).toBe(1);
+    // Closed Day 1 after midnight: it goes on Day 2, the calendar day.
+    expect(addDayFor({ openDay: 1, calendarDay: 2, days: 3, closedDays: new Set([1]) })).toBe(2);
+    // Closed today in the evening, or not a trip day: nowhere.
+    expect(addDayFor({ openDay: 2, calendarDay: 2, days: 3, closedDays: new Set([2]) })).toBeNull();
+    expect(addDayFor({ openDay: 4, calendarDay: 4, days: 3, closedDays: none })).toBeNull();
+    expect(addDayFor({ openDay: 0, calendarDay: -2, days: 3, closedDays: none })).toBeNull();
   });
 });
 

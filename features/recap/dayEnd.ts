@@ -48,7 +48,8 @@ export function dayEndMode({ finished, keptGoing, closed }: { finished: boolean;
 
 /**
  * Closures that count at time t: closed, and not "later" than the fake time in Demo mode
- * (Reset moves the clock back, which reopens the day, like the spend check's answers).
+ * (Reset moves the clock back, which undoes them so the demo can be replayed, like the spend
+ * check's answers). Otherwise Done for today is final: there is no reopen.
  */
 export function closuresAt(rows: DayClosure[], t: number): DayClosure[] {
   return rows.filter((r) => r.closed && Date.parse(r.closed_at) <= t);
@@ -57,6 +58,45 @@ export function closuresAt(rows: DayClosure[], t: number): DayClosure[] {
 /** Members who have closed this day at time t. */
 export function closedIds(rows: DayClosure[], day: number, t: number): Set<string> {
   return new Set(closuresAt(rows, t).filter((r) => r.day_number === day).map((r) => r.member_id));
+}
+
+/** The days this member has closed at time t. */
+export function myClosedDays(rows: DayClosure[], meId: string | null | undefined, t: number): Set<number> {
+  return new Set(meId ? closuresAt(rows, t).filter((r) => r.member_id === meId).map((r) => r.day_number) : []);
+}
+
+// ---------- Finished days (read-only) ----------
+
+/**
+ * A trip day is finished for this person (read-only on their phone: no adding, editing,
+ * deleting or moving stops) once they tapped Done for today on it, or once the next trip day
+ * has started for them (`openDay`, the Today tab's open-day rule, so someone who tapped Keep
+ * going can still add to the day until it ends by itself). After the trip every day is finished.
+ */
+export function dayFinishedFor({ day, openDay, closedDays }: { day: number; openDay: number; closedDays: Set<number> }): boolean {
+  return closedDays.has(day) || (openDay >= 1 && day < openDay);
+}
+
+/**
+ * The trip day a stop added "now" goes on (Pin spot's Add to plan): the open day, or, once that
+ * is finished for this person (closed after Keep going, past midnight), the calendar day.
+ * Null when neither is a trip day still open for them.
+ */
+export function addDayFor({
+  openDay,
+  calendarDay,
+  days,
+  closedDays,
+}: {
+  openDay: number;
+  calendarDay: number;
+  days: number;
+  closedDays: Set<number>;
+}): number | null {
+  for (const d of [openDay, calendarDay]) {
+    if (d >= 1 && d <= days && !dayFinishedFor({ day: d, openDay, closedDays })) return d;
+  }
+  return null;
 }
 
 /** "2 of 4 have closed their day" / "You've closed your day" (solo). */

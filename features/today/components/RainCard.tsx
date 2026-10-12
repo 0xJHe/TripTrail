@@ -49,9 +49,7 @@ export function RainCard({ rain }: { rain: RainState }) {
                   {o.name}
                 </Txt>
                 <Txt variant="s11">{rainOptionMeta(o)}</Txt>
-                {o.halalNote ? (
-                  <HalalTag />
-                ) : null}
+                {o.halalNote ? <HalalTag /> : null}
               </View>
               <Button
                 size="sm"

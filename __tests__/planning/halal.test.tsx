@@ -35,9 +35,12 @@ describe('inMalaysia', () => {
 
 describe('halalLabels', () => {
   const food = { category: 'food' as const, ...at(5.4164, 100.3327) };
-  it('food stops in Malaysia get the JAKIM link; the tag only when someone needs halal', () => {
-    expect(halalLabels(food, false)).toEqual({ tag: false, jakim: true });
+  it('food stops in Malaysia: the tag and the JAKIM link when someone chose halal', () => {
     expect(halalLabels(food, true)).toEqual({ tag: true, jakim: true });
+  });
+  it('nobody chose halal: nothing extra, in Malaysia too', () => {
+    expect(halalLabels(food, false)).toEqual({ tag: false, jakim: false });
+    expect(halalLabels({ category: 'food', ...at(-8.65, 115.2167) }, false)).toEqual({ tag: false, jakim: false });
   });
   it('food stops outside Malaysia: tag only, no JAKIM', () => {
     expect(halalLabels({ category: 'food', ...at(-8.65, 115.2167) }, true)).toEqual({ tag: true, jakim: false });
@@ -70,6 +73,14 @@ describe('HalalLabels', () => {
   it('outside Malaysia: no JAKIM link', async () => {
     await render(<HalalLabels stop={{ ...stop, lat: -8.65, lng: 115.2167 }} needsHalal />);
     expect(screen.getByText(HALAL_TAG)).toBeTruthy();
+    expect(screen.queryByText(JAKIM_LINK)).toBeNull();
+  });
+  it('reads "Check halal status →"', () => {
+    expect(JAKIM_LINK).toBe('Check halal status →');
+  });
+  it('nobody chose halal: no tag and no link', async () => {
+    await render(<HalalLabels stop={stop} needsHalal={false} />);
+    expect(screen.queryByText(HALAL_TAG)).toBeNull();
     expect(screen.queryByText(JAKIM_LINK)).toBeNull();
   });
   it('not a food stop: nothing', async () => {

@@ -319,16 +319,17 @@ Time and location rule (built; follow it in every live-trip feature):
   its slot (min 15 min). Keep plan = decide_rain 'keep'.
   Cards stack on Today in this order: late, rain, early, spend.
 - Far from group: any member > 500 m from the group centroid -> amber alert.
-- Halal labels (features/planning/halal.ts, HalalLabels; stop edit screen + Day plan rows; no
-  API calls): food stops (category 'food') show "Halal-friendly · not verified" (small soft grey
-  tag, HalalTag, never green: nobody confirmed it) when anyone in the trip needs halal, in any
-  country; the running-early and rain cards use the same tag. Food stops in Malaysia (inMalaysia:
-  the saved address first, a country or Malaysian state in it, else the location inside rough
-  outlines of Peninsular Malaysia / Sabah + Sarawak, Singapore, southern Thailand and Brunei
-  kept out) also get a teal "Check halal status on JAKIM →" link: JAKIM's official Malaysia
-  Halal Portal search, Food premises, name pre-filled (jakimSearchUrl,
+- Halal labels (features/planning/halal.ts halalLabels, HalalLabels / HalalTag; no API calls):
+  ONLY when at least one person in the trip chose Halal in their preferences; if nobody did,
+  food stops show nothing extra. Then every food stop (category 'food'), any country, shows
+  "Halal-friendly · not verified" (small soft grey tag, never green: nobody confirmed it), and
+  food stops in Malaysia also get a teal "Check halal status →" link: JAKIM's official
+  Malaysia Halal Portal search, Food premises, name pre-filled (jakimSearchUrl,
   https://www.halal.gov.my/index.php?data=ZGlyZWN0b3J5L2luZGV4X2RpcmVjdG9yeTs7Ozs=&category=PE&cari=<name>).
-  Not outside Malaysia.
+  inMalaysia: the saved address first (a country or Malaysian state in it), else the location
+  inside rough outlines of Peninsular Malaysia / Sabah + Sarawak (Singapore, southern Thailand
+  and Brunei kept out). Where: Day plan rows and Edit stop = tag + link; running-early and rain
+  cards = the tag only (their halalNote: a food place and someone needs halal), never the link.
 - Split & rejoin, group B's own stops (features/group/splitStops.ts, `stops.split_id` ->
   meet_points): during a split, group B's banner (SplitBanner) has "+ Add a stop" under "head
   to X", opening the normal Add a stop screen with ?split=<id> (no day pick; must start and end

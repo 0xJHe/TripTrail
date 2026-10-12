@@ -1,15 +1,16 @@
 import type { Stop } from './types';
 
 /**
- * Halal labels on food stops (stop edit screen and the Day plan). No API calls:
- * - anyone in the trip needs halal -> every food stop shows "Halal-friendly · not verified"
- *   (a soft grey tag: the AI picked a halal place, nobody has confirmed it);
- * - food stops in Malaysia get "Check halal status on JAKIM →", JAKIM's official halal
- *   search (Food premises) with the stop's name filled in. Not outside Malaysia.
+ * Halal labels on food stops. No API calls. Only when at least one person in the trip chose
+ * halal in their preferences; otherwise food stops show nothing extra.
+ * - every food stop: "Halal-friendly · not verified" (a soft grey tag: nobody has confirmed it);
+ *   Day plan, Edit stop, and the running-early and rain cards (those: the tag only);
+ * - food stops in Malaysia, Day plan and Edit stop only: "Check halal status →", JAKIM's
+ *   official halal search (Food premises) with the stop's name filled in. Not outside Malaysia.
  */
 
 export const HALAL_TAG = 'Halal-friendly · not verified';
-export const JAKIM_LINK = 'Check halal status on JAKIM →';
+export const JAKIM_LINK = 'Check halal status →';
 
 /** JAKIM's Malaysia Halal Portal search, category "Premis Makanan" (food premises), name pre-filled. */
 export function jakimSearchUrl(name: string): string {
@@ -71,11 +72,11 @@ export function inMalaysia(stop: Pick<Stop, 'address' | 'lat' | 'lng'>): boolean
   return inside(PENINSULAR, lng, lat) || inside(BORNEO, lng, lat);
 }
 
-/** What a food stop shows: the grey halal tag and / or the JAKIM link. Nothing for other stops. */
+/** What a stop shows: for food stops when someone needs halal, the grey tag (+ the JAKIM link in Malaysia); else nothing. */
 export function halalLabels(
   stop: Pick<Stop, 'category' | 'address' | 'lat' | 'lng'>,
   needsHalal: boolean,
 ): { tag: boolean; jakim: boolean } {
-  if (!isFoodStop(stop)) return { tag: false, jakim: false };
-  return { tag: needsHalal, jakim: inMalaysia(stop) };
+  if (!needsHalal || !isFoodStop(stop)) return { tag: false, jakim: false };
+  return { tag: true, jakim: inMalaysia(stop) };
 }

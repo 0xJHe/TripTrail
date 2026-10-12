@@ -100,9 +100,7 @@ export function EarlyCard({ early, stop, left }: EarlyCardProps) {
                 </Txt>
                 <Txt variant="s11">{s.reason}</Txt>
                 <Txt variant="s11">{suggestionMeta(s)}</Txt>
-                {s.halalNote ? (
-                  <HalalTag />
-                ) : null}
+                {s.halalNote ? <HalalTag /> : null}
               </View>
             </>
           ) : (

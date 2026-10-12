@@ -15,7 +15,7 @@ const BOOKED_ICON = { flight: 'airplane', hotel: 'bed' } as const;
 interface StopRowProps {
   stop: Stop;
   onPress: () => void;
-  /** Someone in the trip needs halal food (food stops get the grey tag). */
+  /** Someone in the trip chose halal (food stops get the grey tag, + the JAKIM link in Malaysia). */
   needsHalal?: boolean;
 }
 

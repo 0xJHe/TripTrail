@@ -16,7 +16,7 @@ export function HalalTag() {
   );
 }
 
-/** Teal "Check halal status on JAKIM →": JAKIM's official halal search with the name filled in. */
+/** Teal "Check halal status →": JAKIM's official halal search with the name filled in. */
 export function JakimLink({ name }: { name: string }) {
   return (
     <Pressable
@@ -35,11 +35,11 @@ export function JakimLink({ name }: { name: string }) {
 
 interface HalalLabelsProps {
   stop: Pick<Stop, 'name' | 'category' | 'address' | 'lat' | 'lng'>;
-  /** Someone in the trip needs halal food. */
+  /** At least one person in the trip chose halal in their preferences. */
   needsHalal: boolean;
 }
 
-/** A food stop's halal tag and / or JAKIM link (features/planning/halal.ts); nothing otherwise. */
+/** Day plan / Edit stop: a food stop's halal tag (+ JAKIM link in Malaysia) when someone needs halal (features/planning/halal.ts). */
 export function HalalLabels({ stop, needsHalal }: HalalLabelsProps) {
   const { tag, jakim } = halalLabels(stop, needsHalal);
   if (!tag && !jakim) return null;

@@ -13,11 +13,15 @@ interface NavyHeaderProps {
   right?: ReactNode;
 }
 
-/** Navy top bar with title + subtitle (prototype .top). Draws under the status bar. */
+/**
+ * Navy top bar with title + subtitle (prototype .top). Draws under the status bar and keeps clear
+ * of side cutouts (safe area). The title shrinks (one line, cut with …); `right` never shrinks,
+ * so its buttons always fit on screen.
+ */
 export function NavyHeader({ title, subtitle, onBack, right }: NavyHeaderProps) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.top, { paddingTop: insets.top + 12 }]}>
+    <View style={[styles.top, { paddingTop: insets.top + 12, paddingLeft: insets.left + PAD, paddingRight: insets.right + PAD }]}>
       <View style={styles.row}>
         {onBack ? (
           <Pressable
@@ -29,7 +33,7 @@ export function NavyHeader({ title, subtitle, onBack, right }: NavyHeaderProps) 
             <Ionicons name="chevron-back" size={22} color={colors.white} />
           </Pressable>
         ) : null}
-        <View style={{ flex: 1 }}>
+        <View style={styles.titles}>
           <Txt variant="h17" color={colors.white} numberOfLines={1}>
             {title}
           </Txt>
@@ -39,14 +43,19 @@ export function NavyHeader({ title, subtitle, onBack, right }: NavyHeaderProps) 
             </Txt>
           ) : null}
         </View>
-        {right}
+        {right ? <View style={styles.right}>{right}</View> : null}
       </View>
     </View>
   );
 }
 
+/** Space from the screen edge (plus the safe-area inset). */
+const PAD = 18;
+
 const styles = StyleSheet.create({
-  top: { backgroundColor: colors.navy, paddingHorizontal: 18, paddingBottom: 14 },
+  top: { backgroundColor: colors.navy, paddingBottom: 14 },
+  titles: { flex: 1, minWidth: 0 },
+  right: { flexShrink: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   back: { marginLeft: -6 },
 });

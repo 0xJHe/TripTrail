@@ -49,10 +49,10 @@ export function HomeScreen() {
         title={`Hi ${name || 'there'} 👋`}
         subtitle="Where is the group going next?"
         right={
-          <View style={styles.headerButtons}>
+          <>
             <SettingsButton />
             <SignOutButton />
-          </View>
+          </>
         }
       />
       <ScrollView
@@ -111,7 +111,6 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   body: { padding: 16, gap: 12 },
-  headerButtons: { flexDirection: 'row', alignItems: 'center' },
   label: { marginTop: 10 },
   rename: { alignSelf: 'center', marginTop: 12, padding: 6 },
 });

@@ -16,22 +16,34 @@ interface HeroHeaderProps {
   /** Show the logo + "TripTrail" brand row (prototype screen 1). */
   brand?: boolean;
   onBack?: () => void;
-  /** Shown in the top-right corner, level with the brand row. */
+  /**
+   * Buttons for the top-right corner (Settings, Sign out). They get their own row above the brand
+   * row, right-aligned, so on a small phone they never push each other (or the brand) off screen;
+   * if they still don't fit side by side (large font size) they wrap.
+   */
   right?: ReactNode;
   children?: ReactNode;
 }
 
-/** Gradient header with the dashed trail, from the prototype's create-trip screen. */
+/**
+ * Gradient header with the dashed trail, from the prototype's create-trip screen. Keeps clear of
+ * the status bar and side cutouts (safe area); the greeting wraps rather than crowding the buttons.
+ */
 export function HeroHeader({ title, subtitle, brand, onBack, right, children }: HeroHeaderProps) {
   const insets = useSafeAreaInsets();
   return (
-    <TrailBackdrop style={[styles.wrap, { paddingTop: insets.top + 12 }]}>
+    <TrailBackdrop
+      style={[
+        styles.wrap,
+        { paddingTop: insets.top + 12, paddingLeft: insets.left + PAD, paddingRight: insets.right + PAD },
+      ]}>
+      {right ? <View style={styles.right}>{right}</View> : null}
       {onBack && !brand ? <BackButton onPress={onBack} /> : null}
       {brand ? (
         <View style={styles.brand}>
           {onBack ? <BackButton onPress={onBack} inline /> : null}
           <Image source={logo} style={styles.logo} contentFit="contain" accessibilityLabel="TripTrail logo" />
-          <View>
+          <View style={styles.brandText}>
             <Txt style={styles.brandName} color={colors.white}>
               TripTrail
             </Txt>
@@ -39,7 +51,6 @@ export function HeroHeader({ title, subtitle, brand, onBack, right, children }: 
               The plan that follows you
             </Txt>
           </View>
-          {right ? <View style={styles.right}>{right}</View> : null}
         </View>
       ) : null}
       <Txt style={[styles.title, brand && { marginTop: 22 }]} color={colors.white}>
@@ -68,13 +79,17 @@ function BackButton({ onPress, inline }: { onPress: () => void; inline?: boolean
   );
 }
 
+/** Space from the screen edge (plus the safe-area inset). */
+const PAD = 18;
+
 const styles = StyleSheet.create({
   backInline: { marginLeft: -6, marginRight: -4 },
-  wrap: { paddingHorizontal: 18, paddingBottom: 22 },
+  wrap: { paddingBottom: 22 },
   back: { alignSelf: 'flex-start', marginLeft: -6, marginBottom: 10 },
-  right: { marginLeft: 'auto' },
+  right: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 6, marginBottom: 8 },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
   logo: { width: 40, height: 40 },
+  brandText: { flexShrink: 1 },
   brandName: { fontFamily: fontFamily.extrabold, fontSize: 24, letterSpacing: -0.5, lineHeight: 26 },
   title: { fontFamily: fontFamily.bold, fontSize: 19, letterSpacing: -0.2, lineHeight: 24 },
 });

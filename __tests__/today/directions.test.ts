@@ -6,17 +6,28 @@ jest.mock('@/lib/location', () => ({ getGroupLocation: jest.fn(), useLocationSou
 const BASE = 'https://www.google.com/maps/dir/?api=1';
 
 describe('directionsUrl: one Google Maps link for every Directions button', () => {
-  it('real mode: no origin (Maps uses the phone), coordinates as the destination, no travel mode', () => {
-    const url = directionsUrl({ lat: 5.4152, lng: 100.3376, name: 'Armenian Street' });
-    expect(url).toBe(`${BASE}&destination=5.4152,100.3376`);
+  it('a stop with name + address: "name, address" as the destination, no origin, no travel mode', () => {
+    const url = directionsUrl({ lat: 5.4152, lng: 100.3376, name: 'Armenian Street', address: 'George Town, Penang' });
+    expect(url).toBe(`${BASE}&destination=Armenian%20Street%2C%20George%20Town%2C%20Penang`);
     expect(url).not.toMatch(/travelmode/);
     expect(url).not.toMatch(/origin=/);
   });
 
   it('adds the Google place ID so the place shows by name', () => {
-    expect(directionsUrl({ lat: 5.4249, lng: 100.269, name: 'Penang Hill', place_id: 'ChIJ_hill' })).toBe(
-      `${BASE}&destination=5.4249,100.269&destination_place_id=ChIJ_hill`,
+    expect(
+      directionsUrl({ lat: 5.4249, lng: 100.269, name: 'Penang Hill', address: 'Air Itam, Penang', place_id: 'ChIJ_hill' }),
+    ).toBe(`${BASE}&destination=Penang%20Hill%2C%20Air%20Itam%2C%20Penang&destination_place_id=ChIJ_hill`);
+  });
+
+  it('a place ID without an address: the name with the place ID', () => {
+    expect(directionsUrl({ lat: 5.4249, lng: 100.269, name: 'Penang Hill', address: null, place_id: 'ChIJ_hill' })).toBe(
+      `${BASE}&destination=Penang%20Hill&destination_place_id=ChIJ_hill`,
     );
+  });
+
+  it('pins and meet points (name, no address or place ID): coordinates', () => {
+    expect(directionsUrl({ lat: 5.4152, lng: 100.3376, name: 'Nice mural' })).toBe(`${BASE}&destination=5.4152,100.3376`);
+    expect(directionsUrl({ lat: -8.65, lng: 115.2167, name: 'Clan Jetties' })).toBe(`${BASE}&destination=-8.65,115.2167`);
   });
 
   it('demo mode: starts from the given origin', () => {
@@ -29,6 +40,7 @@ describe('directionsUrl: one Google Maps link for every Directions button', () =
     expect(directionsUrl({ lat: null, lng: null, name: 'Kek Lok Si', address: 'Air Itam' })).toBe(
       `${BASE}&destination=Kek%20Lok%20Si%2C%20Air%20Itam`,
     );
+    expect(directionsUrl({ lat: null, lng: null, name: 'Kek Lok Si' })).toBe(`${BASE}&destination=Kek%20Lok%20Si`);
   });
 });
 

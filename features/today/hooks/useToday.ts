@@ -9,7 +9,7 @@ import { useCurrentTrip } from '@/features/trip/store';
 import { now as clockNow, useNow } from '@/lib/clock';
 import { useDemoRoute, useGroupLocation } from '@/lib/location';
 import { useLocationAccess } from '../permission';
-import { directionsUrl, justLeftStop, lastLeftStop, todayView, travelModeTo } from '../todayPlan';
+import { justLeftStop, todayView } from '../todayPlan';
 import { useEarlyAlert } from './useEarlyAlert';
 import { useLateAlert } from './useLateAlert';
 import { useRainAlert } from './useRainAlert';
@@ -63,10 +63,6 @@ export function useToday() {
   const heading = day && !day.now && !leftStop ? day.next : null;
   const upNext = day ? (day.now || leftStop ? day.next : day.after) : null;
   const weather = useWeather(tripId, day?.now ?? leftStop ?? heading, upNext);
-  // Directions start from this phone (else the group), or the stop left last before any reading.
-  const lastLeft = lastLeftStop(dayStops, time.getTime());
-  const from = location?.me ?? location?.center ?? (lastLeft?.lat != null && lastLeft.lng != null ? { lat: lastLeft.lat, lng: lastLeft.lng } : null);
-  const directionsTo = (stop: Stop) => directionsUrl(stop, travelModeTo(from, stop));
 
   /** "We're done here": the stop is finished now, without waiting for the 3 minutes away. */
   const doneHere = useCallback(
@@ -114,6 +110,5 @@ export function useToday() {
     doneHere,
     leaving,
     /** Google Maps directions to a stop: walking under ~2 km, else driving (opens the app, no API call). */
-    directionsTo,
   };
 }

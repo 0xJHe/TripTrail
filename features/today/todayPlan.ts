@@ -2,7 +2,6 @@ import { daysBetween, todayISO, type ISODate } from '@/features/planning/dates';
 import { dayDate, durationText } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import type { TripStage } from '@/features/trip/types';
-import { haversineMeters, type LatLng } from '@/lib/distance';
 import { currentStop } from './arrival';
 import type { TodayView } from './types';
 
@@ -110,24 +109,6 @@ export function justLeftStop<T extends LeftStop>(input: {
   }
   if (spendStop) return spendStop;
   return late ? lastLeftStop(dayStops, now) : null;
-}
-
-/** Google Maps directions link to a stop (opens the Maps app; no API call). */
-export function directionsUrl(stop: Pick<Stop, 'lat' | 'lng' | 'name' | 'address'>, mode?: TravelMode | null): string {
-  const destination =
-    stop.lat != null && stop.lng != null ? `${stop.lat},${stop.lng}` : [stop.name, stop.address].filter(Boolean).join(', ');
-  const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
-  return mode ? `${url}&travelmode=${mode}` : url;
-}
-
-export type TravelMode = 'walking' | 'driving';
-/** Up to this far (straight line), directions are for walking; further, driving. */
-export const WALK_UP_TO_M = 2000;
-
-/** Walking under ~2 km from `from` to the stop, else driving; null when either place is unknown (Maps picks). */
-export function travelModeTo(from: LatLng | null, stop: Pick<Stop, 'lat' | 'lng'>): TravelMode | null {
-  if (!from || stop.lat == null || stop.lng == null) return null;
-  return haversineMeters(from, { lat: stop.lat, lng: stop.lng }) < WALK_UP_TO_M ? 'walking' : 'driving';
 }
 
 const WEEKDAYS =['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

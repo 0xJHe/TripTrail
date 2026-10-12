@@ -1,12 +1,10 @@
 import type { Stop } from '@/features/planning/types';
 import {
-  directionsUrl,
   justLeftStop,
   lastLeftStop,
   longDate,
   paceLabel,
   todayView,
-  travelModeTo,
   tripDayOn,
 } from '@/features/today/todayPlan';
 
@@ -117,28 +115,6 @@ describe('helpers', () => {
 
   it('longDate', () => {
     expect(longDate('2026-10-12')).toBe('Monday 12 Oct');
-  });
-
-  it('directionsUrl uses the position, or the name when there is none', () => {
-    expect(directionsUrl({ lat: 5.4, lng: 100.3, name: 'x', address: null })).toBe(
-      'https://www.google.com/maps/dir/?api=1&destination=5.4%2C100.3',
-    );
-    expect(directionsUrl({ lat: null, lng: null, name: 'Kek Lok Si', address: 'Air Itam' })).toContain(
-      'destination=Kek%20Lok%20Si%2C%20Air%20Itam',
-    );
-  });
-
-  it('directions walk under ~2 km and drive further, and let Maps pick when the start is unknown', () => {
-    const komtar = { lat: 5.4145, lng: 100.3292 };
-    const murals = { lat: 5.4152, lng: 100.3376, name: 'Armenian Street', address: null }; // ~0.9 km
-    const hill = { lat: 5.4249, lng: 100.269, name: 'Penang Hill', address: null }; // ~6.8 km
-    expect(travelModeTo(komtar, murals)).toBe('walking');
-    expect(travelModeTo(komtar, hill)).toBe('driving');
-    expect(travelModeTo(null, hill)).toBeNull();
-    expect(directionsUrl(murals, travelModeTo(komtar, murals))).toBe(
-      'https://www.google.com/maps/dir/?api=1&destination=5.4152%2C100.3376&travelmode=walking',
-    );
-    expect(directionsUrl(hill, 'driving')).toMatch(/&travelmode=driving$/);
   });
 });
 

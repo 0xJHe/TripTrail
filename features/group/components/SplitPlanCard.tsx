@@ -1,14 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Linking, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Chip } from '@/components/ui/Chip';
 import { Txt } from '@/components/ui/Txt';
 import { clockOf, durationText } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
+import { useDirections } from '@/features/today/directions';
 import { colors, fontFamily, shadow } from '@/lib/theme';
 import { firstName } from '../groupMap';
 import type { Person } from '../hooks/useMapMembers';
-import { meetDirectionsUrl, type Rejoin } from '../meetPoint';
+import type { Rejoin } from '../meetPoint';
 
 interface SplitPlanCardProps {
   a: Person[];
@@ -23,9 +24,10 @@ const clock = (ms: number) => clockOf(new Date(ms).toISOString());
 
 /** Both mini-plans and where everyone meets again (prototype screen 12). */
 export function SplitPlanCard({ a, b, rejoin, aPlan }: SplitPlanCardProps) {
+  const openDirections = useDirections();
   const at = clock(rejoin.at);
   const away = rejoin.etaMin === 0 ? 'already there' : `~${durationText(rejoin.etaMin)} ${rejoin.mode === 'walk' ? 'walk' : 'ride'} away`;
-  const directions = () => Linking.openURL(meetDirectionsUrl(rejoin.stop, rejoin.mode)).catch(() => {});
+  const directions = () => openDirections(rejoin.stop);
   return (
     <View style={styles.card} testID="split-plan">
       <View style={styles.head}>

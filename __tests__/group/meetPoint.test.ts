@@ -8,7 +8,6 @@ import {
   etaTo,
   everyoneHere,
   groupAPlan,
-  meetDirectionsUrl,
   nameForSpot,
   pickRejoin,
   saveErrorText,
@@ -82,13 +81,6 @@ describe('ETA estimate (free, straight line)', () => {
     expect(etaTo(base, at(40))).toMatchObject({ minutes: 0 });
     expect(etaText(etaTo(base, at(40)))).toBe('here');
     expect(etaTo(base, at(60)).minutes).toBe(1);
-  });
-
-  it('opens Google Maps walking directions (driving for a ride)', () => {
-    expect(meetDirectionsUrl({ lat: 5.4, lng: 100.3 })).toBe(
-      'https://www.google.com/maps/dir/?api=1&destination=5.4,100.3&travelmode=walking',
-    );
-    expect(meetDirectionsUrl({ lat: 5.4, lng: 100.3 }, 'ride')).toMatch(/travelmode=driving$/);
   });
 });
 

@@ -184,9 +184,3 @@ export function saveErrorText(e: unknown, doing = 'save it'): string {
   }
   return msg ? `Couldn't ${doing}: ${msg}` : `Couldn't ${doing}. Try again.`;
 }
-
-/** Google Maps directions to the point: walking, or driving when it's a ride (over 2 km). */
-export function meetDirectionsUrl(to: LatLng, mode: 'walk' | 'ride' = 'walk'): string {
-  const travel = mode === 'walk' ? 'walking' : 'driving';
-  return `https://www.google.com/maps/dir/?api=1&destination=${to.lat},${to.lng}&travelmode=${travel}`;
-}

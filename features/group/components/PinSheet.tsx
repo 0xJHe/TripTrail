@@ -1,12 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Txt } from '@/components/ui/Txt';
 import { clockOf } from '@/features/planning/stops';
-import { directionsUrl } from '@/features/today/todayPlan';
+import { useDirections } from '@/features/today/directions';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import { colors } from '@/lib/theme';
 import { pinTitle } from '../pins';
@@ -29,10 +29,10 @@ interface PinSheetProps {
 
 /** A tapped pin on the group map: its name, who pinned it, Directions, and Delete for my own pins. */
 export function PinSheet({ pin, by, distance, onClose, onPhoto, onDelete, deleting, error }: PinSheetProps) {
+  const openDirections = useDirections();
   const title = pinTitle(pin);
   const spot = pin.type === 'spot';
-  const directions = () =>
-    Linking.openURL(directionsUrl({ lat: pin.lat, lng: pin.lng, name: title, address: null })).catch(() => {});
+  const directions = () => openDirections({ lat: pin.lat, lng: pin.lng, name: title });
   return (
     <Card style={styles.card} testID="pin-sheet">
       <View style={styles.row}>

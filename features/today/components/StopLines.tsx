@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
 import { Txt } from '@/components/ui/Txt';
@@ -7,7 +7,7 @@ import { GroupBTag } from '@/features/group/components/GroupBTag';
 import { clockOf, priceLabel } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { colors } from '@/lib/theme';
-import { directionsUrl } from '../todayPlan';
+import { useDirections } from '../directions';
 import type { WeatherText } from '../weather';
 import { WeatherLine } from './WeatherLine';
 
@@ -22,6 +22,7 @@ export function NextCard({ stop, weather }: { stop: Stop; weather: WeatherText |
 
 /** The inside of the Next card (also shown at the bottom of the running-late card). */
 export function NextLine({ stop, weather }: { stop: Stop; weather: WeatherText | null }) {
+  const openDirections = useDirections();
   const time = clockOf(stop.planned_time);
   const title = time ? `${time} · ${stop.name}` : stop.name;
   return (
@@ -40,7 +41,7 @@ export function NextLine({ stop, weather }: { stop: Stop; weather: WeatherText |
         </View>
       </View>
       <Pressable
-        onPress={() => Linking.openURL(directionsUrl(stop)).catch(() => {})}
+        onPress={() => openDirections(stop)}
         hitSlop={10}
         accessibilityRole="button"
         accessibilityLabel={`Directions to ${stop.name}`}

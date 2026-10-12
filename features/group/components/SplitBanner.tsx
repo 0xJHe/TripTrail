@@ -1,19 +1,20 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Txt } from '@/components/ui/Txt';
 import { clockOf } from '@/features/planning/stops';
 import { useOpenDay } from '@/features/recap/hooks/useOpenDay';
+import { useDirections } from '@/features/today/directions';
 import { useMyMember } from '@/features/trip/hooks/useTrip';
 import { useCurrentTrip } from '@/features/trip/store';
 import { useGroupLocation } from '@/lib/location';
 import { colors, fontFamily, shadow } from '@/lib/theme';
 import { firstName } from '../groupMap';
 import { useMeetPoints } from '../hooks/useMeetPoints';
-import { countdownText, etaTo, meetDirectionsUrl, saveErrorText, splitTitle } from '../meetPoint';
+import { countdownText, saveErrorText, splitTitle } from '../meetPoint';
 
 /**
  * While the group is split (Split & rejoin, prototype screen 12): "Split · rejoin at [place]
@@ -22,6 +23,7 @@ import { countdownText, etaTo, meetDirectionsUrl, saveErrorText, splitTitle } fr
  * "Back together" once both groups are within 50 m of the rejoin point.
  */
 export function SplitBanner() {
+  const openDirections = useDirections();
   const tripId = useCurrentTrip((s) => s.currentTripId) ?? undefined;
   const me = useMyMember(tripId);
   const location = useGroupLocation();
@@ -63,8 +65,7 @@ export function SplitBanner() {
   const inB = row.group_b.some((m) => m.id === myId);
   const bNames = row.group_b.map((m) => (m.id === myId ? 'you' : firstName(m.name))).join(', ');
   const at = row.rejoin_at ? Date.parse(row.rejoin_at) : null;
-  const mode = location?.me ? etaTo(location.me, row).mode : 'walk';
-  const directions = () => Linking.openURL(meetDirectionsUrl(row, mode)).catch(() => {});
+  const directions = () => openDirections({ lat: row.lat, lng: row.lng, name: row.name });
   // Group B's own stop: the normal Add a stop screen, ending by the rejoin time.
   const addStop = () =>
     router.push({

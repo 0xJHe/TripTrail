@@ -1,11 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
 import { Txt } from '@/components/ui/Txt';
 import { clockOf } from '@/features/planning/stops';
-import { directionsUrl } from '@/features/today/todayPlan';
+import { useDirections } from '@/features/today/directions';
 import { colors, fontFamily } from '@/lib/theme';
 import { pinTitle } from '../pins';
 import type { PinWithPhoto } from '../types';
@@ -30,10 +30,10 @@ interface PinRowProps {
  * the photo opens full screen, and my own pins can be deleted.
  */
 export function PinRow({ pin, by, distance, onAdd, added, adding, onPhoto, onDelete, deleting }: PinRowProps) {
+  const openDirections = useDirections();
   const title = pinTitle(pin);
   const spot = pin.type === 'spot';
-  const directions = () =>
-    Linking.openURL(directionsUrl({ lat: pin.lat, lng: pin.lng, name: title, address: null })).catch(() => {});
+  const directions = () => openDirections({ lat: pin.lat, lng: pin.lng, name: title });
   return (
     <Card style={styles.row}>
       {pin.photoLink ? (

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { NavyHeader } from '@/components/ui/NavyHeader';
 import { Txt } from '@/components/ui/Txt';
@@ -25,6 +25,7 @@ import { NowCard } from '../components/NowCard';
 import { RainCard } from '../components/RainCard';
 import { DoneRow, NextCard } from '../components/StopLines';
 import { TipCard } from '../components/TipCard';
+import { useDirections } from '../directions';
 import { useToday } from '../hooks/useToday';
 import { longDate } from '../todayPlan';
 import { useTipsSetting } from '../tipsSetting';
@@ -41,6 +42,7 @@ import { useTipsSetting } from '../tipsSetting';
  * (Done for today / Keep going); after Keep going, both pinned to the bottom; after Done, "Day closed".
  */
 export function TodayScreen() {
+  const openDirections = useDirections();
   const today = useToday();
   const [hiddenTip, setHiddenTip] = useState<string | null>(null);
   const tipsOn = useTipsSetting((s) => s.enabled);
@@ -129,7 +131,7 @@ export function TodayScreen() {
             stop={heading}
             weather={today.weather.now}
             onPin={() => router.push('/pin')}
-            onDirections={() => Linking.openURL(today.directionsTo(heading)).catch(() => {})}
+            onDirections={() => openDirections(heading)}
           />
         ) : asking ? (
           <DayEndCard end={dayEnd} />

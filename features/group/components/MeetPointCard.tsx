@@ -1,12 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Txt } from '@/components/ui/Txt';
 import { clockOf } from '@/features/planning/stops';
+import { useDirections } from '@/features/today/directions';
 import { colors, fontFamily, shadow } from '@/lib/theme';
 import { firstName, type MapMember } from '../groupMap';
-import { etaText, etaTo, meetDirectionsUrl, SPOT_NAME, type Gathering } from '../meetPoint';
+import { etaText, etaTo, SPOT_NAME, type Gathering } from '../meetPoint';
 
 interface MeetPointCardProps {
   meet: Gathering;
@@ -21,9 +22,10 @@ interface MeetPointCardProps {
 
 /**
  * The meet point under the map: each member's free estimate to get there, Directions
- * (Google Maps, walking) and Clear. "Everyone's here" once all are within 50 m.
+ * (Google Maps) and Clear. "Everyone's here" once all are within 50 m.
  */
 export function MeetPointCard({ meet, members, setBy, onClear, onClose, error }: MeetPointCardProps) {
+  const openDirections = useDirections();
   const { row } = meet;
   const name = row.name ?? SPOT_NAME;
 
@@ -54,7 +56,7 @@ export function MeetPointCard({ meet, members, setBy, onClear, onClose, error }:
   const me = members.find((m) => m.isMe);
   const myEta = me ? etaTo(me, row) : null;
   const sorted = [...members].sort((a, b) => Number(b.isMe) - Number(a.isMe));
-  const directions = () => Linking.openURL(meetDirectionsUrl(row, 'walk')).catch(() => {});
+  const directions = () => openDirections({ lat: row.lat, lng: row.lng, name });
 
   return (
     <View style={[styles.card, styles.navy]} testID="meet-card">

@@ -254,9 +254,13 @@ Time and location rule (built; follow it in every live-trip feature):
   now()); with a late card up, Next sits inside the late card as at a stop. Once all are
   answered or dismissed: "On the way to [next stop]" until the group arrives, with
   Directions + Pin spot side by side (equal width). Directions opens Google Maps (no API
-  call): walking if the stop is under 2 km in a straight line from this phone (else the
-  group centre, else the stop left last), otherwise driving; Maps picks if neither end is
-  known (travelModeTo). Demo mode: the route has an "On the way to [next]" event (kind
+  call). Every directions link in the app (Today, Next card pin, pins, meet point, split &
+  rejoin) goes through one helper, features/today/directions.ts (useDirections /
+  directionsUrl): https://www.google.com/maps/dir/?api=1&destination=<lat>,<lng>, plus
+  destination_place_id when the stop has a Google place ID. Never a travelmode, so Maps
+  picks and the person can switch car / motorbike / transit / walking. Real mode: no
+  origin (Maps uses the phone's location); Demo mode: origin = the demo group's centre
+  (lib/location getGroupLocation). Demo mode: the route has an "On the way to [next]" event (kind
   'travel') between every leave and the next arrival, 3+ min after the leave event (which
   is where the leave is noticed) and no earlier than halfway; none when the stops are too
   close for the leave to be noticed on the way.

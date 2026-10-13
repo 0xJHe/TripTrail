@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback } from 'react';
 import { Alert, Linking } from 'react-native';
 
@@ -51,18 +50,13 @@ export async function directionsOrigin(source: 'demo' | 'gps'): Promise<LatLng |
 }
 
 export const DEMO_DIRECTIONS_NOTE = 'In Demo mode, the route starts from where the demo group is.';
-const DEMO_NOTE_KEY = 'triptrail-demo-directions-note';
 
 /**
- * Demo mode only, once per phone: before the first directions open, a small popup says the
- * route starts at the demo group (OK, then Maps). Remembered on the phone, never shown again.
- * Resolves when it's time to open Maps.
+ * Demo mode only, on every Directions tap: a small popup says the route starts at the demo
+ * group (OK, then Maps). Resolves when it's time to open Maps.
  */
 export async function demoDirectionsNote(source: 'demo' | 'gps'): Promise<void> {
   if (source !== 'demo') return;
-  const shown = await AsyncStorage.getItem(DEMO_NOTE_KEY).catch(() => '1');
-  if (shown) return;
-  await AsyncStorage.setItem(DEMO_NOTE_KEY, '1').catch(() => {});
   await new Promise<void>((resolve) => {
     Alert.alert('Directions', DEMO_DIRECTIONS_NOTE, [{ text: 'OK', onPress: () => resolve() }], {
       cancelable: true,

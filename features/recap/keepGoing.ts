@@ -4,12 +4,16 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 /**
  * "Keep going" on the Today tab: this person's choice for a trip day, saved on the phone.
- * Stored with now() when tapped, so Demo mode Reset (clock back) brings the card back.
+ * Stored with now() when tapped, so Demo mode Reset (clock back) brings the card back; Reset
+ * also forgets the taps made during the demo on every phone (forgetSince), so a replay never
+ * finds an old tap once the fake clock passes it again.
  */
 interface KeepGoingState {
   /** `${tripId}:${day}` -> when tapped (ms). */
   at: Record<string, number>;
   keepGoing: (tripId: string, day: number, t: number) => void;
+  /** Forget this trip's taps at or after `since` (Demo mode Reset). */
+  forgetSince: (tripId: string, since: number) => void;
 }
 
 const key = (tripId: string, day: number) => `${tripId}:${day}`;
@@ -24,6 +28,10 @@ export const useKeepGoing = create<KeepGoingState>()(
           const entries = Object.entries({ ...s.at, [key(tripId, day)]: t }).slice(-30);
           return { at: Object.fromEntries(entries) };
         }),
+      forgetSince: (tripId, since) =>
+        set((s) => ({
+          at: Object.fromEntries(Object.entries(s.at).filter(([k, t]) => !(k.startsWith(`${tripId}:`) && t >= since))),
+        })),
     }),
     { name: 'triptrail-keep-going', storage: createJSONStorage(() => AsyncStorage) },
   ),

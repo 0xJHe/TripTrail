@@ -3,13 +3,16 @@ import { View } from 'react-native';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useDemo } from '@/lib/demo';
+import { useDemoSession } from '../hooks/useDemoSession';
 import { DemoBar } from './DemoBar';
 
 /**
- * Wraps the app. In Demo mode the debug bar sits at the top, under the status bar,
- * and the screens below it get a top inset of 0 so they don't leave a second gap.
+ * Wraps the app. Keeps the open trip's shared Demo mode in step (useDemoSession). In Demo
+ * mode the debug bar sits at the top, under the status bar, and the screens below it get a
+ * top inset of 0 so they don't leave a second gap.
  */
 export function DemoFrame({ children }: { children: ReactNode }) {
+  useDemoSession();
   const enabled = useDemo((s) => s.enabled);
   const insets = useSafeAreaInsets();
   // Same tree with the bar on or off, so toggling Demo mode doesn't reset navigation.

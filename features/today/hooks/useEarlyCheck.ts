@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
 import { mainPlan } from '@/features/group/splitStops';
-import { planningKeys, useStops } from '@/features/planning/hooks/usePlanning';
+import { useStops } from '@/features/planning/hooks/usePlanning';
 import { dayCount, planStart, sortStops } from '@/features/planning/stops';
 import { useTrip } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
@@ -12,14 +12,13 @@ import { now, useNow } from '@/lib/clock';
 import { getGroupLocation, useDemoRoute } from '@/lib/location';
 import { estimateMinutes } from '@/supabase/functions/_shared/eta';
 import type { NearbySuggestion } from '@/supabase/functions/_shared/nearby';
-import { fetchEarlyAlerts, fetchNearby, raiseEarlyAlert, undoDemoMoments } from '../api';
+import { fetchEarlyAlerts, fetchNearby, raiseEarlyAlert } from '../api';
 import { demoSuggestion } from '../demoPlaces';
 import { earlyAlertFor, earlyCheck, justLeft } from '../early';
 import { checkable } from '../late';
 import { useLocationAccess } from '../permission';
 import { todayView } from '../todayPlan';
-import { lateKeys, useLateAlerts } from './useLateCheck';
-import { rainKeys } from './useRainCheck';
+import { useLateAlerts } from './useLateCheck';
 
 export const earlyKeys = {
   alerts: (tripId: string) => ['earlyAlerts', tripId] as const,
@@ -68,23 +67,14 @@ export function useEarlyCheck() {
     lastTime.current = null;
   }, [tripId, demo]);
 
-  // Demo mode, the fake clock went back (Reset): forget the checks after it, and the rain,
-  // running-early and running-late cards checked after it (putting back the stops they
-  // changed). All kinds are undone here, latest kind first, so the oldest times win.
+  // Demo mode, the fake clock went back (Reset): forget the checks after it. The cards
+  // themselves were undone once for the whole trip by Reset (demo_reset).
   useEffect(() => {
     const last = lastTime.current;
     lastTime.current = time;
-    if (!demo || !tripId || last == null || time >= last) return;
+    if (!demo || last == null || time >= last) return;
     for (const [key, at] of done.current) if (at > time) done.current.delete(key);
-    undoDemoMoments(tripId, new Date(time))
-      .catch((e) => console.warn('Undoing rain / running-early / late cards failed:', e instanceof Error ? e.message : e))
-      .finally(() => {
-        queryClient.invalidateQueries({ queryKey: rainKeys.alerts(tripId) });
-        queryClient.invalidateQueries({ queryKey: earlyKeys.alerts(tripId) });
-        queryClient.invalidateQueries({ queryKey: lateKeys.alerts(tripId) });
-        queryClient.invalidateQueries({ queryKey: planningKeys.stops(tripId) });
-      });
-  }, [demo, tripId, time, queryClient]);
+  }, [demo, time]);
 
   useEffect(() => {
     if (busy.current) {

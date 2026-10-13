@@ -165,17 +165,3 @@ export async function decideRain(
   if (error) throw error;
   return data === true;
 }
-
-/**
- * Demo mode Reset: forget the rain, running-early and running-late cards checked after
- * `after`, putting back the stops they changed. Latest kind first: in a demo day rain comes
- * after early, early after late, so the oldest saved times are put back last.
- */
-export async function undoDemoMoments(tripId: string, after: Date): Promise<void> {
-  const rain = await supabase.rpc('undo_rain_alerts', { p_trip: tripId, p_after: after.toISOString() });
-  if (rain.error) throw rain.error;
-  const early = await supabase.rpc('undo_early_alerts', { p_trip: tripId, p_after: after.toISOString() });
-  if (early.error) throw early.error;
-  const late = await supabase.rpc('undo_late_alerts', { p_trip: tripId, p_after: after.toISOString() });
-  if (late.error) throw late.error;
-}

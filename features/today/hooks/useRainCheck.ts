@@ -72,7 +72,7 @@ export function useRainCheck() {
   const lastTime = useRef<number | null>(null);
 
   // New trip, switching between demo and real, or Demo mode's clock going back (Reset):
-  // start over. Reset's undo of the cards themselves runs in useEarlyCheck (undoDemoMoments).
+  // start over. Reset undid the cards themselves once for the whole trip (demo_reset).
   useEffect(() => {
     done.current.clear();
   }, [tripId, demo]);

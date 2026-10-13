@@ -61,7 +61,7 @@ const TRAVEL_AFTER_LEAVE_MIN = 3;
 const RAIN_AHEAD_MS = 60 * MIN;
 /** Minutes between a leave tap and the rain tap when they would land together. */
 const RAIN_GAP_MIN = 5;
-const FAKE_NAMES = ['Aisha', 'Ben', 'Mei', 'Raj'];
+const FAKE_NAMES = ['Aisha', 'Ben', 'Mei', 'Raj', 'Sam'];
 const GROUP_SIZE = 4;
 // Small spread so members aren't drawn on top of each other (metres east, north).
 const SPREAD = [
@@ -333,7 +333,9 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
   const off = walkOffPoint(at);
   group.push({ t: leave[n - 1] + WALK_OFF_MIN * MIN, ...off }, { t: endsAt, ...off });
 
-  // Members: the trip's, padded with made-up friends so there is a group to see.
+  // Members: the trip's (in join order, so the same on every phone), padded with made-up
+  // friends so there is a group to see. Always at least one made-up friend: the last one
+  // wanders off with low battery (real members show their real phone battery).
   const people: (RouteMember & { isMe: boolean; fake: boolean })[] = members.map((m) => ({
     ...m,
     isMe: m.id === meId,
@@ -341,12 +343,13 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
   }));
   if (!people.some((p) => p.isMe)) people.unshift({ id: meId ?? 'me', name: 'You', isMe: true, fake: false });
   for (const name of FAKE_NAMES) {
-    if (people.length >= GROUP_SIZE) break;
+    if (people.length >= GROUP_SIZE && people.some((p) => p.fake)) break;
     if (people.some((p) => p.name === name)) continue;
     people.push({ id: `demo-${name.toLowerCase()}`, name: `${name} (demo)`, isMe: false, fake: true });
   }
-  // The last member who isn't this phone wanders off.
-  const drifter = people.length - 1 - [...people].reverse().findIndex((p) => !p.isMe);
+  if (!people.some((p) => p.fake)) people.push({ id: 'demo-friend', name: 'Friend (demo)', isMe: false, fake: true });
+  // The last made-up friend wanders off (the same one on every phone).
+  const drifter = people.map((p) => p.fake).lastIndexOf(true);
   const spread = people.map((_, i) => SPREAD[i % SPREAD.length]);
   const others = spread.filter((_, i) => i !== drifter);
   const cx = others.reduce((sum, o) => sum + o[0], 0) / others.length;
@@ -360,10 +363,12 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
       return {
         ...p,
         offsets: [{ t: startsAt, ...home }],
-        battery: [
-          { t: startsAt, value: full },
-          { t: endsAt, value: full - 22 },
-        ],
+        battery: p.fake
+          ? [
+              { t: startsAt, value: full },
+              { t: endsAt, value: full - 22 },
+            ]
+          : [],
       };
     }
     return {

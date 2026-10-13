@@ -137,14 +137,45 @@ describe('buildDemoRoute', () => {
     expect(haversineMeters(again, back.center)).toBeLessThan(50);
   });
 
-  it('keeps everyone else near the group with a healthy battery', () => {
+  it('keeps everyone else near the group, made-up friends with a healthy battery', () => {
     for (const e of route.events) {
       const loc = sampleRoute(route, e.at);
       for (const m of loc.members.filter((x) => x.id !== event(route, 'far').memberId)) {
         expect(haversineMeters(m, loc.center)).toBeLessThan(500);
-        expect(m.battery).toBeGreaterThanOrEqual(15);
+        if (m.id.startsWith('demo-')) expect(m.battery).toBeGreaterThanOrEqual(15);
       }
     }
+  });
+
+  it("shows real members' real phone battery, made-up friends a fake one", () => {
+    const t = event(route, 'far').at;
+    const loc = sampleRoute(route, t, { 'm-me': 77, 'm-2': 9 });
+    expect(loc.members.find((m) => m.id === 'm-me')?.battery).toBe(77);
+    expect(loc.members.find((m) => m.id === 'm-2')?.battery).toBe(9);
+    // Not shared yet: unknown, never made up.
+    expect(sampleRoute(route, t).members.find((m) => m.id === 'm-2')?.battery).toBeNull();
+    expect(route.members.filter((m) => !m.fake).every((m) => m.battery.length === 0)).toBe(true);
+  });
+
+  it('sends a made-up friend off with low battery, the same one on every phone', () => {
+    const other = buildDemoRoute({ tripId: 't1', day: 1, stops, members, meId: 'm-2' })!;
+    expect(event(other, 'far').memberId).toBe(event(route, 'far').memberId);
+    expect(route.members.find((m) => m.id === event(route, 'far').memberId)?.fake).toBe(true);
+    expect(other.events.map((e) => [e.at, e.kind, e.title])).toEqual(route.events.map((e) => [e.at, e.kind, e.title]));
+    // Everyone is in the same place on both phones; only "me" differs.
+    const t = event(route, 'far').at;
+    const strip = (r: DemoRoute) => sampleRoute(r, t).members.map(({ isMe: _isMe, ...m }) => m);
+    expect(strip(other)).toEqual(strip(route));
+    expect(other.members.find((m) => m.isMe)?.id).toBe('m-2');
+  });
+
+  it('still adds a made-up friend to wander off when the trip has 4+ members', () => {
+    const big = [...members, { id: 'm-3', name: 'Ravi' }, { id: 'm-4', name: 'Siti' }];
+    const r = build(stops, big);
+    expect(r.members.filter((m) => !m.fake).map((m) => m.id)).toEqual(['m-me', 'm-2', 'm-3', 'm-4']);
+    const drifter = r.members.find((m) => m.id === event(r, 'far').memberId)!;
+    expect(drifter.fake).toBe(true);
+    expect(sampleRoute(r, event(r, 'far').at).members.find((m) => m.id === drifter.id)!.battery).toBeLessThan(15);
   });
 
   it('pads a small group with made-up friends and marks this phone', () => {

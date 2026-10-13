@@ -19,6 +19,8 @@ const TABLE_KEYS = {
   rain_alerts: 'rainAlerts',
   spends: 'spends',
   day_closures: 'dayClosures',
+  demo_sessions: 'demoSession',
+  demo_batteries: 'demoBatteries',
 } satisfies Record<string, string | string[]>;
 
 export type RealtimeTable = keyof typeof TABLE_KEYS;

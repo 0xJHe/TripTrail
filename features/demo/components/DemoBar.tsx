@@ -4,12 +4,17 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Txt } from '@/components/ui/Txt';
-import { advanceFakeTime, setFakeTime, useNow } from '@/lib/clock';
+import { useDayClosures } from '@/features/recap/hooks/useDayClosures';
+import { keptGoing, useKeepGoing } from '@/features/recap/keepGoing';
+import { useNow } from '@/lib/clock';
 import { centroid, haversineMeters } from '@/lib/distance';
 import { eventsAround, useGroupLocation, type DemoEvent, type DemoEventKind, type GroupLocation } from '@/lib/location';
 import { colors, fontFamily } from '@/lib/theme';
+import { useDemoActions } from '../hooks/useDemoActions';
+import { useDemoBatteries } from '../hooks/useDemoBatteries';
 import { useDemoReplay } from '../hooks/useDemoReplay';
 import { useDemoReset } from '../hooks/useDemoReset';
+import { lastEventAt, nextAction } from '../session';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -30,15 +35,29 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const pad = (n: number) => String(n).padStart(2, '0');
 const timeText = (d: Date) => `${DAYS[d.getDay()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
-/** Demo mode debug bar: fake time, what just happened, and buttons to move the clock. */
+/**
+ * Demo mode debug bar: fake time, what just happened, and buttons to move the clock. The
+ * demo is the trip's (shared): a tap here moves it on every member's phone. At the end of the
+ * day the middle button waits for the person ("Your turn: ..."), never choosing for them.
+ */
 export function DemoBar({ topInset }: { topInset: number }) {
-  const { route, tripId, demoStart } = useDemoReplay();
-  const { reset, resetting } = useDemoReset(tripId, demoStart);
+  const { route, tripId, demoStart, dayAt } = useDemoReplay();
+  useDemoBatteries(tripId);
+  const { reset, resetting, error: resetError } = useDemoReset(tripId, demoStart);
+  const { step, busy, error } = useDemoActions(tripId);
   const time = useNow();
+  const t = time.getTime();
   const loc = useGroupLocation();
   const [open, setOpen] = useState(false);
-  const { last, next } = route ? eventsAround(route, time.getTime()) : { last: null, next: null };
-  const nextAt = next?.at ?? route?.nextDayStartsAt ?? null;
+  const { last, next } = route ? eventsAround(route, t) : { last: null, next: null };
+  const closures = useDayClosures(tripId, route?.day ?? 0);
+  const keepAt = useKeepGoing((s) => s.at);
+  const action = nextAction(route, t, {
+    closedByMe: closures.mine,
+    keptGoing: route ? keptGoing(keepAt, tripId, route.day, t) : false,
+  });
+  const moveTo = (at: number) => step({ fakeTime: at, day: dayAt(at), eventAt: lastEventAt(route, at) });
+  const waiting = busy || resetting;
 
   let status = 'Open a trip to replay its day.';
   if (tripId && !route) status = 'Add stops with a time and a place to the Day plan to replay a route.';
@@ -61,7 +80,7 @@ export function DemoBar({ topInset }: { topInset: number }) {
       {route ? (
         <>
           <EventLine event={last} prefix="Now" />
-          <EventLine event={next} prefix="Next" muted />
+          {action.kind === 'event' ? <EventLine event={next} prefix="Next" muted /> : null}
         </>
       ) : (
         <Txt variant="s11" color={colors.textOnNavy}>
@@ -69,15 +88,28 @@ export function DemoBar({ topInset }: { topInset: number }) {
         </Txt>
       )}
       {open && loc ? <Members loc={loc} /> : null}
+      {error || resetError ? (
+        <Txt variant="s11" color={colors.amber}>
+          {error ?? resetError}
+        </Txt>
+      ) : null}
 
       <View style={styles.row}>
-        <BarButton label="+15 min" onPress={() => advanceFakeTime(15)} />
-        <BarButton
-          label={next || nextAt == null ? 'Next event' : 'Next day'}
-          onPress={() => nextAt != null && setFakeTime(nextAt)}
-          disabled={nextAt == null}
-        />
-        <BarButton label="Reset" onPress={reset} disabled={resetting} />
+        <BarButton label="+15 min" onPress={() => moveTo(t + 15 * 60_000)} disabled={waiting} />
+        {action.kind === 'yourTurn' ? (
+          <View style={[styles.button, styles.turn]} accessibilityRole="text" testID="demo-your-turn">
+            <Txt style={styles.buttonText} color={colors.amber} numberOfLines={2}>
+              {action.label}
+            </Txt>
+          </View>
+        ) : (
+          <BarButton
+            label={action.label}
+            onPress={() => (action.kind === 'event' || action.kind === 'nextDay') && moveTo(action.at)}
+            disabled={waiting || (action.kind !== 'event' && action.kind !== 'nextDay')}
+          />
+        )}
+        <BarButton label="Reset" onPress={reset} disabled={waiting} />
       </View>
     </View>
   );
@@ -158,5 +190,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.22)',
   },
-  buttonText: { fontFamily: fontFamily.semibold, fontSize: 12, lineHeight: 15 },
+  buttonText: { fontFamily: fontFamily.semibold, fontSize: 12, lineHeight: 15, textAlign: 'center' },
+  turn: { flex: 2, paddingHorizontal: 6, borderColor: colors.amber },
 });

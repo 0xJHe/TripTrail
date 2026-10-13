@@ -147,11 +147,12 @@ types.ts. Keep screens under ~200 lines; split into components.
 
 ## Demo mode (must always work)
 
-Settings has a Demo mode toggle. When on:
+Settings has a Demo mode toggle. It is shared per trip: turning it on or off on any
+member's phone turns it on or off for everyone in that trip. When on:
 - lib/location.ts replays a fake route built from the open trip's Day plan
   (features/demo/route.ts) instead of GPS.
-- lib/clock.ts returns a settable fake time; a small debug bar lets you jump
-  the clock and skip to the next event.
+- lib/clock.ts returns the trip's shared fake time; a small debug bar lets anyone jump
+  the clock and skip to the next event, for every phone in the trip.
 - The Edge Functions are still called. If Google Places fails or finds nothing for
   the running-early suggestion or the rain options, Demo mode (only) shows made-up
   nearby places (features/today/demoPlaces.ts), so those cards always have some.
@@ -164,17 +165,37 @@ Time and location rule (built; follow it in every live-trip feature):
 - Get positions ONLY from lib/location.ts: `getGroupLocation()` or the
   `useGroupLocation()` hook (members, battery, centre, `rainSoon` in demo). Never
   import expo-location anywhere else.
-- Demo mode lives in lib/demo.ts (Settings > Demo mode, saved on the phone). The fake
+- Demo mode is per trip, in Supabase: `demo_sessions` (one row per trip: enabled,
+  fake_time, day, event_at = last event reached, start_time = Day 1's replay start, step,
+  reset_at; migration 018; members read it, it changes only through the security-definer
+  RPCs demo_set_enabled / demo_init / demo_step / demo_reset, features/demo/api.ts).
+  lib/demo.ts is this phone's copy of the open trip's row (also saved on the phone, so the
+  background location task knows), kept in step by features/demo/hooks/useDemoSession.ts
+  (mounted in DemoFrame at the app root; React Query + Realtime filtered by trip_id;
+  applyDemoSession never puts back an older step). No trip open = Demo mode off. Every tap
+  (Settings switch, +15 min, Next event, Next day, Reset; useDemoActions / useDemoReset)
+  sends the step this phone last saw: the RPC applies it only if it is still the latest,
+  so two taps at the same moment make one step (no double jumps), and the state that won
+  comes back to both. Turning it on: the first phone with the Day plan starts the clock 30
+  min before Day 1 (demo_init, only while fake_time is null); turning it off clears it all,
+  so the next time starts at Day 1 again. Every phone builds the same route from the same
+  plan, members (join order) and shared clock, so the bar, clock, Today card, map, cards and
+  recap match on every phone. The fake
   route is built from the open trip's Day plan by features/demo/route.ts: it walks
   stop to stop and includes arriving late, leaving early, rain near an outdoor stop,
-  and one member 900 m away with low battery (from a stop until 10 min after the group
+  and one made-up member ("(demo)", always at least one is added, the last one wanders;
+  the same on every phone) 900 m away with low battery (from a stop until 10 min after the group
   reaches the next one, so it lasts several Next event taps: far, leave, on the way,
   arrive, then back; the Today tab shows an amber "Mei is 900 m from the group · Open
   map" banner meanwhile, features/group/components/FarBanner.tsx, the far-from-group
   rule, so real trips get it too). Every "Left [stop]" event sits where the leave is
   noticed (150 m out for 3 min), so its spend check (and an early card) show on that
-  tap; after the last stop a final "That's every stop for today" event (kind 'end')
-  comes before Next day. The rain card never lands on a leave tap: if it would, the
+  tap; after the last stop a final "That's every stop for today" event (kind 'end').
+  The demo never chooses Done for today or Keep going: from the 'end' event the middle
+  button reads "Your turn: tap Done for today or Keep going" (after Keep going "Your turn:
+  tap Done for today") and does nothing (features/demo/session.ts nextAction); stops added
+  after Keep going bring Next event back. "Next day" shows only once this person has tapped
+  Done for today on that day. The rain card never lands on a leave tap: if it would, the
   rain comes later so it gets its own Next event. The "late" moment is the
   30-min-before check while the group is still at the stop before (screen 7). The
   "early" moment is a later stop left 30+ min before its planned end with 45+ min to
@@ -182,11 +203,20 @@ Time and location rule (built; follow it in every live-trip feature):
   the "rain" moment is rain over an outdoor stop (after the early one) starting 10 min
   after the group gets there, so the rain card shows before they arrive;
   the moments are picked from the plan before any running-early change or rain swap,
-  and the replay follows added / moved / swapped stops. Reset undoes rain cards, then
-  early, then late ones, and removes this phone's pins and "+ Add spend" rows made
-  during the demo (at or after the fake start time; features/demo/reset.ts,
-  useDemoReset). The bar at the
-  top (+15 min, Next event, Reset) is features/demo/components/DemoBar.tsx.
+  and the replay follows added / moved / swapped stops. Reset (useDemoReset -> demo_reset
+  RPC) runs once for the whole trip: it undoes everything at or after the fake start time
+  for every member: rain cards, then early, then late ones (with the stops they changed),
+  visits (arrived after -> planned, left after -> arrived), spend answers and "+ Add
+  spend" rows, Done for today rows, meet points and splits (group B's stops go with them)
+  and pins (their photos are then removed by the phone that reset, storage policy "pin
+  photos delete orphan"), then puts the shared clock back. Every phone that sees the new
+  reset_at forgets its own Keep going taps since the start (keepGoing.ts forgetSince) and
+  refetches. The checks' local memory (late / early / rain) still clears when the clock goes
+  back; the visit tracker's own undo stays as a safety net (same values). Real members
+  show their real phone battery in Demo mode (only their position is pretend): each phone
+  saves its level to `demo_batteries` when it changes (useDemoBatteries, never a position)
+  and lib/location sampleRoute uses those; only the made-up members have fake levels. The
+  bar at the top (+15 min, Next event, Reset) is features/demo/components/DemoBar.tsx.
 - Settings: the gear + "Settings" (SettingsButton) is in the header of every main
   screen: Home, Plan, Today, Map, Group. Settings also has First-timer tips (on by default,
   saved on the phone: features/today/tipsSetting.ts); off = no tip card on Today.

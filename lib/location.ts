@@ -56,6 +56,7 @@ export interface DemoMemberTrack {
   /** Made up for the demo (the trip has too few members). */
   fake: boolean;
   offsets: { t: number; east: number; north: number }[];
+  /** Made-up members only (empty for real members: they show their real phone battery). */
   battery: { t: number; value: number }[];
 }
 
@@ -106,12 +107,17 @@ export function rainSoonAt(route: DemoRoute, p: LatLng, t: number): boolean {
   );
 }
 
-/** Everyone's position at time t on a demo route. */
-export function sampleRoute(route: DemoRoute, t: number): GroupLocation {
+/**
+ * Everyone's position at time t on a demo route. Only positions are pretend for real
+ * members: their battery is their own phone's (`batteries`, member id -> %, null if not
+ * known yet); the made-up members use the route's fake levels.
+ */
+export function sampleRoute(route: DemoRoute, t: number, batteries: Record<string, number> = {}): GroupLocation {
   const base = { lat: lerp(route.group, t, 'lat'), lng: lerp(route.group, t, 'lng') };
   const members: MemberLocation[] = route.members.map((m) => {
     const p = offsetMeters(base, lerp(m.offsets, t, 'east'), lerp(m.offsets, t, 'north'));
-    return { id: m.id, name: m.name, isMe: m.isMe, ...p, battery: Math.round(lerp(m.battery, t, 'value')) };
+    const battery = m.fake && m.battery.length > 0 ? Math.round(lerp(m.battery, t, 'value')) : (batteries[m.id] ?? null);
+    return { id: m.id, name: m.name, isMe: m.isMe, ...p, battery };
   });
   const center = centroid(members) ?? base;
   return {
@@ -137,6 +143,10 @@ export function eventsAround(route: DemoRoute, t: number): { last: DemoEvent | n
 /** The demo route being replayed (set by features/demo when Demo mode is on). */
 export const useDemoRoute = create<{ route: DemoRoute | null }>(() => ({ route: null }));
 export const setDemoRoute = (route: DemoRoute | null) => useDemoRoute.setState({ route });
+
+/** Demo mode: real members' own phone battery (member id -> %), shared by features/demo. */
+export const useDemoBatteries = create<{ levels: Record<string, number> }>(() => ({ levels: {} }));
+export const setDemoBatteries = (levels: Record<string, number>) => useDemoBatteries.setState({ levels });
 
 // ---------- Real GPS (foreground only for now) ----------
 
@@ -191,7 +201,7 @@ export async function getGroupLocation(): Promise<GroupLocation | null> {
   if (isDemoMode()) {
     const route = useDemoRoute.getState().route;
     const { fakeTime } = useDemo.getState();
-    return route ? sampleRoute(route, fakeTime ?? route.startsAt) : null;
+    return route ? sampleRoute(route, fakeTime ?? route.startsAt, useDemoBatteries.getState().levels) : null;
   }
   try {
     if (!(await gpsAllowed())) return null;
@@ -205,9 +215,10 @@ export async function getGroupLocation(): Promise<GroupLocation | null> {
 export function useGroupLocation(): GroupLocation | null {
   const demo = useDemo((s) => s.enabled);
   const route = useDemoRoute((s) => s.route);
+  const batteries = useDemoBatteries((s) => s.levels);
   const time = useNow();
   const gps = useGpsWatch(!demo);
-  if (demo) return route ? sampleRoute(route, time.getTime()) : null;
+  if (demo) return route ? sampleRoute(route, time.getTime(), batteries) : null;
   return gps;
 }
 
@@ -266,7 +277,7 @@ export function onBackgroundLocation(handler: (fix: BackgroundFix) => Promise<vo
   backgroundHandler = handler;
 }
 
-/** Demo mode is saved on the phone; when the app wakes up in the background it may not be loaded yet. */
+/** Demo mode is mirrored on the phone; when the app wakes up in the background it may not be loaded yet. */
 async function demoModeOnceLoaded(): Promise<boolean> {
   if (!useDemo.persist.hasHydrated()) {
     await new Promise<void>((resolve) => {

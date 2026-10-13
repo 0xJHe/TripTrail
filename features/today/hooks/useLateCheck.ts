@@ -68,7 +68,7 @@ export function useLateCheck() {
   }, [tripId, demo]);
 
   // Demo mode, the fake clock went back (Reset): forget the checks after it. The cards
-  // themselves are removed with the running-early ones (useEarlyCheck), early first.
+  // themselves were undone once for the whole trip by Reset (demo_reset).
   useEffect(() => {
     const last = lastTime.current;
     lastTime.current = time;

@@ -9,6 +9,7 @@ import { Txt } from '@/components/ui/Txt';
 import { useTipsSetting } from '@/features/today/tipsSetting';
 import { useCurrentTrip } from '@/features/trip/store';
 import { useDemo } from '@/lib/demo';
+import { useDemoActions } from '../hooks/useDemoActions';
 import { colors } from '@/lib/theme';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -20,11 +21,12 @@ const MOMENTS: { icon: IconName; color: string; text: string }[] = [
   { icon: 'battery-dead', color: colors.amber, text: 'One member 900 m away with low battery' },
 ];
 
-/** Settings: the Demo mode and First-timer tips switches. */
+/** Settings: the Demo mode (for everyone in the open trip) and First-timer tips switches. */
 export function SettingsScreen() {
   const enabled = useDemo((s) => s.enabled);
-  const setEnabled = useDemo((s) => s.setEnabled);
-  const hasTrip = useCurrentTrip((s) => s.currentTripId != null);
+  const tripId = useCurrentTrip((s) => s.currentTripId) ?? undefined;
+  const hasTrip = tripId != null;
+  const { setEnabled, busy, error } = useDemoActions(tripId);
   const tipsOn = useTipsSetting((s) => s.enabled);
   const setTipsOn = useTipsSetting((s) => s.setEnabled);
 
@@ -62,6 +64,7 @@ export function SettingsScreen() {
             <Switch
               value={enabled}
               onValueChange={setEnabled}
+              disabled={!hasTrip || busy}
               trackColor={{ true: colors.teal, false: colors.disabled }}
               thumbColor={colors.white}
               accessibilityLabel="Demo mode"
@@ -72,6 +75,15 @@ export function SettingsScreen() {
             Uses a fake clock and replays a fake walk through the open trip&apos;s Day plan, instead of the real time
             and GPS. A bar at the top shows the fake time, with +15 min, Next event and Reset.
           </Txt>
+          <Txt variant="b12">
+            Shared with everyone in this trip: turning it on or off, and every tap on the bar, changes it on
+            everyone&apos;s phone.
+          </Txt>
+          {error ? (
+            <Txt variant="s11" color={colors.amberText}>
+              {error}
+            </Txt>
+          ) : null}
         </Card>
 
         <Card style={styles.card}>

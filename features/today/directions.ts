@@ -1,5 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback } from 'react';
-import { Linking } from 'react-native';
+import { Alert, Linking } from 'react-native';
 
 import type { LatLng } from '@/lib/distance';
 import { getGroupLocation, useLocationSource } from '@/lib/location';
@@ -49,11 +50,33 @@ export async function directionsOrigin(source: 'demo' | 'gps'): Promise<LatLng |
   return loc ? { lat: loc.center.lat, lng: loc.center.lng } : null;
 }
 
+export const DEMO_DIRECTIONS_NOTE = 'In Demo mode, the route starts from where the demo group is.';
+const DEMO_NOTE_KEY = 'triptrail-demo-directions-note';
+
+/**
+ * Demo mode only, once per phone: before the first directions open, a small popup says the
+ * route starts at the demo group (OK, then Maps). Remembered on the phone, never shown again.
+ * Resolves when it's time to open Maps.
+ */
+export async function demoDirectionsNote(source: 'demo' | 'gps'): Promise<void> {
+  if (source !== 'demo') return;
+  const shown = await AsyncStorage.getItem(DEMO_NOTE_KEY).catch(() => '1');
+  if (shown) return;
+  await AsyncStorage.setItem(DEMO_NOTE_KEY, '1').catch(() => {});
+  await new Promise<void>((resolve) => {
+    Alert.alert('Directions', DEMO_DIRECTIONS_NOTE, [{ text: 'OK', onPress: () => resolve() }], {
+      cancelable: true,
+      onDismiss: () => resolve(),
+    });
+  });
+}
+
 /** Opens Google Maps directions to a stop / pin / meet point. Every Directions button uses this. */
 export function useDirections(): (to: DirectionsTo) => Promise<void> {
   const source = useLocationSource();
   return useCallback(
     async (to: DirectionsTo) => {
+      await demoDirectionsNote(source);
       const origin = await directionsOrigin(source);
       await Linking.openURL(directionsUrl(to, origin)).catch(() => {});
     },

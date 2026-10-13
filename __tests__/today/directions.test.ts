@@ -1,7 +1,13 @@
-import { directionsOrigin, directionsUrl } from '@/features/today/directions';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
+
+import { DEMO_DIRECTIONS_NOTE, demoDirectionsNote, directionsOrigin, directionsUrl } from '@/features/today/directions';
 import { getGroupLocation } from '@/lib/location';
 
 jest.mock('@/lib/location', () => ({ getGroupLocation: jest.fn(), useLocationSource: jest.fn(() => 'gps') }));
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);
 
 const BASE = 'https://www.google.com/maps/dir/?api=1';
 
@@ -61,5 +67,33 @@ describe('directionsOrigin', () => {
   it('demo mode without a route: none', async () => {
     mocked.mockResolvedValue(null);
     expect(await directionsOrigin('demo')).toBeNull();
+  });
+});
+
+describe('demoDirectionsNote: once per phone, Demo mode only', () => {
+  let alert: jest.SpyInstance;
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    alert = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => buttons?.[0]?.onPress?.());
+  });
+  afterEach(() => alert.mockRestore());
+
+  it('real mode: no popup', async () => {
+    await demoDirectionsNote('gps');
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it('demo mode: the popup the first time (OK goes on to Maps), never again', async () => {
+    await demoDirectionsNote('demo');
+    expect(alert).toHaveBeenCalledTimes(1);
+    expect(alert.mock.calls[0][1]).toBe(DEMO_DIRECTIONS_NOTE);
+    expect(alert.mock.calls[0][2]).toEqual([expect.objectContaining({ text: 'OK' })]);
+    await demoDirectionsNote('demo');
+    expect(alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('closing the popup another way still goes on to Maps', async () => {
+    alert.mockImplementation((_t, _m, _b, options) => options?.onDismiss?.());
+    await expect(demoDirectionsNote('demo')).resolves.toBeUndefined();
   });
 });

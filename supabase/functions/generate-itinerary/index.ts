@@ -8,6 +8,9 @@
 // today -> status 'limit'; otherwise no usable answer -> status 'busy'. The app saves
 // nothing then and shows the message with Try again. A built plan is never made again:
 // once the trip is 'decided' this answers 409.
+// A trip day that is today (in the trip's local time: Malaysia time unless the destination
+// is known to be elsewhere) only gets stops from 30 min after now to 23:59; under 1 h left
+// = no stops that day (with a note). Future days are planned as usual.
 //
 // POST { tripId, optionId, start? }  ->  { status: 'ok' | 'busy' | 'limit', stops: StopDraft[], note, model, googleCalls }
 // Only signed-in members of the trip may call it (Authorization: Bearer <user JWT>).
@@ -16,7 +19,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 import { cors, googleDeps, json, makeGeminiChain, requireMember } from '../_shared/edge.ts';
 import { findStopPlace } from '../_shared/google.ts';
-import { planItinerary, type ItineraryInput } from '../_shared/itinerary.ts';
+import { localNow, planItinerary, todayWindow, tripTimeZone, type ItineraryInput } from '../_shared/itinerary.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -56,6 +59,9 @@ Deno.serve(async (req) => {
   const days = Number(option.plan_json?.days) || trip.length_days || 3;
   const budgets = members.map((m) => m.dailyBudget).filter((b): b is number => b != null && b > 0);
   const start = typeof body.start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.start) ? body.start : trip.start_date;
+  // "Now" in the trip's own time: a day that is today only gets stops from 30 min from now to 23:59.
+  const where = [option.name, option.plan_json?.landmark, ...(option.plan_json?.dayTitles ?? [])].filter(Boolean).join(' · ');
+  const today = todayWindow(start ?? null, days, localNow(new Date(), tripTimeZone(where)));
   const input: ItineraryInput = {
     destination: option.name,
     days,
@@ -64,6 +70,7 @@ Deno.serve(async (req) => {
     startDate: start ?? null,
     members,
     budget: budgets.length ? Math.min(...budgets) * days : null,
+    today,
   };
 
   const log = (m: string) => console.error(m);

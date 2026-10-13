@@ -150,7 +150,98 @@ export interface ItineraryInput extends ItineraryRequest {
   members: PlannerMember[];
   /** Group budget per person for the whole trip (lowest daily budget × days); null if none set. */
   budget: number | null;
+  /** The trip day that is today in the trip's own time (todayWindow); null / missing = no day is today. */
+  today?: TodayWindow | null;
 }
+
+// ---------------------------------------------------------------------------
+// Today: a trip that starts today, planned in the evening, must not get stops that
+// have already passed. The function works out "now" in the trip's local time.
+
+/** The trip day that is today: stops from `earliest` to 23:59 only; `earliest` null = no stops that day. */
+export interface TodayWindow {
+  day: number;
+  /** Local time now, "HH:MM". */
+  now: string;
+  /** First allowed start ("HH:MM", now + 30 min rounded up to 5 min), or null when under 1 h is left. */
+  earliest: string | null;
+}
+
+/** Last minute a stop on today may end: nothing crosses midnight. */
+export const DAY_END = '23:59';
+const LEAD_MINUTES = 30;
+const MIN_MINUTES_LEFT = 60;
+export const MALAYSIA_TIME_ZONE = 'Asia/Kuala_Lumpur';
+
+/** Destination words -> time zone. Malaysia first; anything unknown is Malaysia time. */
+const TIME_ZONES: [RegExp, string][] = [
+  [/malaysia|penang|langkawi|kuala lumpur|\bkl\b|melaka|malacca|ipoh|perak|cameron|johor|sabah|kota kinabalu|sarawak|kuching|terengganu|redang|perhentian|tioman|pahang|kelantan|kedah|selangor|negeri sembilan|putrajaya|genting|fraser|borneo/i, MALAYSIA_TIME_ZONE],
+  [/singapore/i, 'Asia/Singapore'],
+  [/thailand|bangkok|phuket|krabi|chiang mai|chiang rai|pattaya|hat yai|samui|phi phi|hua hin/i, 'Asia/Bangkok'],
+  [/bali|lombok|yogyakarta|jogja|bandung|jakarta|java|sumatra|medan|batam|bintan|indonesia/i, 'Asia/Jakarta'],
+  [/vietnam|hanoi|ho chi minh|saigon|da nang|hoi an|ha long|nha trang|phu quoc/i, 'Asia/Ho_Chi_Minh'],
+  [/cambodia|siem reap|phnom penh/i, 'Asia/Phnom_Penh'],
+  [/philippines|manila|cebu|boracay|palawan|el nido/i, 'Asia/Manila'],
+  [/brunei/i, 'Asia/Brunei'],
+  [/hong kong/i, 'Asia/Hong_Kong'],
+  [/macau|macao/i, 'Asia/Macau'],
+  [/taiwan|taipei/i, 'Asia/Taipei'],
+  [/china|beijing|shanghai|guangzhou|shenzhen|chengdu/i, 'Asia/Shanghai'],
+  [/japan|tokyo|osaka|kyoto|hokkaido|sapporo|okinawa|fukuoka/i, 'Asia/Tokyo'],
+  [/korea|seoul|busan|jeju/i, 'Asia/Seoul'],
+  [/india|delhi|mumbai|goa|jaipur|kerala/i, 'Asia/Kolkata'],
+  [/sri lanka|colombo/i, 'Asia/Colombo'],
+  [/maldives/i, 'Indian/Maldives'],
+  [/nepal|kathmandu/i, 'Asia/Kathmandu'],
+  [/dubai|abu dhabi|emirates|\buae\b/i, 'Asia/Dubai'],
+  [/turkey|istanbul|cappadocia/i, 'Europe/Istanbul'],
+  [/mecca|makkah|medina|madinah|saudi/i, 'Asia/Riyadh'],
+  [/perth/i, 'Australia/Perth'],
+  [/sydney|melbourne|canberra/i, 'Australia/Sydney'],
+  [/brisbane|gold coast/i, 'Australia/Brisbane'],
+  [/new zealand|auckland|queenstown/i, 'Pacific/Auckland'],
+  [/london|england|scotland|edinburgh|united kingdom|\buk\b/i, 'Europe/London'],
+  [/paris|france|amsterdam|netherlands|rome|italy|barcelona|madrid|spain|berlin|germany|switzerland|zurich|vienna|austria|prague/i, 'Europe/Paris'],
+];
+
+/** The trip's local time zone from its destination text; Malaysia time when unknown. */
+export function tripTimeZone(destination: string): string {
+  return TIME_ZONES.find(([words]) => words.test(destination))?.[1] ?? MALAYSIA_TIME_ZONE;
+}
+
+/** Local date ("YYYY-MM-DD") and minutes since midnight at `at` in `timeZone`. */
+export function localNow(at: Date, timeZone: string): { date: string; minutes: number } {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(at);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00';
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, minutes: Number(get('hour')) * 60 + Number(get('minute')) };
+}
+
+/** Which trip day (if any) is today, and from when it may have stops. Other days: null (planned normally). */
+export function todayWindow(startDate: string | null, days: number, now: { date: string; minutes: number }): TodayWindow | null {
+  if (!startDate) return null;
+  const [y, m, d] = startDate.split('-').map(Number);
+  const [ny, nm, nd] = now.date.split('-').map(Number);
+  const day = Math.round((Date.UTC(ny, nm - 1, nd) - Date.UTC(y, m - 1, d)) / 86_400_000) + 1;
+  if (!(day >= 1 && day <= days)) return null;
+  const end = minutesOf(DAY_END);
+  const earliest = Math.ceil((now.minutes + LEAD_MINUTES) / 5) * 5;
+  return {
+    day,
+    now: clockOf(now.minutes),
+    earliest: end - now.minutes < MIN_MINUTES_LEFT || earliest >= end ? null : clockOf(earliest),
+  };
+}
+
+/** Note for the Day plan when today got no stops. */
+export const noTimeTodayNote = (day: number) => `No stops on Day ${day}: there's less than an hour left today.`;
 
 interface FoundPlace {
   placeId: string;
@@ -217,7 +308,13 @@ export function buildItineraryPrompt(input: ItineraryInput, feedback?: string): 
   const days = Array.from({ length: input.days }, (_, i) => {
     const title = input.dayTitles[i] ? ` (theme: ${input.dayTitles[i]})` : '';
     const when = input.startDate ? dayLabel(input.startDate, i + 1) : '';
-    return `Day ${i + 1}${when}${title}`;
+    const today = input.today?.day === i + 1 ? input.today : null;
+    const now = !today
+      ? ''
+      : today.earliest
+        ? ` - TODAY, and it is already ${today.now} there: every stop starts at ${today.earliest} or later and ends by ${DAY_END} (nothing crosses midnight). Fit as many sensible stops as there is time for, e.g. dinner, a night market or dessert; fewer than ${MIN_STOPS} is fine.`
+        : ` - TODAY, and it is already ${today.now} there: not enough time left, so no stops ("stops": []).`;
+    return `Day ${i + 1}${when}${title}${now}`;
   }).join('\n');
   const members = input.members
     .map(
@@ -242,8 +339,8 @@ What each member answered:
 ${members}
 
 Rules:
-- ${MIN_STOPS} to 6 stops per day, real named places that exist (no "local café"), in the order they are visited, with time to travel between them.
-- Include lunch and dinner each day as food stops.
+- ${MIN_STOPS} to 6 stops per day${input.today ? ' (today: see its line above)' : ''}, real named places that exist (no "local café"), in the order they are visited, with time to travel between them.
+- Include lunch and dinner each day as food stops${input.today?.earliest ? ' (today: only the meals that still fit)' : ''}.
 - Cover the group's must-haves across the days. Never plan anything that is someone's no-go (no starts before 08:00 if "Early mornings" is a no-go, nothing after 22:00 if "Late nights", no long hikes if "Long hikes").
 - ${halal}
 - ${budget}
@@ -266,10 +363,8 @@ const minutesOf = (t: string) => {
   return Number(m[1]) * 60 + Number(m[2]);
 };
 const pad2 = (n: number) => String(n).padStart(2, '0');
-const tidyClock = (t: string) => {
-  const mins = minutesOf(t);
-  return `${pad2(Math.floor(mins / 60))}:${pad2(mins % 60)}`;
-};
+const clockOf = (mins: number) => `${pad2(Math.floor(mins / 60))}:${pad2(mins % 60)}`;
+const tidyClock = (t: string) => clockOf(minutesOf(t));
 
 function fail(message: string): never {
   throw new Error(message);
@@ -304,10 +399,13 @@ export function checkItinerary(text: string, input: ItineraryInput): StopDraft[]
   const allDays = raw.days as unknown[];
   const stops: StopDraft[] = [];
   for (let day = 1; day <= input.days; day++) {
+    const today = input.today?.day === day ? input.today : null;
+    if (today && !today.earliest) continue; // under an hour left today: no stops, whatever came back
     const entry = allDays.find((d) => isObj(d) && num(d.day) === day) ?? allDays[day - 1];
     if (!isObj(entry) || !Array.isArray(entry.stops)) fail(`Day ${day} is missing.`);
     const list = entry.stops as unknown[];
-    if (list.length < MIN_STOPS) fail(`Day ${day} needs at least ${MIN_STOPS} stops.`);
+    const fewest = today ? 1 : MIN_STOPS;
+    if (list.length < fewest) fail(`Day ${day} needs at least ${fewest} stop${fewest === 1 ? '' : 's'}.`);
     const dayStops: StopDraft[] = [];
     for (const s of list.slice(0, MAX_STOPS)) {
       if (!isObj(s)) fail(`Day ${day} has a stop that is not an object.`);
@@ -315,6 +413,10 @@ export function checkItinerary(text: string, input: ItineraryInput): StopDraft[]
       const start = typeof s.start === 'string' && CLOCK.test(s.start.trim()) ? s.start.trim() : fail(`"${name}" needs a start time like 09:00.`);
       const end = typeof s.end === 'string' && CLOCK.test(s.end.trim()) ? s.end.trim() : fail(`"${name}" needs an end time like 10:30.`);
       if (minutesOf(end) <= minutesOf(start)) fail(`"${name}" ends before it starts.`);
+      if (today?.earliest && minutesOf(start) < minutesOf(today.earliest)) {
+        fail(`"${name}" starts at ${start} on day ${day}, which is today: it is already ${today.now}, so stops start at ${today.earliest} or later.`);
+      }
+      if (today && minutesOf(end) > minutesOf(DAY_END)) fail(`"${name}" must end by ${DAY_END} on day ${day} (today).`);
       const price = num(s.price);
       if (price == null || price < 0 || price > 5000) fail(`"${name}" needs a price in RM (0 if free).`);
       const category = CATEGORIES.includes(s.category as StopCategory) ? (s.category as StopCategory) : 'sight';
@@ -350,14 +452,15 @@ export function checkItinerary(text: string, input: ItineraryInput): StopDraft[]
 
 /**
  * Make a plan that's over budget fit: drop the most expensive non-food stops
- * first (keeping at least 3 a day), then scale the remaining prices down.
+ * first (keeping at least 3 a day, 1 on today), then scale the remaining prices down.
  */
-export function fitToBudget(stops: StopDraft[], budget: number): StopDraft[] {
+export function fitToBudget(stops: StopDraft[], budget: number, today?: TodayWindow | null): StopDraft[] {
   let out = [...stops];
+  const fewest = (day: number) => (today?.day === day ? 1 : MIN_STOPS);
   while (planTotal(out) > budget) {
     const perDay = (day: number) => out.filter((s) => s.day === day).length;
     const droppable = out
-      .filter((s) => s.category !== 'food' && s.price > 0 && perDay(s.day) > MIN_STOPS)
+      .filter((s) => s.category !== 'food' && s.price > 0 && perDay(s.day) > fewest(s.day))
       .sort((a, b) => b.price - a.price)[0];
     if (!droppable) break;
     out = out.filter((s) => s !== droppable);
@@ -434,7 +537,7 @@ export async function planItinerary(input: ItineraryInput, deps: PlannerDeps): P
         if (stop) break; // no model left to ask
       }
     }
-    if (!stops && overBudget) stops = fitToBudget(overBudget.stops, overBudget.budget);
+    if (!stops && overBudget) stops = fitToBudget(overBudget.stops, overBudget.budget, input.today);
   }
   if (!stops) return { status: stop === 'used-up' ? 'limit' : 'busy', stops: [], note: null, googleCalls: 0 };
   const placed = await addPlaces(stops, input, deps);
@@ -442,7 +545,10 @@ export async function planItinerary(input: ItineraryInput, deps: PlannerDeps): P
     status: 'ok',
     // Only Google's addresses are real; drop Gemini's search text.
     stops: placed.stops.map((s) => (s.placeId ? s : { ...s, address: null, placeId: null })),
-    note: placed.limited ? GOOGLE_LIMIT_NOTE : null,
+    note:
+      [input.today && !input.today.earliest ? noTimeTodayNote(input.today.day) : null, placed.limited ? GOOGLE_LIMIT_NOTE : null]
+        .filter(Boolean)
+        .join('\n') || null,
     googleCalls: placed.calls,
   };
 }

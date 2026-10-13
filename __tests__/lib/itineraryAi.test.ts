@@ -1,10 +1,16 @@
 // generate-itinerary logic with fake Gemini and Google answers. No real API calls.
 import {
+  buildItineraryPrompt,
   checkItinerary,
   fitToBudget,
   GOOGLE_LIMIT_NOTE,
+  localNow,
+  MALAYSIA_TIME_ZONE,
+  noTimeTodayNote,
   planItinerary,
   planTotal,
+  todayWindow,
+  tripTimeZone,
   type ItineraryInput,
   type PlannerDeps,
 } from '@/supabase/functions/_shared/itinerary';
@@ -185,5 +191,86 @@ describe('planItinerary', () => {
   it('gives no plan without Gemini (never a sample plan)', async () => {
     const result = await planItinerary(input, { ask: null, findPlace: null });
     expect(result).toMatchObject({ status: 'busy', stops: [], note: null, googleCalls: 0 });
+  });
+});
+
+describe('a trip day that is today', () => {
+  // Trip starts today (Day 1 = 2026-10-12) and the plan is built at 21:00 Malaysia time.
+  const at2100 = { date: '2026-10-12', minutes: 21 * 60 };
+  const today = todayWindow('2026-10-12', 2, at2100);
+  const tonight = { ...input, today };
+  const evening = {
+    day: 1,
+    stops: [
+      stop('Dinner at Kapitan', '21:30', '22:30', 15, { category: 'food', halal: true, estimate: true, outdoor: false }),
+      stop('Dessert at Chulia Street', '22:45', '23:30', 8, { category: 'food', halal: true, estimate: true }),
+    ],
+  };
+
+  it('works out "now" in the trip time zone (Malaysia unless the destination is known)', () => {
+    expect(tripTimeZone('Penang')).toBe(MALAYSIA_TIME_ZONE);
+    expect(tripTimeZone('Bali · Beach & chill')).toBe('Asia/Jakarta');
+    expect(tripTimeZone('Somewhere new')).toBe(MALAYSIA_TIME_ZONE);
+    // 13:00 UTC = 21:00 in Malaysia (UTC+8), 20:00 in Bali's zone (UTC+7).
+    expect(localNow(new Date('2026-10-12T13:00:00Z'), MALAYSIA_TIME_ZONE)).toEqual({ date: '2026-10-12', minutes: 21 * 60 });
+    expect(localNow(new Date('2026-10-12T13:00:00Z'), 'Asia/Jakarta')).toEqual({ date: '2026-10-12', minutes: 20 * 60 });
+    expect(localNow(new Date('2026-10-12T16:30:00Z'), MALAYSIA_TIME_ZONE)).toEqual({ date: '2026-10-13', minutes: 30 });
+  });
+
+  it('starts today 30 min from now (rounded up to 5 min); no stops with under an hour left', () => {
+    expect(today).toEqual({ day: 1, now: '21:00', earliest: '21:30' });
+    expect(todayWindow('2026-10-12', 2, { date: '2026-10-12', minutes: 21 * 60 + 2 })?.earliest).toBe('21:35');
+    expect(todayWindow('2026-10-11', 3, at2100)).toMatchObject({ day: 2, earliest: '21:30' });
+    expect(todayWindow('2026-10-12', 2, { date: '2026-10-12', minutes: 22 * 60 + 59 })).toEqual({ day: 1, now: '22:59', earliest: '23:30' });
+    expect(todayWindow('2026-10-12', 2, { date: '2026-10-12', minutes: 23 * 60 })).toEqual({ day: 1, now: '23:00', earliest: null });
+    // Days in the future (or no dates) are planned normally.
+    expect(todayWindow('2026-10-13', 2, at2100)).toBeNull();
+    expect(todayWindow(null, 2, at2100)).toBeNull();
+  });
+
+  it('tells Gemini the earliest start and the 23:59 end for today only', () => {
+    const prompt = buildItineraryPrompt(tonight);
+    expect(prompt).toContain('Day 1 Monday 2026-10-12 (theme: George Town) - TODAY, and it is already 21:00 there: every stop starts at 21:30 or later and ends by 23:59');
+    expect(prompt).toContain('dinner, a night market or dessert');
+    expect(prompt).toContain('Day 2 Tuesday 2026-10-13 (theme: Beach)\n');
+    expect(buildItineraryPrompt(input)).not.toContain('TODAY');
+  });
+
+  it('accepts a short evening for today, and the other days as usual', () => {
+    const stops = checkItinerary(JSON.stringify({ days: [evening, day(2)] }), tonight);
+    expect(stops.filter((s) => s.day === 1).map((s) => s.time)).toEqual(['21:30', '22:45']);
+    expect(stops.filter((s) => s.day === 2)).toHaveLength(4);
+  });
+
+  it('rejects a stop on today that starts too soon or in the past', () => {
+    expect(() => checkItinerary(JSON.stringify({ days: [day(1), day(2)] }), tonight)).toThrow(
+      '"Sight 1A" starts at 09:00 on day 1, which is today: it is already 21:00, so stops start at 21:30 or later.',
+    );
+    const soon = { day: 1, stops: [stop('Night market', '21:15', '22:30', 10)] };
+    expect(() => checkItinerary(JSON.stringify({ days: [soon, day(2)] }), tonight)).toThrow('starts at 21:15');
+  });
+
+  it('rejects a stop on today that crosses midnight', () => {
+    const late = { day: 1, stops: [stop('Night market', '22:00', '00:30', 10)] };
+    expect(() => checkItinerary(JSON.stringify({ days: [late, day(2)] }), tonight)).toThrow('ends before it starts');
+  });
+
+  it('plans no stops today with under an hour left, the other days normally, with a note', async () => {
+    const at2310 = { ...input, today: todayWindow('2026-10-12', 2, { date: '2026-10-12', minutes: 23 * 60 + 10 }) };
+    const f = fakes([JSON.stringify({ days: [{ day: 1, stops: [] }, day(2)] })]);
+    const result = await planItinerary(at2310, f.deps);
+    expect(result.status).toBe('ok');
+    expect(result.stops.every((s) => s.day === 2)).toBe(true);
+    expect(result.stops).toHaveLength(4);
+    expect(result.note).toBe(noTimeTodayNote(1));
+    expect(f.prompts[0]).toContain('not enough time left, so no stops');
+  });
+
+  it('retries with the reason when Gemini plans today in the past', async () => {
+    const f = fakes([goodPlan, JSON.stringify({ days: [evening, day(2)] })]);
+    const result = await planItinerary(tonight, f.deps);
+    expect(result.status).toBe('ok');
+    expect(f.prompts[1]).toContain('which is today: it is already 21:00');
+    expect(result.stops.filter((s) => s.day === 1).every((s) => s.time >= '21:30' && (s.endTime ?? '') <= '23:59')).toBe(true);
   });
 });

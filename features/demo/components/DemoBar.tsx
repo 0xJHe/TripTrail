@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Txt } from '@/components/ui/Txt';
 import { useDayClosures } from '@/features/recap/hooks/useDayClosures';
 import { keptGoing, useKeepGoing } from '@/features/recap/keepGoing';
+import { useMembers } from '@/features/trip/hooks/useTrip';
 import { useNow } from '@/lib/clock';
 import { centroid, haversineMeters } from '@/lib/distance';
 import { eventsAround, useGroupLocation, type DemoEvent, type DemoEventKind, type GroupLocation } from '@/lib/location';
@@ -52,8 +53,12 @@ export function DemoBar({ topInset }: { topInset: number }) {
   const { last, next } = route ? eventsAround(route, t) : { last: null, next: null };
   const closures = useDayClosures(tripId, route?.day ?? 0);
   const keepAt = useKeepGoing((s) => s.at);
+  // Real members (not the made-up "(demo)" friends) who haven't tapped Done for today yet.
+  const members = useMembers(tripId);
+  const stillOpen = members.data ? members.data.filter((m) => !closures.closed.has(m.id)).length : null;
   const action = nextAction(route, t, {
     closedByMe: closures.mine,
+    stillOpen,
     keptGoing: route ? keptGoing(keepAt, tripId, route.day, t) : false,
   });
   const moveTo = (at: number) => step({ fakeTime: at, day: dayAt(at), eventAt: lastEventAt(route, at) });
@@ -96,8 +101,8 @@ export function DemoBar({ topInset }: { topInset: number }) {
 
       <View style={styles.row}>
         <BarButton label="+15 min" onPress={() => moveTo(t + 15 * 60_000)} disabled={waiting} />
-        {action.kind === 'yourTurn' ? (
-          <View style={[styles.button, styles.turn]} accessibilityRole="text" testID="demo-your-turn">
+        {action.kind === 'yourTurn' || action.kind === 'waiting' ? (
+          <View style={[styles.button, styles.turn]} accessibilityRole="text" testID={`demo-${action.kind}`}>
             <Txt style={styles.buttonText} color={colors.amber} numberOfLines={2}>
               {action.label}
             </Txt>

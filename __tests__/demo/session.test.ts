@@ -7,6 +7,7 @@ import {
   sessionFromRow,
   YOUR_TURN,
   YOUR_TURN_KEPT,
+  waitingText,
   type DemoSessionRow,
 } from '@/features/demo/session';
 import { keptGoing, useKeepGoing } from '@/features/recap/keepGoing';
@@ -40,7 +41,7 @@ const stops = [
 ];
 const route: DemoRoute = buildDemoRoute({ tripId: 't1', day: 1, stops, members: [{ id: 'm1', name: 'A' }], meId: 'm1' })!;
 const end = route.events.find((e) => e.kind === 'end')!;
-const open = { closedByMe: false, keptGoing: false };
+const open = { closedByMe: false, keptGoing: false, stillOpen: 2 };
 
 describe('sessionFromRow', () => {
   it('turns the shared row into the phone copy; no row = Demo mode off', () => {
@@ -96,17 +97,29 @@ describe('nextAction (the debug bar middle button)', () => {
   });
 
   it('after Keep going it is still their turn, to tap Done for today', () => {
-    expect(nextAction(route, end.at, { closedByMe: false, keptGoing: true })).toEqual({ kind: 'yourTurn', label: YOUR_TURN_KEPT });
+    expect(nextAction(route, end.at, { closedByMe: false, keptGoing: true, stillOpen: 2 })).toEqual({ kind: 'yourTurn', label: YOUR_TURN_KEPT });
   });
 
-  it('offers Next day only once they have tapped Done for today', () => {
-    expect(nextAction(route, end.at, { closedByMe: true, keptGoing: false })).toEqual({
+  it('waits for every real member to tap Done for today before Next day', () => {
+    expect(nextAction(route, end.at, { closedByMe: true, keptGoing: false, stillOpen: 2 })).toEqual({
+      kind: 'waiting',
+      label: 'Waiting for 2 to finish their day',
+    });
+    expect(nextAction(route, end.at, { closedByMe: true, keptGoing: true, stillOpen: 1 }).label).toBe(waitingText(1));
+    // Members still loading: no Next day yet.
+    expect(nextAction(route, end.at, { closedByMe: true, keptGoing: false, stillOpen: null }).kind).toBe('none');
+    // Not closed myself: still my turn, whoever else has closed.
+    expect(nextAction(route, end.at, { closedByMe: false, keptGoing: false, stillOpen: 1 }).kind).toBe('yourTurn');
+  });
+
+  it('offers Next day once everyone has tapped Done for today', () => {
+    expect(nextAction(route, end.at, { closedByMe: true, keptGoing: false, stillOpen: 0 })).toEqual({
       kind: 'nextDay',
       label: 'Next day',
       at: route.nextDayStartsAt,
     });
     const last = { ...route, nextDayStartsAt: null };
-    expect(nextAction(last, end.at, { closedByMe: true, keptGoing: true }).kind).toBe('none');
+    expect(nextAction(last, end.at, { closedByMe: true, keptGoing: true, stillOpen: 0 }).kind).toBe('none');
   });
 
   it('does nothing without a route', () => {

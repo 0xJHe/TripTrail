@@ -45,24 +45,29 @@ export function isNewReset(current: { tripId: string | null; resetAt: string | n
 
 export const YOUR_TURN = 'Your turn: tap Done for today or Keep going';
 export const YOUR_TURN_KEPT = 'Your turn: tap Done for today';
+/** Next day waits for every real member's Done for today. */
+export const waitingText = (n: number) => `Waiting for ${n} to finish their day`;
 
 /** What the debug bar's middle button does at fake time t. */
 export type NextAction =
   | { kind: 'event'; label: string; at: number }
   | { kind: 'yourTurn'; label: string }
   | { kind: 'nextDay'; label: string; at: number }
+  | { kind: 'waiting'; label: string }
   | { kind: 'none'; label: string };
 
 /**
  * Next event until the day's last event ("That's every stop for today"). Then the demo never
  * chooses for the person: "Your turn" (does nothing) until they tap Done for today; Keep
  * going doesn't count (still their turn, to tap Done for today later; stops they add bring
- * events again). Next day only once they've closed the day.
+ * events again). Next day only once every real member of the trip has closed the day
+ * ("Waiting for N to finish their day" until then; `stillOpen` = real members who haven't,
+ * null while the member list is loading).
  */
 export function nextAction(
   route: DemoRoute | null,
   t: number,
-  { closedByMe, keptGoing }: { closedByMe: boolean; keptGoing: boolean },
+  { closedByMe, keptGoing, stillOpen }: { closedByMe: boolean; keptGoing: boolean; stillOpen: number | null },
 ): NextAction {
   if (!route) return { kind: 'none', label: 'Next event' };
   const end = route.events.find((e) => e.kind === 'end');
@@ -71,6 +76,8 @@ export function nextAction(
     if (next) return { kind: 'event', label: 'Next event', at: next.at };
   }
   if (!closedByMe) return { kind: 'yourTurn', label: keptGoing ? YOUR_TURN_KEPT : YOUR_TURN };
+  if (stillOpen == null) return { kind: 'none', label: 'Next day' };
+  if (stillOpen > 0) return { kind: 'waiting', label: waitingText(stillOpen) };
   if (route.nextDayStartsAt != null) return { kind: 'nextDay', label: 'Next day', at: route.nextDayStartsAt };
   return { kind: 'none', label: 'Last day done' };
 }

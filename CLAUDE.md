@@ -194,8 +194,9 @@ Time and location rule (built; follow it in every live-trip feature):
   The demo never chooses Done for today or Keep going: from the 'end' event the middle
   button reads "Your turn: tap Done for today or Keep going" (after Keep going "Your turn:
   tap Done for today") and does nothing (features/demo/session.ts nextAction); stops added
-  after Keep going bring Next event back. "Next day" shows only once this person has tapped
-  Done for today on that day. The rain card never lands on a leave tap: if it would, the
+  after Keep going bring Next event back. "Next day" shows only once every real member of the
+  trip (not the made-up ones) has tapped Done for today on that day; until then the button
+  reads "Waiting for N to finish their day" and does nothing. The rain card never lands on a leave tap: if it would, the
   rain comes later so it gets its own Next event. The "late" moment is the
   30-min-before check while the group is still at the stop before (screen 7). The
   "early" moment is a later stop left 30+ min before its planned end with 45+ min to

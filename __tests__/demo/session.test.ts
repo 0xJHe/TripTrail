@@ -1,4 +1,5 @@
-import { buildDemoRoute, type RouteStop } from '@/features/demo/route';
+import { demoReason } from '@/features/demo/errors';
+import { buildDemoRoute, demoClockStart, demoReadiness, type RouteStop } from '@/features/demo/route';
 import {
   isNewer,
   isNewReset,
@@ -141,5 +142,32 @@ describe('Keep going after a Reset', () => {
     const kept = useKeepGoing.getState().at;
     expect(keptGoing(kept, 't1', 1, start + 10 * 60 * MIN)).toBe(false);
     expect(kept).toEqual({ 't1:0': start - MIN, 't2:1': start + MIN });
+  });
+});
+
+describe('demoClockStart / demoReadiness (where the demo clock starts)', () => {
+  const unplaced = stops.map((s) => ({ ...s, lat: null, lng: null }));
+  it('starts 30 min before the first stop with a time and a place', () => {
+    expect(demoClockStart(stops)).toEqual({ day: 1, startsAt: Date.parse(at(1, 9)) - 30 * MIN });
+    expect(demoReadiness(stops)).toBe('ready');
+  });
+  it('still starts the clock from the times when no stop has a place yet (sample plan)', () => {
+    expect(demoClockStart(unplaced)).toEqual({ day: 1, startsAt: Date.parse(at(1, 9)) - 30 * MIN });
+    expect(demoReadiness(unplaced)).toBe('clockOnly');
+  });
+  it('has nothing to start from without times', () => {
+    const untimed = unplaced.map((s) => ({ ...s, planned_time: null }));
+    expect(demoClockStart(untimed)).toBeNull();
+    expect(demoReadiness(untimed)).toBe('noTimes');
+    expect(demoReadiness(undefined)).toBe('loading');
+  });
+});
+
+describe('demoReason (errors on screen)', () => {
+  it('says what went wrong in plain words', () => {
+    expect(demoReason(new Error('Not a member of this trip'))).toBe("You're not a member of this trip on this account.");
+    expect(demoReason({ message: 'Could not find the function public.demo_init in the schema cache' })).toMatch(/018_shared_demo\.sql/);
+    expect(demoReason(new TypeError('Network request failed'))).toBe('Check the connection and try again.');
+    expect(demoReason(new Error('Something odd'))).toBe('Something odd. Try again.');
   });
 });

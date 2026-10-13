@@ -9,7 +9,13 @@ import { Txt } from '@/components/ui/Txt';
 import { useTipsSetting } from '@/features/today/tipsSetting';
 import { useCurrentTrip } from '@/features/trip/store';
 import { useDemo } from '@/lib/demo';
+import { useStops } from '@/features/planning/hooks/usePlanning';
+import { CLOCK_ONLY } from '../components/DemoBar';
 import { useDemoActions } from '../hooks/useDemoActions';
+import { demoReadiness } from '../route';
+
+/** Turning Demo mode on for a plan with no times: there is nothing to start the clock from. */
+export const NO_TIMES = "Couldn't turn Demo mode on. This trip's stops have no times yet: add a time to the stops on the Plan tab first.";
 import { colors } from '@/lib/theme';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -26,7 +32,15 @@ export function SettingsScreen() {
   const enabled = useDemo((s) => s.enabled);
   const tripId = useCurrentTrip((s) => s.currentTripId) ?? undefined;
   const hasTrip = tripId != null;
-  const { setEnabled, busy, error } = useDemoActions(tripId);
+  const { setEnabled, busy, error, setError } = useDemoActions(tripId);
+  const readiness = demoReadiness(useStops(tripId).data);
+  const toggle = (on: boolean) => {
+    if (on && readiness === 'noTimes') {
+      setError(NO_TIMES);
+      return;
+    }
+    setEnabled(on);
+  };
   const tipsOn = useTipsSetting((s) => s.enabled);
   const setTipsOn = useTipsSetting((s) => s.setEnabled);
 
@@ -63,7 +77,7 @@ export function SettingsScreen() {
             </View>
             <Switch
               value={enabled}
-              onValueChange={setEnabled}
+              onValueChange={toggle}
               disabled={!hasTrip || busy}
               trackColor={{ true: colors.teal, false: colors.disabled }}
               thumbColor={colors.white}
@@ -80,9 +94,20 @@ export function SettingsScreen() {
             everyone&apos;s phone.
           </Txt>
           {error ? (
-            <Txt variant="s11" color={colors.amberText}>
-              {error}
-            </Txt>
+            <View style={styles.row} accessibilityRole="alert">
+              <Ionicons name="warning" size={18} color={colors.red} />
+              <Txt variant="b12" weight="semibold" color={colors.red} style={{ flex: 1 }} testID="demo-error">
+                {error}
+              </Txt>
+            </View>
+          ) : null}
+          {readiness === 'clockOnly' ? (
+            <View style={styles.row}>
+              <Ionicons name="information-circle" size={18} color={colors.amberText} />
+              <Txt variant="s11" color={colors.amberText} style={{ flex: 1 }} testID="demo-clock-only">
+                {CLOCK_ONLY}
+              </Txt>
+            </View>
           ) : null}
         </Card>
 

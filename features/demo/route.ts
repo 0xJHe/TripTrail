@@ -92,6 +92,30 @@ export function demoDays(stops: RouteStop[]): { day: number; startsAt: number }[
   return [...firsts].map(([day, startsAt]) => ({ day, startsAt })).sort((a, b) => a.day - b.day);
 }
 
+/**
+ * Where the shared demo clock starts: Day 1's replay start (30 min before the first stop
+ * with a time and a place). A plan whose stops have times but no places yet (e.g. the sample
+ * plan) still gets a clock, from the first timed stop, so Demo mode never stays on the real
+ * time; only the walk (route, map, arrivals) needs places. null = no stop has a time.
+ */
+export function demoClockStart(stops: RouteStop[]): { day: number; startsAt: number } | null {
+  const placed = demoDays(stops)[0];
+  if (placed) return placed;
+  const first = sortStops(stops).find((s) => s.planned_time != null);
+  return first ? { day: first.day_number, startsAt: Date.parse(first.planned_time!) - LEAD_IN_MIN * MIN } : null;
+}
+
+/**
+ * Can this plan be replayed? 'loading' (no stops yet), 'ready' (a full walk), 'clockOnly'
+ * (times but no places: the fake clock runs, no walk) or 'noTimes' (nothing to start from).
+ */
+export type DemoReadiness = 'loading' | 'ready' | 'clockOnly' | 'noTimes';
+export function demoReadiness(stops: RouteStop[] | undefined): DemoReadiness {
+  if (!stops) return 'loading';
+  if (demoDays(stops).length > 0) return 'ready';
+  return demoClockStart(stops) ? 'clockOnly' : 'noTimes';
+}
+
 /** The day to replay at time t: the last day whose replay has started, else the first. */
 export function pickDemoDay(stops: RouteStop[], t: number | null): number | null {
   const days = demoDays(stops);

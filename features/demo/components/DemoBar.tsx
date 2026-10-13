@@ -36,13 +36,16 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const pad = (n: number) => String(n).padStart(2, '0');
 const timeText = (d: Date) => `${DAYS[d.getDay()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
+export const CLOCK_ONLY =
+  "This trip's stops have no places yet, so only the demo clock runs (no walk, map or arrivals). Pick a place for each stop on the Plan tab to replay the day.";
+
 /**
  * Demo mode debug bar: fake time, what just happened, and buttons to move the clock. The
  * demo is the trip's (shared): a tap here moves it on every member's phone. At the end of the
  * day the middle button waits for the person ("Your turn: ..."), never choosing for them.
  */
 export function DemoBar({ topInset }: { topInset: number }) {
-  const { route, tripId, demoStart, dayAt } = useDemoReplay();
+  const { route, tripId, demoStart, dayAt, readiness, initError, retryInit } = useDemoReplay();
   useDemoBatteries(tripId);
   const { reset, resetting, error: resetError } = useDemoReset(tripId, demoStart);
   const { step, busy, error } = useDemoActions(tripId);
@@ -65,7 +68,7 @@ export function DemoBar({ topInset }: { topInset: number }) {
   const waiting = busy || resetting;
 
   let status = 'Open a trip to replay its day.';
-  if (tripId && !route) status = 'Add stops with a time and a place to the Day plan to replay a route.';
+  if (tripId && !route) status = readiness === 'clockOnly' ? CLOCK_ONLY : 'Add stops with a time and a place to the Day plan to replay a route.';
 
   return (
     <View style={[styles.bar, { paddingTop: topInset + 6 }]} testID="demo-bar">
@@ -93,6 +96,15 @@ export function DemoBar({ topInset }: { topInset: number }) {
         </Txt>
       )}
       {open && loc ? <Members loc={loc} /> : null}
+      {initError ? (
+        <View style={styles.row}>
+          <Ionicons name="warning" size={14} color={colors.amber} />
+          <Txt variant="s11" color={colors.amber} style={{ flex: 1 }} testID="demo-init-error">
+            {initError}
+          </Txt>
+          <BarButton label="Try again" onPress={retryInit} />
+        </View>
+      ) : null}
       {error || resetError ? (
         <Txt variant="s11" color={colors.amber}>
           {error ?? resetError}

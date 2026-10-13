@@ -178,7 +178,12 @@ Time and location rule (built; follow it in every live-trip feature):
   so two taps at the same moment make one step (no double jumps), and the state that won
   comes back to both. Turning it on: the first phone with the Day plan starts the clock 30
   min before Day 1 (demo_init, only while fake_time is null); turning it off clears it all,
-  so the next time starts at Day 1 again. Every phone builds the same route from the same
+  so the next time starts at Day 1 again. A plan whose stops have times but no places (e.g. the sample
+  plan) still starts the clock from the first timed stop (route.ts demoClockStart /
+  demoReadiness 'clockOnly'): Settings and the bar say only the clock runs until places are
+  picked; no times at all = Settings refuses with a red reason. Every failure is on screen
+  in plain words (features/demo/errors.ts demoReason): the switch's in Settings, the clock
+  start's in the bar with Try again. Every phone builds the same route from the same
   plan, members (join order) and shared clock, so the bar, clock, Today card, map, cards and
   recap match on every phone. The fake
   route is built from the open trip's Day plan by features/demo/route.ts: it walks

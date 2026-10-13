@@ -1,12 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useMembers, useMyMember } from '@/features/trip/hooks/useTrip';
 import { useCurrentTrip } from '@/features/trip/store';
 import { useDemo } from '@/lib/demo';
 import { setDemoRoute, useDemoRoute } from '@/lib/location';
 import { initDemo } from '../api';
-import { buildDemoRoute, demoDays, pickDemoDay } from '../route';
+import { demoReason } from '../errors';
+import { buildDemoRoute, demoClockStart, demoReadiness, pickDemoDay } from '../route';
 import { applyDemoSession } from './useDemoSession';
 import { useDemoStops } from './useDemoStops';
 
@@ -50,24 +51,36 @@ export function useDemoReplay() {
   useEffect(() => () => setDemoRoute(null), []);
 
   // Demo mode just turned on (no shared fake time yet): start 30 min before Day 1, for the
-  // whole trip. The server only takes the first phone's call.
+  // whole trip. The server only takes the first phone's call. Stops with times but no places
+  // still start the clock (demoClockStart), so Demo mode never stays on the real time. A
+  // failure stays on screen (the debug bar) with Try again.
   const queryClient = useQueryClient();
   const asked = useRef<string | null>(null);
+  const [initError, setInitError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!activeTrip || sessionTrip !== activeTrip || fakeTime != null || !stops.data) return;
-    const first = demoDays(stops.data)[0];
+    const first = demoClockStart(stops.data);
     if (!first || asked.current === activeTrip) return;
     asked.current = activeTrip;
+    setInitError(null);
     initDemo(activeTrip, first.startsAt, first.day)
       .then((session) => applyDemoSession(activeTrip, session, queryClient))
-      .catch((e) => console.warn("Couldn't start the demo clock:", e instanceof Error ? e.message : e))
+      .catch((e) => {
+        console.warn("Couldn't start the demo clock:", e instanceof Error ? e.message : e);
+        setInitError(`Demo mode is on, but the demo clock couldn't start. ${demoReason(e)}`);
+      })
       .finally(() => {
         asked.current = null;
       });
-  }, [activeTrip, sessionTrip, fakeTime, stops.data, queryClient]);
+  }, [activeTrip, sessionTrip, fakeTime, stops.data, queryClient, attempt]);
+  useEffect(() => {
+    if (fakeTime != null || !enabled) setInitError(null);
+  }, [fakeTime, enabled]);
+  const retryInit = useCallback(() => setAttempt((a) => a + 1), []);
 
   // The fake start time: Day 1's replay start (Reset goes back there).
-  const demoStart = useMemo(() => (stops.data ? (demoDays(stops.data)[0]?.startsAt ?? null) : null), [stops.data]);
+  const demoStart = useMemo(() => (stops.data ? (demoClockStart(stops.data)?.startsAt ?? null) : null), [stops.data]);
 
   // The day the replay is on at fake time t (saved with each step).
   const dayAt = useCallback((t: number) => pickDemoDay(stops.data ?? [], t), [stops.data]);
@@ -77,6 +90,10 @@ export function useDemoReplay() {
     tripId: activeTrip,
     demoStart,
     dayAt,
+    /** Whether the plan can be replayed (a walk needs stops with a time and a place). */
+    readiness: demoReadiness(stops.data),
+    initError,
+    retryInit,
     loading: stops.isLoading,
   };
 }

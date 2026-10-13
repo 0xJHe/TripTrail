@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 
 import { useDemo, type DemoSession } from '@/lib/demo';
 import { setDemoEnabled, stepDemo } from '../api';
+import { demoReason } from '../errors';
 import { applyDemoSession } from './useDemoSession';
 
 /**
@@ -18,7 +19,7 @@ export function useDemoActions(tripId: string | undefined) {
   const [error, setError] = useState<string | null>(null);
 
   const run = useCallback(
-    async (change: (trip: string) => Promise<DemoSession>) => {
+    async (change: (trip: string) => Promise<DemoSession>, failed: string) => {
       if (!tripId || running.current) return;
       running.current = true;
       setBusy(true);
@@ -27,7 +28,7 @@ export function useDemoActions(tripId: string | undefined) {
         applyDemoSession(tripId, await change(tripId), queryClient);
       } catch (e) {
         console.warn('Updating the demo failed:', e instanceof Error ? e.message : e);
-        setError("Couldn't update the demo. Check the connection and try again.");
+        setError(`${failed} ${demoReason(e)}`);
       } finally {
         running.current = false;
         setBusy(false);
@@ -36,12 +37,15 @@ export function useDemoActions(tripId: string | undefined) {
     [tripId, queryClient],
   );
 
-  const setEnabled = useCallback((on: boolean) => run((trip) => setDemoEnabled(trip, on)), [run]);
+  const setEnabled = useCallback(
+    (on: boolean) => run((trip) => setDemoEnabled(trip, on), `Couldn't turn Demo mode ${on ? 'on' : 'off'}.`),
+    [run],
+  );
   const step = useCallback(
     (move: { fakeTime: number; day: number | null; eventAt: number | null }) =>
-      run((trip) => stepDemo(trip, useDemo.getState().step, move)),
+      run((trip) => stepDemo(trip, useDemo.getState().step, move), "Couldn't move the demo on."),
     [run],
   );
 
-  return { setEnabled, step, busy, error };
+  return { setEnabled, step, busy, error, setError };
 }

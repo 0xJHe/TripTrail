@@ -68,9 +68,12 @@ During the trip:
   The app calls them with `supabase.functions.invoke(name, { body })`, which
   sends the user's JWT. Each function checks the caller's Supabase JWT
   (Authorization: Bearer) and that they are a member of the trip before doing
-  work. lib/ai.ts calls the Gemini ones; the functions fall back to sample data
-  themselves (_shared/tripOptions.ts, _shared/itinerary.ts), and if one can't be
-  reached lib/ai.ts makes the same samples, so the app never gets stuck.
+  work. lib/ai.ts calls the Gemini ones. A real trip NEVER gets sample options or a
+  sample plan: with no usable AI answer the functions answer { status: 'busy' | 'limit' }
+  and lib/ai.ts throws AiUnavailableError (aiStopOf); if a function can't be reached it
+  throws "Couldn't reach our AI. Check your connection and try again." (AI_UNREACHABLE).
+  Nothing is saved then; the screen says why with Try again. sampleTripOptions /
+  sampleItinerary stay in _shared only for clearly labelled examples.
   Deploy: `npx supabase functions deploy <name> --project-ref <ref> --no-verify-jwt`
   (the project uses the new sb_publishable keys, so the function checks the JWT
   itself). Logs: Supabase dashboard > Edge Functions > <name> > Logs.
@@ -121,7 +124,7 @@ supabase/functions/   Supabase Edge Functions (Deno), one folder each with index
   generate-trip-options  generate-itinerary  eta
   nearby-suggestion (running early + rain backup)  weather  place-search  refresh-photo
   _shared/            shared: gemini client, google client, auth check, zod schemas,
-                      tripOptions.ts (types + sample options, also imported by lib/ai.ts;
+                      tripOptions.ts (types + option rules, also imported by lib/ai.ts;
                       files here must stay plain TS with no imports so React Native
                       and Deno can both use them)
 design/prototype.html  the 15 screens
@@ -243,8 +246,8 @@ Time and location rule (built; follow it in every live-trip feature):
   what failed); ErrorLine without onRetry is for problems that aren't about loading.
 - Android permissions (app.json): location + POST_NOTIFICATIONS only. No RECORD_AUDIO
   (expo-image-picker's microphonePermission: false keeps it out).
-- Gemini: ask for JSON only, validate with zod, retry once, then fall back to
-  sample data. Never crash on a bad AI response. Always through the model chain
+- Gemini: ask for JSON only, validate with zod, retry once, then answer 'busy' (never
+  sample data for a real trip). Never crash on a bad AI response. Always through the model chain
   (see "Gemini model chain" below), never one fixed model.
 - Cache Distance Matrix results (same origin/destination within 10 min) to
   protect quota.
@@ -266,9 +269,14 @@ Time and location rule (built; follow it in every live-trip feature):
   every request skips it that day; only rate limited for the minute (429 per-minute, 503
   overloaded) -> next model, never marked; other errors -> next model. An answer that fails our
   checks gets ONE retry, on the next model. Every model left busy -> wait 3 s, try those once
-  more, then the function answers { busy: true } (no samples): the app (lib/ai.ts AiBusyError)
-  shows "Our AI is busy right now" with Try again (AiBusyCard). Every model used up -> sample
-  options / plan with a note. Gemma gets no JSON mode: "JSON only" goes in the prompt and the
+  more. No usable answer -> no options / stops and a status, never samples: every model used
+  up for today -> { status: 'limit' }; anything else (busy this minute, two bad answers, no
+  key) -> { status: 'busy' }; a good answer -> 'ok'. The app (lib/ai.ts AiUnavailableError)
+  saves nothing and shows features/planning/components/AiUnavailableCard.tsx on the trip
+  options screen (WaitingForAnswers, with Try again) and on Results when building the day plan
+  (the bottom button becomes Try again): busy = "Our AI is busy right now." / "Please try
+  again in a minute."; limit = a LimitNote line "Today's free AI limit has been reached.
+  Please try again later." Gemma gets no JSON mode: "JSON only" goes in the prompt and the
   JSON is read from the text (jsonText). Which model answered: the function logs "answered by
   <model>" and returns `model`. Saved options and a built plan are never made again: the
   functions answer 409 once the trip has options / is 'decided', and the app never calls them then.
@@ -311,19 +319,20 @@ Time and location rule (built; follow it in every live-trip feature):
   600-a-day backstop on the Google calls inside sessions, 'place_search_calls'; the app keeps
   the 500 ms wait and 3-letter minimum, and the stop can always be saved by typing the name);
   weather 30, Routes 20, nearby searches 10 per trip per day; Google's own daily quota (a 429
-  that isn't per-minute) counts as a limit too; every Gemini model used up = a limit. When a
+  that isn't per-minute) counts as a limit too; every Gemini model used up = a limit (no
+  options / plan at all: "Today's free AI limit has been reached. Please try again later.",
+  AiUnavailableCard, in the LimitNote style). When a
   limit (and only a limit, never another error) made a feature fall back, it shows one calm
   grey line with a pause icon, components/ui/LimitNote.tsx, ending in
   "· free daily limit reached, resets tomorrow" (LIMIT_REACHED / limitText):
   "Weather paused · …" (instead of hiding the weather line), "Estimated · …" under the late
   card's tiles (late_alerts.travel_source 'limited'), "Suggestions paused · …" on the early and
   rain cards (early_alerts / rain_alerts.limited, migration 017, only written when true),
-  "Drawing instead of a photo · …" on an option card, "Sample trips · …", "Sample plan you can
-  edit · …", "Some places use approximate locations · …" (function notes, one per line;
+  "Drawing instead of a photo · …" on an option card, "Some places use approximate locations · …" (function notes, one per line;
   planning's Notes shows limit lines as LimitNote, others as the amber NoteLine), "Place search
   paused · …" + "You can still type the name." Saved answers (weather, eta, nearby picks) keep
-  `limited`, so every phone of the group says the same. "Our AI is busy right now" stays for
-  per-minute busy.
+  `limited`, so every phone of the group says the same. "Our AI is busy right now." stays for
+  busy.
 - Running late (features/today/late.ts, supabase/functions/_shared/eta.ts + newDay.ts):
   check the next stop once ~30 min before it starts and once when the group leaves
   a stop if the next starts in < 30 min (max 2 checks, one card per stop, shared

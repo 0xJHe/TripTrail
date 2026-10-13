@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { generateTripOptions, isAiBusy } from '@/lib/ai';
+import { aiStopOf, generateTripOptions, type AiStop } from '@/lib/ai';
 import { claimVoting, insertOptions } from '../api';
 import { optionFit } from '../optionFit';
 import type { PlanningData } from './usePlanningData';
@@ -9,15 +9,16 @@ import type { PlanningData } from './usePlanningData';
 /**
  * Make the trip options from everyone's answers. Runs by itself once all
  * members have answered; `generate` lets the group go ahead without waiting.
- * Saved options are never made again (only while the trip has none). When
- * every AI model is busy, `busy` is set and nothing runs by itself: the
- * screen shows "Our AI is busy right now" with Try again (`generate`).
+ * Saved options are never made again (only while the trip has none). When the
+ * AI gives no options, `aiStop` says why ('busy' = try again in a minute, 'limit' =
+ * today's free AI limit), nothing is saved and nothing runs by itself: the screen
+ * shows the message with Try again (`generate`).
  */
 export function useGenerateOptions(data: PlanningData) {
   const queryClient = useQueryClient();
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [aiStop, setAiStop] = useState<AiStop | null>(null);
   const autoTried = useRef(false);
   const { trip, members, answeredPrefs, options, loading } = data;
 
@@ -25,21 +26,9 @@ export function useGenerateOptions(data: PlanningData) {
     if (!trip || answeredPrefs.length === 0 || options.length > 0) return;
     setGenerating(true);
     setError(null);
-    setBusy(false);
+    setAiStop(null);
     try {
-      const { options: drafts, note } = await generateTripOptions(trip.id, {
-        destination: trip.destination,
-        lengthMin: trip.length_min ?? trip.length_days ?? 2,
-        lengthMax: trip.length_days ?? 3,
-        members: answeredPrefs.map((p) => ({
-          dailyBudget: p.daily_budget,
-          foodNeeds: p.food_needs,
-          mustHaves: p.must_haves,
-          noGo: p.no_go,
-        })),
-        freeDates: answeredPrefs.map((p) => p.free_dates),
-        totalMembers: members.length,
-      });
+      const { options: drafts, note } = await generateTripOptions(trip.id);
       const toSave = drafts.map((draft) => {
         const fit = optionFit(
           {
@@ -60,7 +49,8 @@ export function useGenerateOptions(data: PlanningData) {
         queryClient.invalidateQueries({ queryKey: ['options', trip.id] }),
       ]);
     } catch (e) {
-      if (isAiBusy(e)) setBusy(true);
+      const stop = aiStopOf(e);
+      if (stop) setAiStop(stop);
       else setError(e instanceof Error ? e.message : 'Could not make trip options. Please try again.');
     } finally {
       setGenerating(false);
@@ -81,7 +71,7 @@ export function useGenerateOptions(data: PlanningData) {
     generate,
     generating,
     error,
-    busy,
+    aiStop,
     everyoneAnswered,
     /** Still answering questions, or voting started but options haven't arrived. */
     waiting: !!trip && (trip.stage === 'preferences' || options.length === 0),

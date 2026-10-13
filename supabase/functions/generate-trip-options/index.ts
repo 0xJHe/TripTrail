@@ -3,15 +3,15 @@
 // and adds one Google photo per option from its landmark (cache first, max 60
 // Google calls per trip per day). If an option doesn't fit, Gemini gets one retry
 // with the problems; only if it can't be done are the closest options returned,
-// with a short note. After two failed tries the sample options are used.
+// with a short note. Never sample options: no usable answer -> no options and a status.
 // Gemini = the model chain (_shared/geminiChain.ts): best model first, used-up models
-// skipped until midnight Pacific, the retry on the next model. Every model busy for
-// the minute -> { busy: true } (the app shows "Our AI is busy right now" + Try again);
-// every model used up -> sample options with a note. Saved options are never made
-// again: once the trip has options this answers 409.
+// skipped until midnight Pacific, the retry on the next model. Every model used up for
+// today -> status 'limit'; otherwise no usable answer (busy for the minute, bad answers)
+// -> status 'busy'. The app saves nothing then and shows the message with Try again.
+// Saved options are never made again: once the trip has options this answers 409.
 //
-// POST { tripId }  ->  { options: TripOptionDraft[], source: 'ai' | 'sample', note, reason?, busy?, model, googleCalls }
-// (note: why the options can't fit everyone; reason: why Gemini wasn't used; model: the one that answered)
+// POST { tripId }  ->  { status: 'ok' | 'busy' | 'limit', options: TripOptionDraft[], note, reason?, model, googleCalls }
+// (note: why the options can't fit everyone; reason: why there are none; model: the one that answered)
 // Only signed-in members of the trip may call it (Authorization: Bearer <user JWT>).
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
     findPhoto: google ? (landmark) => findLandmarkPhoto(google, landmark) : null,
     log,
   });
-  const model = result.source === 'ai' ? chain?.model ?? null : null;
-  console.log(`generate-trip-options trip ${who.tripId}: ${model ? `answered by ${model}` : result.busy ? 'every model busy' : `sample options (${result.reason})`}`);
+  const model = result.status === 'ok' ? chain?.model ?? null : null;
+  console.log(`generate-trip-options trip ${who.tripId}: ${model ? `answered by ${model}` : `no options, ${result.status} (${result.reason})`}`);
   return json({ ...result, model });
 });

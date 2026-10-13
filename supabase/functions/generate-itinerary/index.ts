@@ -1,15 +1,15 @@
 // generate-itinerary: plans every day of the chosen trip with Gemini, from the
 // trip dates and everyone's answers (budget, food needs, must-haves, no-go),
 // then gets each stop's real address, location and place ID from Google Places
-// (cache first, max 60 Google calls per trip per day). Gemini gets two tries;
-// after that the sample plan is used, so the app always gets a plan.
+// (cache first, max 60 Google calls per trip per day). Gemini gets two tries; never a
+// sample plan: no usable answer -> no stops and a status.
 // Gemini = the model chain (_shared/geminiChain.ts): best model first, used-up models
-// skipped until midnight Pacific, the retry on the next model. Every model busy for
-// the minute -> { busy: true } (the app shows "Our AI is busy right now" + Try again);
-// every model used up -> the sample plan with a note. A built plan is never made
-// again: once the trip is 'decided' this answers 409.
+// skipped until midnight Pacific, the retry on the next model. Every model used up for
+// today -> status 'limit'; otherwise no usable answer -> status 'busy'. The app saves
+// nothing then and shows the message with Try again. A built plan is never made again:
+// once the trip is 'decided' this answers 409.
 //
-// POST { tripId, optionId, start? }  ->  { stops: StopDraft[], source: 'ai' | 'sample', note, busy?, model, googleCalls }
+// POST { tripId, optionId, start? }  ->  { status: 'ok' | 'busy' | 'limit', stops: StopDraft[], note, model, googleCalls }
 // Only signed-in members of the trip may call it (Authorization: Bearer <user JWT>).
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     findPlace: google ? (query, near) => findStopPlace(google, query, near) : null,
     log,
   });
-  const model = result.source === 'ai' ? chain?.model ?? null : null;
-  console.log(`generate-itinerary trip ${who.tripId}: ${model ? `answered by ${model}` : result.busy ? 'every model busy' : 'sample plan'}`);
+  const model = result.status === 'ok' ? chain?.model ?? null : null;
+  console.log(`generate-itinerary trip ${who.tripId}: ${model ? `answered by ${model}` : `no plan, ${result.status}`}`);
   return json({ ...result, model });
 });

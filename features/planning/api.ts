@@ -108,21 +108,12 @@ export async function chooseOption(memberId: string, optionId: string): Promise<
 /**
  * Build the day-by-day plan for the trip everyone chose and save it. The
  * database only builds it once, even if several people tap at the same time.
+ * No AI plan (busy / today's limit): generateItinerary throws, nothing is saved.
  */
-export async function buildPlan(
-  trip: Trip,
-  option: TripOption,
-  window: DateWindow | null,
-  halal: boolean,
-): Promise<{ note: string | null }> {
+export async function buildPlan(trip: Trip, option: TripOption, window: DateWindow | null): Promise<{ note: string | null }> {
   const days = option.plan_json.days;
   const start = window?.start ?? option.start_date ?? planStart(trip.start_date, []);
-  const { stops, note } = await generateItinerary(trip.id, option.id, start, {
-    destination: option.name,
-    days,
-    dayTitles: option.plan_json.dayTitles ?? [],
-    halal,
-  });
+  const { stops, note } = await generateItinerary(trip.id, option.id, start);
   const { error } = await supabase.rpc('build_plan', {
     p_trip: trip.id,
     p_option: option.id,

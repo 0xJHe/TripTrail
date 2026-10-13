@@ -18,8 +18,8 @@ export function NoteLine({ text }: { text: string }) {
 }
 
 /**
- * A note from the Edge Functions, one line each: a daily-limit line ("Sample trips · free
- * daily limit reached, resets tomorrow") is the calm LimitNote, anything else a NoteLine.
+ * A note from the Edge Functions, one line each: a daily-limit line ("Some places use approximate
+ * locations · free daily limit reached, resets tomorrow") is the calm LimitNote, anything else a NoteLine.
  */
 export function Notes({ text }: { text: string }) {
   const lines = text

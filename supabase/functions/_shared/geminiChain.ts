@@ -8,8 +8,8 @@
 // - other errors (timeout, 500) -> next model.
 // An answer that fails our JSON checks makes the caller ask again: that goes to the
 // NEXT model. If every model left is busy, wait 3 s and try those once more, then
-// AiBusyError ("Our AI is busy right now"). If every model is used up, AiUsedUpError
-// (the caller returns the sample options / plan with a note).
+// AiBusyError (the function answers status 'busy'). If every model is used up, AiUsedUpError
+// (status 'limit'). Never sample options / plans.
 // No imports, so React Native (tests) and Deno can both use it.
 
 /** Best first. Overridden by the GEMINI_MODELS secret (comma-separated). IDs from ai.google.dev/gemini-api/docs/models. */

@@ -5,7 +5,6 @@ import {
   GOOGLE_LIMIT_NOTE,
   planItinerary,
   planTotal,
-  sampleItinerary,
   type ItineraryInput,
   type PlannerDeps,
 } from '@/supabase/functions/_shared/itinerary';
@@ -119,7 +118,7 @@ describe('planItinerary', () => {
   it('uses Gemini and adds real addresses, locations and place IDs', async () => {
     const f = fakes([goodPlan], found());
     const result = await planItinerary(input, f.deps);
-    expect(result.source).toBe('ai');
+    expect(result.status).toBe('ok');
     expect(result.note).toBeNull();
     expect(result.googleCalls).toBe(8);
     expect(result.stops[0]).toMatchObject({ placeId: 'pid:Sight 1A, Penang', address: 'Sight 1A, Penang (real address)', lat: 5.42 });
@@ -132,22 +131,21 @@ describe('planItinerary', () => {
   it('retries once with the problem, then uses the fixed answer', async () => {
     const f = fakes(['{"oops":', goodPlan]);
     const result = await planItinerary(input, f.deps);
-    expect(result.source).toBe('ai');
+    expect(result.status).toBe('ok');
     expect(f.prompts).toHaveLength(2);
     expect(f.prompts[1]).toContain('Your last answer had a problem: The answer was not valid JSON.');
   });
 
-  it('falls back to the sample plan after two bad answers', async () => {
+  it('never falls back to a sample plan: two bad answers = busy, no stops', async () => {
     const f = fakes(['nope', '{"days": []}']);
     const result = await planItinerary(input, f.deps);
-    expect(result.source).toBe('sample');
-    expect(result.stops.map((s) => s.name)).toEqual(sampleItinerary(input).map((s) => s.name));
+    expect(result).toMatchObject({ status: 'busy', stops: [], note: null, googleCalls: 0 });
   });
 
   it('makes a plan that is still over budget after the retry fit', async () => {
     const expensive = JSON.stringify({ days: [day(1, 100), day(2, 100)] });
     const result = await planItinerary(input, fakes([expensive, expensive]).deps);
-    expect(result.source).toBe('ai');
+    expect(result.status).toBe('ok');
     expect(planTotal(result.stops)).toBeLessThanOrEqual(300);
   });
 
@@ -171,7 +169,7 @@ describe('planItinerary', () => {
     expect(result.stops).toHaveLength(8);
   });
 
-  it('never looks up a stop that already has a place ID, or a made-up sample stop', async () => {
+  it('makes no Google lookups when there is no AI plan', async () => {
     const lookups: string[] = [];
     const deps: PlannerDeps = {
       ask: null,
@@ -180,12 +178,12 @@ describe('planItinerary', () => {
         return { value: null, limited: false, calls: 1 };
       },
     };
-    await planItinerary({ ...input, destination: 'Melaka' }, deps); // generic sample: "local café" etc.
+    expect((await planItinerary({ ...input, destination: 'Melaka' }, deps)).stops).toEqual([]);
     expect(lookups).toEqual([]);
   });
 
-  it('works with no Gemini and no Google', async () => {
+  it('gives no plan without Gemini (never a sample plan)', async () => {
     const result = await planItinerary(input, { ask: null, findPlace: null });
-    expect(result).toMatchObject({ source: 'sample', note: null, googleCalls: 0 });
+    expect(result).toMatchObject({ status: 'busy', stops: [], note: null, googleCalls: 0 });
   });
 });

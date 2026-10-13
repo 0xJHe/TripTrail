@@ -1,7 +1,16 @@
 const mockInvoke = jest.fn();
 jest.mock('@/lib/supabase', () => ({ supabase: { functions: { invoke: (...args: unknown[]) => mockInvoke(...args) } } }));
 
-import { AiBusyError, generateItinerary, generateTripOptions, OPTION_COUNT, sampleItinerary, sampleTripOptions, type MemberAnswers } from '@/lib/ai';
+import {
+  AI_UNREACHABLE,
+  aiStopOf,
+  AiUnavailableError,
+  generateItinerary,
+  generateTripOptions,
+  OPTION_COUNT,
+  sampleTripOptions,
+  type MemberAnswers,
+} from '@/lib/ai';
 
 const beachLover: MemberAnswers = {
   dailyBudget: 150,
@@ -10,6 +19,7 @@ const beachLover: MemberAnswers = {
   noGo: 'Early mornings',
 };
 
+// Kept only for clearly labelled examples; never a real trip's options.
 describe('sample trip options', () => {
   it('returns 5 options that fit the trip length', () => {
     const options = sampleTripOptions({ destination: null, lengthMin: 2, lengthMax: 3, members: [beachLover] });
@@ -44,8 +54,10 @@ describe('sample trip options', () => {
   });
 });
 
+/** What supabase-js gives back when the function can't be reached. */
+const fetchError = () => Object.assign(new Error('Failed to send a request to the Edge Function'), { name: 'FunctionsFetchError' });
+
 describe('generateTripOptions', () => {
-  const req = { destination: null, lengthMin: 2, lengthMax: 3, members: [beachLover] };
   const aiOption = {
     name: 'Ipoh', days: 2, costPerPerson: 260, tags: ['Cafés'], covers: ['Cafés'], avoids: [],
     halal: true, scene: 'highlands', dayTitles: ['Old town', 'Caves'],
@@ -57,38 +69,44 @@ describe('generateTripOptions', () => {
   });
 
   it('calls the Edge Function with the trip id and returns its options', async () => {
-    mockInvoke.mockResolvedValue({ data: { options: [aiOption], source: 'ai', note: null, googleCalls: 2 }, error: null });
-    const result = await generateTripOptions('trip-1', req);
+    mockInvoke.mockResolvedValue({ data: { status: 'ok', options: [aiOption], note: null, googleCalls: 2 }, error: null });
+    const result = await generateTripOptions('trip-1');
     expect(mockInvoke).toHaveBeenCalledWith('generate-trip-options', { body: { tripId: 'trip-1' } });
-    expect(result).toEqual({ options: [aiOption], source: 'ai', note: null });
+    expect(result).toEqual({ options: [aiOption], note: null });
   });
 
-  it('falls back to sample options when the function fails', async () => {
-    mockInvoke.mockResolvedValue({ data: null, error: new Error('offline') });
-    const result = await generateTripOptions('trip-1', req);
-    expect(result.source).toBe('sample');
-    expect(result.options).toEqual(sampleTripOptions(req));
+  it('says the AI is busy (no sample options) when the models are busy this minute', async () => {
+    mockInvoke.mockResolvedValue({ data: { status: 'busy', options: [], note: null }, error: null });
+    const e = await generateTripOptions('trip-1').catch((x) => x);
+    expect(e).toBeInstanceOf(AiUnavailableError);
+    expect(aiStopOf(e)).toBe('busy');
   });
 
-  it('says the AI is busy (no sample options) when every model is busy', async () => {
-    mockInvoke.mockResolvedValue({ data: { options: [], source: 'sample', busy: true, note: null }, error: null });
-    await expect(generateTripOptions('trip-1', req)).rejects.toBeInstanceOf(AiBusyError);
+  it("says today's free AI limit is reached (no sample options) when every model is used up", async () => {
+    mockInvoke.mockResolvedValue({ data: { status: 'limit', options: [], note: null }, error: null });
+    expect(aiStopOf(await generateTripOptions('trip-1').catch((x) => x))).toBe('limit');
   });
 
   it('logs which model answered', async () => {
-    mockInvoke.mockResolvedValue({ data: { options: [aiOption], source: 'ai', note: null, model: 'gemini-3.8-flash' }, error: null });
-    await generateTripOptions('trip-1', req);
+    mockInvoke.mockResolvedValue({ data: { status: 'ok', options: [aiOption], note: null, model: 'gemini-3.8-flash' }, error: null });
+    await generateTripOptions('trip-1');
     expect(console.log).toHaveBeenCalledWith('generate-trip-options: answered by gemini-3.8-flash');
   });
 
-  it('falls back to sample options when the reply is broken', async () => {
+  it("never makes sample options when the function can't be reached: a clear error instead", async () => {
+    mockInvoke.mockResolvedValue({ data: null, error: fetchError() });
+    await expect(generateTripOptions('trip-1')).rejects.toThrow(AI_UNREACHABLE);
+    mockInvoke.mockRejectedValue(new Error('timeout'));
+    await expect(generateTripOptions('trip-1')).rejects.toThrow(AI_UNREACHABLE);
+  });
+
+  it('treats a broken reply as busy (nothing to save, try again)', async () => {
     mockInvoke.mockResolvedValue({ data: { options: 'nope' }, error: null });
-    expect((await generateTripOptions('trip-1', req)).source).toBe('sample');
+    expect(aiStopOf(await generateTripOptions('trip-1').catch((x) => x))).toBe('busy');
   });
 });
 
 describe('generateItinerary', () => {
-  const fallback = { destination: 'Penang', days: 2, dayTitles: [], halal: true };
   const stop = {
     day: 1, time: '09:00', endTime: '10:30', name: 'Kek Lok Si Temple', price: 0, isEstimate: false,
     category: 'sight', isOutdoor: true, tip: 'Go early.', lat: 5.4, lng: 100.27, address: 'Air Itam, Penang', placeId: 'p1',
@@ -100,22 +118,28 @@ describe('generateItinerary', () => {
   });
 
   it('calls the Edge Function with the trip, option and start date', async () => {
-    mockInvoke.mockResolvedValue({ data: { stops: [stop], source: 'ai', note: null, googleCalls: 1 }, error: null });
-    const result = await generateItinerary('trip-1', 'opt-1', '2026-10-12', fallback);
+    mockInvoke.mockResolvedValue({ data: { status: 'ok', stops: [stop], note: null, googleCalls: 1 }, error: null });
+    const result = await generateItinerary('trip-1', 'opt-1', '2026-10-12');
     expect(mockInvoke).toHaveBeenCalledWith('generate-itinerary', {
       body: { tripId: 'trip-1', optionId: 'opt-1', start: '2026-10-12' },
     });
-    expect(result).toEqual({ stops: [stop], source: 'ai', note: null });
+    expect(result).toEqual({ stops: [stop], note: null });
   });
 
-  it('says the AI is busy (no sample plan) when every model is busy', async () => {
-    mockInvoke.mockResolvedValue({ data: { stops: [], source: 'sample', busy: true, note: null }, error: null });
-    await expect(generateItinerary('trip-1', 'opt-1', null, fallback)).rejects.toBeInstanceOf(AiBusyError);
+  it('says busy / limit (no sample plan) when there is no AI plan', async () => {
+    mockInvoke.mockResolvedValue({ data: { status: 'busy', stops: [], note: null }, error: null });
+    expect(aiStopOf(await generateItinerary('trip-1', 'opt-1', null).catch((x) => x))).toBe('busy');
+    mockInvoke.mockResolvedValue({ data: { status: 'limit', stops: [], note: null }, error: null });
+    expect(aiStopOf(await generateItinerary('trip-1', 'opt-1', null).catch((x) => x))).toBe('limit');
   });
 
-  it('falls back to the sample plan when the function fails', async () => {
-    mockInvoke.mockResolvedValue({ data: null, error: new Error('offline') });
-    const result = await generateItinerary('trip-1', 'opt-1', null, fallback);
-    expect(result).toEqual({ stops: sampleItinerary(fallback), source: 'sample', note: null });
+  it("never makes a sample plan when the function can't be reached", async () => {
+    mockInvoke.mockResolvedValue({ data: null, error: fetchError() });
+    await expect(generateItinerary('trip-1', 'opt-1', null)).rejects.toThrow(AI_UNREACHABLE);
+  });
+
+  it("passes on the function's own error (e.g. the plan is already built)", async () => {
+    mockInvoke.mockResolvedValue({ data: null, error: Object.assign(new Error('Edge Function returned a non-2xx status code'), { name: 'FunctionsHttpError' }) });
+    await expect(generateItinerary('trip-1', 'opt-1', null)).rejects.toThrow('non-2xx');
   });
 });

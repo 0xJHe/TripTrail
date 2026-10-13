@@ -12,8 +12,8 @@ import {
   nextPacificMidnight,
   type ChainDeps,
 } from '@/supabase/functions/_shared/geminiChain';
-import { planItinerary, sampleItinerary, AI_USED_UP_PLAN_NOTE, type ItineraryInput } from '@/supabase/functions/_shared/itinerary';
-import { AI_USED_UP_NOTE, planTripOptions, sampleTripOptions, type TripOptionsRequest } from '@/supabase/functions/_shared/tripOptions';
+import { planItinerary, type ItineraryInput } from '@/supabase/functions/_shared/itinerary';
+import { planTripOptions, type TripOptionsRequest } from '@/supabase/functions/_shared/tripOptions';
 
 // Google's real 429 bodies, shortened.
 const PER_DAY = JSON.stringify({
@@ -234,38 +234,35 @@ describe('planTripOptions with the model chain', () => {
   it('retries a bad JSON answer once on the next model', async () => {
     const f = fakeChain({ 'm-1': ['{"options": "nope"}'], 'm-2': [goodOptions], 'm-3': [goodOptions] });
     const result = await plan(f);
-    expect(result.source).toBe('ai');
+    expect(result.status).toBe('ok');
     expect(f.calls).toEqual(['m-1', 'm-2']);
     expect(f.chain.model).toBe('m-2');
   });
 
   it('works with a Gemma-style answer once the JSON is read from the text', async () => {
     const f = fakeChain({ 'gemma-4-31b-it': [jsonText(`Sure! Here you go:\n\`\`\`json\n${goodOptions}\n\`\`\``)] });
-    expect((await plan(f)).source).toBe('ai');
+    expect((await plan(f)).status).toBe('ok');
   });
 
-  it('uses the sample options after two bad answers', async () => {
+  it('answers busy (never samples) after two bad answers', async () => {
     const f = fakeChain({ 'm-1': ['nope'], 'm-2': ['nope'], 'm-3': [goodOptions] });
     const result = await plan(f);
-    expect(result.source).toBe('sample');
+    expect(result).toMatchObject({ status: 'busy', options: [] });
     expect(f.calls).toEqual(['m-1', 'm-2']); // only one retry
   });
 
   it('returns busy (no samples) when every model is busy', async () => {
     const f = fakeChain({ 'm-1': [minute], 'm-2': [{ status: 503, body: 'overloaded' }] });
     const result = await plan(f);
-    expect(result.busy).toBe(true);
+    expect(result.status).toBe('busy');
     expect(result.options).toEqual([]);
     expect(f.waits).toEqual([BUSY_WAIT_MS]);
   });
 
-  it('returns the sample options with a note when every model is used up', async () => {
+  it('returns limit (no samples) when every model is used up for today', async () => {
     const f = fakeChain({ 'm-1': [daily], 'm-2': [gone] });
     const result = await plan(f);
-    expect(result.busy).toBeUndefined();
-    expect(result.source).toBe('sample');
-    expect(result.options.map((o) => o.name)).toEqual(sampleTripOptions(req).map((o) => o.name));
-    expect(result.note).toContain(AI_USED_UP_NOTE);
+    expect(result).toMatchObject({ status: 'limit', options: [], note: null });
   });
 });
 
@@ -278,15 +275,13 @@ describe('planItinerary with the model chain', () => {
   it('returns busy (no samples) when every model is busy', async () => {
     const f = fakeChain({ 'm-1': [minute] });
     const result = await plan(f);
-    expect(result.busy).toBe(true);
+    expect(result.status).toBe('busy');
     expect(result.stops).toEqual([]);
   });
 
-  it('returns the sample plan with a note when every model is used up', async () => {
+  it('returns limit (no sample plan) when every model is used up for today', async () => {
     const f = fakeChain({ 'm-1': [daily] });
     const result = await plan(f);
-    expect(result.source).toBe('sample');
-    expect(result.stops.map((s) => s.name)).toEqual(sampleItinerary(input).map((s) => s.name));
-    expect(result.note).toBe(AI_USED_UP_PLAN_NOTE);
+    expect(result).toMatchObject({ status: 'limit', stops: [], note: null });
   });
 });

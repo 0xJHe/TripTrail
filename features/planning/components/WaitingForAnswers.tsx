@@ -6,8 +6,9 @@ import { Card } from '@/components/ui/Card';
 import { Txt } from '@/components/ui/Txt';
 import { ErrorLine } from '@/features/trip/components/ErrorLine';
 import type { Member } from '@/features/trip/types';
+import type { AiStop } from '@/lib/ai';
 import { colors } from '@/lib/theme';
-import { AiBusyCard } from './AiBusyCard';
+import { AiUnavailableCard } from './AiUnavailableCard';
 import { AnsweredCard } from './AnsweredCard';
 
 interface WaitingForAnswersProps {
@@ -15,8 +16,8 @@ interface WaitingForAnswersProps {
   answeredIds: Set<string>;
   generating: boolean;
   error: string | null;
-  /** Every AI model was busy: show "Our AI is busy right now" + Try again. */
-  busy?: boolean;
+  /** The AI gave no options (busy / today's limit): show why + Try again. */
+  aiStop?: AiStop | null;
   onBuildNow: () => void;
   onEditAnswers: () => void;
 }
@@ -27,7 +28,7 @@ export function WaitingForAnswers({
   answeredIds,
   generating,
   error,
-  busy,
+  aiStop,
   onBuildNow,
   onEditAnswers,
 }: WaitingForAnswersProps) {
@@ -43,10 +44,10 @@ export function WaitingForAnswers({
     );
   }
 
-  if (busy) {
+  if (aiStop) {
     return (
       <View style={styles.wrap}>
-        <AiBusyCard what="trip options" onTryAgain={onBuildNow} />
+        <AiUnavailableCard stop={aiStop} onTryAgain={onBuildNow} />
         <View style={styles.actions}>
           <Button label="Edit my answers" variant="secondary" onPress={onEditAnswers} />
         </View>

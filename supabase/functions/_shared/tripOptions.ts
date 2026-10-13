@@ -1,5 +1,6 @@
-// Trip option types and the sample options. Shared by the app (lib/ai.ts) and the
-// generate-trip-options Edge Function, so both fall back to exactly the same data.
+// Trip option types, the option rules and the planner. Shared by the app (lib/ai.ts) and
+// the generate-trip-options Edge Function. sampleTripOptions is only for clearly labelled
+// examples: a real trip's options are never samples (no usable AI answer -> 'busy' / 'limit').
 // Plain TypeScript with no imports: it has to run in both React Native and Deno.
 
 /** Picture drawn at the top of an option card. */
@@ -286,8 +287,12 @@ export const NO_GOS = ['Early mornings', 'Late nights', 'Long hikes'];
 const MIN_OPTIONS = 4;
 const MAX_OPTIONS = 5;
 
-/** Shown with the sample options when every Gemini model is used up for today. */
-export const AI_USED_UP_NOTE = 'Sample trips · free daily limit reached, resets tomorrow';
+/**
+ * How a planning call ended: 'ok' = AI options / plan; 'busy' = no usable answer right now
+ * (every model rate limited for the minute or overloaded, or answers that failed our checks):
+ * try again in a minute; 'limit' = every model is used up for today. Nothing to save unless 'ok'.
+ */
+export type AiStatus = 'ok' | 'busy' | 'limit';
 
 /** 'busy' / 'used-up' when the Gemini model chain gave up (geminiChain.ts AiBusyError / AiUsedUpError). */
 export function chainStopOf(e: unknown): 'busy' | 'used-up' | null {
@@ -307,14 +312,13 @@ export interface OptionsDeps {
 }
 
 export interface TripOptionsResponse {
+  /** 'busy' / 'limit': no options (the app shows the message with Try again, saves nothing). */
+  status: AiStatus;
   options: TripOptionDraft[];
-  source: 'ai' | 'sample';
   /** Why the options can't fit everyone, e.g. "No dates suit all 4, these suit 3 of 4". Null when they all fit. */
   note: string | null;
-  /** Why Gemini wasn't used (only when source is 'sample'). */
+  /** Why there are no options (only when status isn't 'ok'), for the logs. */
   reason?: string;
-  /** Every model was busy for the minute: no options, the app shows "Our AI is busy right now". */
-  busy?: true;
   googleCalls: number;
 }
 
@@ -544,9 +548,8 @@ async function addPhotos(options: TripOptionDraft[], deps: OptionsDeps) {
  * food needs and no-gos. If an option doesn't fit, Gemini gets one retry with
  * the problems; the better answer is kept, fitting options first, with a short
  * note when they can't all fit. The retry goes to the next model in the chain.
- * Falls back to the sample options (with AI_USED_UP_NOTE when every model is
- * used up for today); when every model is busy for the minute, returns
- * { busy: true } and no options, so the app can offer "Try again". Never throws.
+ * No usable answer = no options, never samples: status 'limit' when every model is used up
+ * for today, else 'busy' (try again in a minute). Never throws.
  */
 export async function planTripOptions(req: TripOptionsRequest, deps: OptionsDeps): Promise<TripOptionsResponse> {
   const limits = groupLimits(req);
@@ -573,20 +576,12 @@ export async function planTripOptions(req: TripOptionsRequest, deps: OptionsDeps
       }
     }
   }
-  if (!best && stop === 'busy') return { options: [], source: 'sample', busy: true, note: null, reason, googleCalls: 0 };
-  const source: TripOptionsResponse['source'] = best ? 'ai' : 'sample';
-  const chosen = best ?? sampleTripOptions(req);
+  if (!best) return { status: stop === 'used-up' ? 'limit' : 'busy', options: [], note: null, reason, googleCalls: 0 };
   // Options that fit everyone first; the rest by how many things don't fit.
-  const ordered = chosen
+  const ordered = best
     .map((o, i) => ({ o, i, n: optionProblems(o, limits).length }))
     .sort((a, b) => a.n - b.n || a.i - b.i)
     .map((x) => x.o);
   const withPhotos = await addPhotos(ordered, deps);
-  return {
-    options: withPhotos.options,
-    source,
-    note: joinNotes(!best && stop === 'used-up' ? AI_USED_UP_NOTE : null, fitNote(ordered, limits, req)),
-    ...(source === 'sample' ? { reason } : {}),
-    googleCalls: withPhotos.calls,
-  };
+  return { status: 'ok', options: withPhotos.options, note: joinNotes(fitNote(ordered, limits, req)), googleCalls: withPhotos.calls };
 }

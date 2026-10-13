@@ -1,5 +1,6 @@
-// Day-by-day itinerary types and the sample plan. Shared by the app (lib/ai.ts) and,
-// later, the generate-itinerary Edge Function, so both fall back to the same data.
+// Day-by-day itinerary types, the plan checks and the planner. sampleItinerary is only for
+// clearly labelled examples, never a real trip's plan. Shared by the app (lib/ai.ts) and,
+// the generate-itinerary Edge Function.
 // Plain TypeScript with no imports: it has to run in both React Native and Deno.
 
 export type StopCategory = 'flight' | 'hotel' | 'sight' | 'food' | 'beach' | 'shopping';
@@ -158,9 +159,6 @@ interface FoundPlace {
   lng: number;
 }
 
-/** Shown with the sample plan when every Gemini model is used up for today. */
-export const AI_USED_UP_PLAN_NOTE = 'Sample plan you can edit · free daily limit reached, resets tomorrow';
-
 /** 'busy' / 'used-up' when the Gemini model chain gave up (geminiChain.ts AiBusyError / AiUsedUpError). */
 function chainStopOf(e: unknown): 'busy' | 'used-up' | null {
   const s = (e as { aiStatus?: unknown } | null)?.aiStatus;
@@ -178,12 +176,14 @@ export interface PlannerDeps {
 }
 
 export interface ItineraryResponse {
+  /**
+   * 'ok' = an AI plan; 'busy' = no usable answer right now (try again in a minute);
+   * 'limit' = every model used up for today. No stops (nothing to save) unless 'ok'.
+   */
+  status: 'ok' | 'busy' | 'limit';
   stops: StopDraft[];
-  source: 'ai' | 'sample';
   /** Small note for the app, e.g. when Google's daily limit was reached. */
   note: string | null;
-  /** Every model was busy for the minute: no stops, the app shows "Our AI is busy right now". */
-  busy?: true;
   googleCalls: number;
 }
 
@@ -413,10 +413,9 @@ async function addPlaces(stops: StopDraft[], input: ItineraryInput, deps: Planne
 }
 
 /**
- * The whole flow: Gemini (one retry with the problem explained, on the next
- * model in the chain), else the sample plan (with AI_USED_UP_PLAN_NOTE when
- * every model is used up for today); then Google Places for each stop. When
- * every model is busy for the minute: { busy: true } and no stops. Never throws.
+ * The whole flow: Gemini (one retry with the problem explained, on the next model in the
+ * chain), then Google Places for each stop. No usable answer = no stops, never a sample
+ * plan: status 'limit' when every model is used up for today, else 'busy'. Never throws.
  */
 export async function planItinerary(input: ItineraryInput, deps: PlannerDeps): Promise<ItineraryResponse> {
   let stops: StopDraft[] | null = null;
@@ -437,15 +436,13 @@ export async function planItinerary(input: ItineraryInput, deps: PlannerDeps): P
     }
     if (!stops && overBudget) stops = fitToBudget(overBudget.stops, overBudget.budget);
   }
-  if (!stops && stop === 'busy') return { stops: [], source: 'sample', note: null, busy: true, googleCalls: 0 };
-  const source: ItineraryResponse['source'] = stops ? 'ai' : 'sample';
-  const placed = await addPlaces(stops ?? sampleItinerary(input), input, deps);
-  const notes = [!stops && stop === 'used-up' ? AI_USED_UP_PLAN_NOTE : null, placed.limited ? GOOGLE_LIMIT_NOTE : null];
+  if (!stops) return { status: stop === 'used-up' ? 'limit' : 'busy', stops: [], note: null, googleCalls: 0 };
+  const placed = await addPlaces(stops, input, deps);
   return {
+    status: 'ok',
     // Only Google's addresses are real; drop Gemini's search text.
     stops: placed.stops.map((s) => (s.placeId ? s : { ...s, address: null, placeId: null })),
-    source,
-    note: notes.filter(Boolean).join('\n') || null, // one note per line (the app shows each)
+    note: placed.limited ? GOOGLE_LIMIT_NOTE : null,
     googleCalls: placed.calls,
   };
 }

@@ -1,8 +1,9 @@
 // "· free daily limit reached, resets tomorrow" notes: one style everywhere, and only
 // when a daily limit really caused the fallback. No Supabase or Google calls.
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { isLimitText, LIMIT_REACHED, limitText } from '@/components/ui/LimitNote';
+import { AI_LIMIT_TEXT, AiUnavailableCard } from '@/features/planning/components/AiUnavailableCard';
 import { Notes } from '@/features/planning/components/NoteLine';
 import { PlaceSuggestions } from '@/features/planning/components/PlaceSuggestions';
 import type { Stop } from '@/features/planning/types';
@@ -14,9 +15,8 @@ import type { LateState } from '@/features/today/hooks/useLateAlert';
 import type { RainState } from '@/features/today/hooks/useRainAlert';
 import { rainAlertFor } from '@/features/today/rain';
 import { WEATHER_PAUSED } from '@/features/today/weather';
-import { AI_USED_UP_PLAN_NOTE, GOOGLE_LIMIT_NOTE } from '@/supabase/functions/_shared/itinerary';
+import { GOOGLE_LIMIT_NOTE } from '@/supabase/functions/_shared/itinerary';
 import type { NearbySuggestion } from '@/supabase/functions/_shared/nearby';
-import { AI_USED_UP_NOTE } from '@/supabase/functions/_shared/tripOptions';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -26,7 +26,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 describe('one style', () => {
   it('every limit note ends with "· free daily limit reached, resets tomorrow"', () => {
     expect(limitText('Suggestions paused')).toBe('Suggestions paused · free daily limit reached, resets tomorrow');
-    for (const note of [AI_USED_UP_NOTE, AI_USED_UP_PLAN_NOTE, GOOGLE_LIMIT_NOTE, WEATHER_PAUSED.text]) {
+    for (const note of [GOOGLE_LIMIT_NOTE, WEATHER_PAUSED.text]) {
       expect(note.endsWith(` · ${LIMIT_REACHED}`)).toBe(true);
       expect(isLimitText(note)).toBe(true);
     }
@@ -34,15 +34,42 @@ describe('one style', () => {
   });
 
   it('a function note with a limit line and a fit line shows each its own way', async () => {
-    await render(<Notes text={`${AI_USED_UP_NOTE}\nSome trips are over the lowest budget (RM 150 a day)`} />);
+    await render(<Notes text={`${GOOGLE_LIMIT_NOTE}\nSome trips are over the lowest budget (RM 150 a day)`} />);
     expect(screen.getByTestId('limit-note')).toBeTruthy();
-    expect(screen.getByText(AI_USED_UP_NOTE)).toBeTruthy();
+    expect(screen.getByText(GOOGLE_LIMIT_NOTE)).toBeTruthy();
     expect(screen.getByText('Some trips are over the lowest budget (RM 150 a day)')).toBeTruthy();
   });
 
   it('a note without a limit has no limit line', async () => {
     await render(<Notes text="No dates suit all 4, these suit 3 of 4" />);
     expect(screen.queryByTestId('limit-note')).toBeNull();
+  });
+});
+
+describe('no AI options / plan (never samples)', () => {
+  it('busy: "Our AI is busy right now. Please try again in a minute." with Try again', async () => {
+    const onTryAgain = jest.fn();
+    await render(<AiUnavailableCard stop="busy" onTryAgain={onTryAgain} />);
+    expect(screen.getByText('Our AI is busy right now.')).toBeTruthy();
+    expect(screen.getByText('Please try again in a minute.')).toBeTruthy();
+    expect(screen.queryByTestId('limit-note')).toBeNull();
+    fireEvent.press(screen.getByText('Try again'));
+    expect(onTryAgain).toHaveBeenCalledTimes(1);
+  });
+
+  it("limit: today's free AI limit as a limit note, with Try again", async () => {
+    const onTryAgain = jest.fn();
+    await render(<AiUnavailableCard stop="limit" onTryAgain={onTryAgain} />);
+    expect(AI_LIMIT_TEXT).toBe("Today's free AI limit has been reached. Please try again later.");
+    expect(screen.getByTestId('limit-note')).toBeTruthy();
+    expect(screen.getByText(AI_LIMIT_TEXT)).toBeTruthy();
+    fireEvent.press(screen.getByText('Try again'));
+    expect(onTryAgain).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves Try again to the screen's own button when it has one (Results)", async () => {
+    await render(<AiUnavailableCard stop="limit" />);
+    expect(screen.queryByText('Try again')).toBeNull();
   });
 });
 

@@ -6,7 +6,6 @@ import {
   mostFreeFor,
   optionProblems,
   planTripOptions,
-  sampleTripOptions,
   type OptionsDeps,
   type TripOptionsRequest,
 } from '@/supabase/functions/_shared/tripOptions';
@@ -93,7 +92,7 @@ describe('planTripOptions', () => {
   it('returns options that fit everyone, each with one photo, and no note', async () => {
     const f = fakes([fitting]);
     const result = await planTripOptions(req, f.deps);
-    expect(result.source).toBe('ai');
+    expect(result.status).toBe('ok');
     expect(result.note).toBeNull();
     expect(f.prompts).toHaveLength(1);
     expect(result.options[0].photo).toEqual({ url: 'https://photo/Penang landmark', credit: 'Ana Lim', creditUrl: null });
@@ -132,17 +131,16 @@ describe('planTripOptions', () => {
   it('explains when no trip fits the lowest budget', async () => {
     const allDear = answer(...['Penang', 'Langkawi', 'Ipoh', 'Melaka'].map((n) => option(n, { costPerPerson: 900 })));
     const result = await planTripOptions(req, fakes([allDear, allDear]).deps);
-    expect(result.source).toBe('ai');
+    expect(result.status).toBe('ok');
     expect(result.note).toBe('No trip fits the lowest budget (RM 150 a day), these are the closest');
   });
 
-  it('falls back to the sample options after two broken answers, still with photos', async () => {
+  it('never falls back to sample options: two broken answers = busy, no options, no photo lookups', async () => {
     const f = fakes(['not json', '{"options": []}']);
     const result = await planTripOptions(req, f.deps);
-    expect(result.source).toBe('sample');
+    expect(result).toMatchObject({ status: 'busy', options: [], note: null, googleCalls: 0 });
     expect(result.reason).toBe('Give at least 4 options.');
-    expect(result.options.map((o) => o.name).sort()).toEqual(sampleTripOptions(req).map((o) => o.name).sort());
-    expect(result.options.every((o) => o.photo?.url)).toBe(true);
+    expect(f.photoLookups).toEqual([]);
   });
 
   it("keeps the drawing and marks it when Google's limit is reached", async () => {
@@ -152,10 +150,9 @@ describe('planTripOptions', () => {
     expect(result.options[0]).toMatchObject({ photo: null, photoLimited: true });
   });
 
-  it('works with no Gemini and no Google', async () => {
+  it('gives no options without Gemini (never samples)', async () => {
     const result = await planTripOptions(req, { ask: null, findPhoto: null });
-    expect(result.source).toBe('sample');
-    expect(result.googleCalls).toBe(0);
+    expect(result).toMatchObject({ status: 'busy', options: [], googleCalls: 0 });
   });
 });
 

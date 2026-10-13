@@ -1,7 +1,7 @@
 import { durationText, sortStops } from '@/features/planning/stops';
 import type { Stop } from '@/features/planning/types';
 import { LEAVE_AFTER_MS, LEAVE_M } from '@/features/today/arrival';
-import { haversineMeters, offsetMeters, type LatLng } from '@/lib/distance';
+import { centroid, haversineMeters, offsetMeters, type LatLng } from '@/lib/distance';
 import type { DemoEvent, DemoMemberTrack, DemoRoute } from '@/lib/location';
 import { CHECK_BEFORE_MIN, EARLY_AHEAD_MIN, EARLY_SPARE_MIN, estimateMinutes, spareMinutes } from '@/supabase/functions/_shared/eta';
 
@@ -140,7 +140,8 @@ export function travelMs(a: LatLng, b: LatLng): number {
   return Math.max(3, Math.round(minutes)) * MIN;
 }
 
-const LEAD_IN_M = 1500;
+const LEAD_IN_M = 800;
+const LEAD_IN_MIN_M = 200;
 
 /** Metres from p to the segment a-b (flat map around a; fine for a few km). */
 function metersToSegment(p: LatLng, a: LatLng, b: LatLng): number {
@@ -154,18 +155,34 @@ function metersToSegment(p: LatLng, a: LatLng, b: LatLng): number {
 }
 
 /**
- * Where the day's walk starts: 1.5 km from the first stop, from the side that keeps the
- * walk in furthest from the day's other stops (passing within 100 m would tick one off).
+ * Where the day's walk starts: a short way from the first stop towards the centre of the
+ * day's other stops, so it is on land like they are (a fixed direction put Fort Cornwallis's
+ * start in the sea). Up to 800 m and no further than that centre, but at least 200 m (else the
+ * first stop would count as reached before the walk). Shorter if the walk in would pass
+ * within 150 m of another stop (100 m would tick it off). One stop: right at it.
  */
-function leadInStart(at: LatLng[]): LatLng {
-  let best = { p: offsetMeters(at[0], -LEAD_IN_M * Math.SQRT1_2, -LEAD_IN_M * Math.SQRT1_2), clear: -1 };
-  for (let k = 0; k < 8; k++) {
-    const angle = Math.PI * (1.25 + k / 4); // south-west first, then round the compass
-    const p = offsetMeters(at[0], LEAD_IN_M * Math.cos(angle), LEAD_IN_M * Math.sin(angle));
-    const clear = Math.min(Infinity, ...at.slice(1).map((s) => metersToSegment(s, p, at[0])));
-    if (clear > best.clear + 1) best = { p, clear };
+export function leadInStart(at: LatLng[]): LatLng {
+  const first = at[0];
+  const others = at.slice(1);
+  if (others.length === 0) return first;
+  let towards = centroid(others)!;
+  if (haversineMeters(first, towards) < 1) {
+    towards = others.reduce((a, b) => (haversineMeters(first, b) < haversineMeters(first, a) ? b : a));
   }
-  return best.p;
+  const dist = haversineMeters(first, towards);
+  if (dist < 1) return first;
+  const along = (m: number): LatLng => ({
+    lat: first.lat + ((towards.lat - first.lat) * m) / dist,
+    lng: first.lng + ((towards.lng - first.lng) * m) / dist,
+  });
+  let best = { p: first, clear: -1 };
+  for (let m = Math.max(LEAD_IN_MIN_M, Math.min(LEAD_IN_M, dist)); ; m = Math.max(LEAD_IN_MIN_M, m * 0.75)) {
+    const p = along(m);
+    const clear = Math.min(...others.map((s) => metersToSegment(s, p, first)));
+    if (clear > LEAVE_M) return p;
+    if (clear > best.clear) best = { p, clear };
+    if (m === LEAD_IN_MIN_M) return best.p;
+  }
 }
 
 /**
@@ -341,7 +358,7 @@ export function buildDemoRoute({ tripId, day, stops, base, members, meId }: Buil
   const farBack = Math.max(farReach, rejoin - 10 * MIN);
   let endsAt = Math.max(leave[n - 1] + 30 * MIN, rejoin + 10 * MIN);
 
-  // Group path: from 1.5 km out, then stop to stop. After leaving the early stop they walk
+  // Group path: from a short way in from the first stop (leadInStart), then stop to stop. After leaving the early stop they walk
   // briskly out of range first, so the leave (150 m for 3 min) is noticed a few minutes later
   // with the spare time still there, then take their time to the next stop.
   const group = [{ t: startsAt, ...leadInStart(at) }];

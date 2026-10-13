@@ -154,6 +154,32 @@ describe.each([
     for (const s of plan) expect(visited(s).status).toBe('done');
   });
 
+  it('starts on land: a short way from the first stop towards the other stops, passing none of them', () => {
+    const pos = (s: Stop) => ({ lat: s.lat!, lng: s.lng! });
+    const [first, ...rest] = [...plan].sort((a, b) => a.position - b.position).map(pos);
+    const start = route.group[0];
+    const centre = centroid(rest)!;
+    const out = haversineMeters(first, start);
+    // Inside the area the day's stops span (Day 1's old start was out at sea off Fort Cornwallis).
+    const all = [first, ...rest];
+    expect(start.lat).toBeGreaterThanOrEqual(Math.min(...all.map((p) => p.lat)));
+    expect(start.lat).toBeLessThanOrEqual(Math.max(...all.map((p) => p.lat)));
+    expect(start.lng).toBeGreaterThanOrEqual(Math.min(...all.map((p) => p.lng)));
+    expect(start.lng).toBeLessThanOrEqual(Math.max(...all.map((p) => p.lng)));
+    expect(out).toBeGreaterThanOrEqual(199);
+    expect(out).toBeLessThanOrEqual(801);
+    // On the straight line from the first stop to the centre of the others (not past it).
+    expect(out + haversineMeters(start, centre)).toBeCloseTo(haversineMeters(first, centre), -1);
+    // The walk in stays more than 150 m from every other stop.
+    for (let k = 0; k <= 50; k++) {
+      const p = { lat: start.lat + ((first.lat - start.lat) * k) / 50, lng: start.lng + ((first.lng - start.lng) * k) / 50 };
+      for (const s of rest) expect(haversineMeters(p, s)).toBeGreaterThan(150);
+    }
+    // So the first stop is the first one ticked off.
+    const firstArrival = Math.min(...plan.map((s) => Date.parse(visited(s).arrived_at!)));
+    expect(Date.parse(visited(plan[0]).arrived_at!)).toBe(firstArrival);
+  });
+
   it('shows the running-late card before the late stop starts', () => {
     const late = event(route, 'late');
     const next = byId(late.stopId) as Stop & { planned_time: string };

@@ -196,6 +196,36 @@ describe('buildDemoRoute', () => {
   it('still has all four moments with a single stop', () => {
     const one = build([stop(1, 'Fort Cornwallis', 5.4206, 100.3438, at(1, 9), at(1, 10, 30), { is_outdoor: true })]);
     expect(one.events.map((e) => e.kind)).toEqual(expect.arrayContaining(['late', 'early', 'rain', 'far']));
+    // One stop: the day starts right at it.
+    expect(haversineMeters(one.group[0], { lat: 5.4206, lng: 100.3438 })).toBeLessThan(1);
+  });
+
+  it('starts from the side of the day\'s other stops, never a fixed direction', () => {
+    const fort = { lat: 5.4206, lng: 100.3438 };
+    for (const [dLat, dLng] of [[0.01, 0], [-0.01, 0], [0, 0.01], [0, -0.01]]) {
+      const other = { lat: fort.lat + dLat, lng: fort.lng + dLng };
+      const r = build([
+        stop(1, 'Fort Cornwallis', fort.lat, fort.lng, at(1, 9), at(1, 10)),
+        stop(1, 'Elsewhere', other.lat, other.lng, at(1, 11), at(1, 12)),
+      ]);
+      const out = haversineMeters(fort, r.group[0]);
+      expect(out).toBeCloseTo(800, 0);
+      expect(haversineMeters(r.group[0], other)).toBeCloseTo(haversineMeters(fort, other) - 800, -1);
+    }
+  });
+
+  it('starts closer in when the walk in would pass another stop', () => {
+    // A stop 120 m off the line from the first stop towards the others, 500 m out.
+    const r = build([
+      stop(1, 'Fort Cornwallis', 5.4206, 100.3438, at(1, 9), at(1, 10)),
+      stop(1, 'On the way', 5.4206 + 0.0011, 100.3438 - 0.0045, at(1, 11), at(1, 12)),
+      stop(1, 'Far west', 5.4206, 100.3438 - 0.03, at(1, 13), at(1, 14)),
+    ]);
+    const start = r.group[0];
+    const out = haversineMeters({ lat: 5.4206, lng: 100.3438 }, start);
+    expect(out).toBeGreaterThanOrEqual(199);
+    expect(out).toBeLessThan(500);
+    expect(haversineMeters(start, { lat: 5.4206 + 0.0011, lng: 100.3438 - 0.0045 })).toBeGreaterThan(150);
   });
 
   it('marks every leave as a spend check, and really leaves each stop', () => {

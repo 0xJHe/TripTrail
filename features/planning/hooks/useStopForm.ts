@@ -12,7 +12,7 @@ import { now } from '@/lib/clock';
 import { addStop, deleteStop, shiftStops, updateStop } from '../api';
 import { placeCategory } from '../foodStop';
 import { checkOverlap, type OverlapCheck } from '../overlap';
-import { emptyForm, formFromStop, readStopForm, timeProblem, type StopFields, type StopFormValues } from '../stopForm';
+import { emptyForm, formFromStop, readStopForm, timePassedProblem, timeProblem, type StopFields, type StopFormValues } from '../stopForm';
 import { planningKeys } from './usePlanning';
 import { useDayPlan } from './useDayPlan';
 
@@ -22,6 +22,9 @@ import { useDayPlan } from './useDayPlan';
  * A stop is saved on the day picked in the form (the day it was opened for); a day finished
  * for this person (Done for today, or the next day has started) can't get, lose or change stops.
  * pinId = a pin's "Add to plan": the form starts with the pin's name and location.
+ * Every way in (Add a stop, + Add more stops, a pin's Add to plan, group B's stops) saves here,
+ * so all of them refuse a start time that has already passed (timePassedProblem, now()); an
+ * edit only when its start time changes.
  * New times that overlap another stop on the day (this person's view of the plan) aren't saved
  * straight away: `overlap` says which stop, and shiftAndSave() moves the later stops to make
  * room (for everyone), then saves.
@@ -101,6 +104,9 @@ export function useStopForm(
       return;
     }
     const fields = read.fields;
+    const passed = timePassedProblem(fields.planned_time!, now().getTime(), stop ? stop.planned_time : null);
+    setTimeError(passed);
+    if (passed) return;
     if (splitOf) {
       if (!split) {
         setError(splits.isLoading ? 'Still loading the split. Try again in a moment.' : 'This split has ended.');

@@ -424,6 +424,14 @@ Time and location rule (built; follow it in every live-trip feature):
   time." instead of the button. A stop that would end at or after midnight -> "Not enough time
   left today, please pick another time." instead of the button. Changing a time or the day hides
   the warning.
+- Times that have passed (features/planning/stopForm.ts timePassedProblem, useStopForm): a new
+  stop, or an edit that changes a stop's start time, must start later than now() (lib/clock, so
+  the demo clock in Demo mode); else nothing is saved and the line under the times says "That
+  time has already passed. Please pick a later time." (TIME_PASSED). Checked before the overlap
+  check. It bites on the open day (today, or the day kept open with Keep going); future days
+  start later anyway and finished days stay read-only. Editing anything else of a stop that
+  already started (price, name, end time) stays allowed. Every way of adding a stop saves through
+  useStopForm (Add a stop, + Add more stops, a pin's Add to plan, group B's stops), so all get it.
 - Add to plan on a pin (Pin spot list PinRow and the map's pin card PinSheet, spots only;
   features/group/hooks/usePinPlan.ts, pins.ts pinForm / pinStopRoute): opens the normal Add a
   stop screen (?pin=<id>) for the open day (addDay above), filled with the pin's name and exact

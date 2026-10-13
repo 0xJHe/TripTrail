@@ -56,6 +56,19 @@ export type StopFields = Omit<NewStop, 'position' | 'tip' | 'is_outdoor'>;
 
 export const PICK_TIMES = 'Please pick a start and end time';
 export const END_BEFORE_START = 'End time must be after the start time';
+export const TIME_PASSED = 'That time has already passed. Please pick a later time.';
+
+/**
+ * A new stop, or an edit that changes the start time, must start later than now (lib/clock
+ * now(), so the demo clock in Demo mode). In practice this bites on the open day (today, or
+ * the day kept open with Keep going): future days start later anyway and finished days are
+ * read-only. Editing anything else of a stop that already started stays allowed.
+ * `before` = the stop's saved start when editing (null / undefined = a new stop).
+ */
+export function timePassedProblem(start: string, nowMs: number, before?: string | null): string | null {
+  if (before != null && Date.parse(before) === Date.parse(start)) return null;
+  return Date.parse(start) <= nowMs ? TIME_PASSED : null;
+}
 
 type Times = Pick<StopFormValues, 'time' | 'endTime'>;
 

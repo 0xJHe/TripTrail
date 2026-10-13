@@ -1,9 +1,9 @@
-import * as Battery from 'expo-battery';
 import { useMemo } from 'react';
 
 import { useDayClosures } from '@/features/recap/hooks/useDayClosures';
 import { useMembers, useMyMember } from '@/features/trip/hooks/useTrip';
 import { useGroupLocation } from '@/lib/location';
+import { useBatteryPercent } from '../battery';
 import { markDone, type MapMember } from '../groupMap';
 import { useGroupPositions } from './useGroupPositions';
 import { useTripDay } from './useTripDay';
@@ -26,7 +26,7 @@ export function useMapMembers(tripId: string | undefined) {
   const members = useMembers(tripId);
   const me = useMyMember(tripId);
   const location = useGroupLocation();
-  const level = Battery.useBatteryLevel();
+  const myBattery = useBatteryPercent();
   const demo = location?.source === 'demo';
   const closures = useDayClosures(tripId, day.day);
 
@@ -35,7 +35,6 @@ export function useMapMembers(tripId: string | undefined) {
   const since = !demo && sharing && window ? new Date(window.from).toISOString() : null;
   const positions = useGroupPositions(tripId, memberIds, since);
 
-  const myBattery = level >= 0 ? Math.round(level * 100) : null;
   const placed: MapMember[] = useMemo(() => {
     if (demo && location) return location.members.map((m) => ({ ...m, seenAt: location.at }));
     if (!sharing) return [];

@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchMembers, fetchMyTrips, fetchTrip } from '../api';
+import { fetchMadeUpMembers, fetchMembers, fetchMyTrips, fetchTrip } from '../api';
 import { useUserId } from '../authStore';
 
 export const tripKeys = {
   trip: (id: string) => ['trip', id] as const,
   members: (id: string) => ['members', id] as const,
+  madeUp: (id: string) => ['madeUpMembers', id] as const,
   myTrips: (userId: string | null) => ['myTrips', userId] as const,
 };
 
@@ -22,6 +23,17 @@ export function useMembers(tripId: string | undefined) {
     queryKey: tripKeys.members(tripId ?? ''),
     queryFn: () => fetchMembers(tripId!),
     enabled: !!tripId,
+  });
+}
+
+/** A demo trip's made-up members (none for a normal trip: not even asked for). */
+export function useMadeUpMembers(tripId: string | undefined) {
+  const trip = useTrip(tripId);
+  const demoTrip = !!trip.data?.demo_of;
+  return useQuery({
+    queryKey: tripKeys.madeUp(tripId ?? ''),
+    queryFn: () => fetchMadeUpMembers(tripId!),
+    enabled: !!tripId && demoTrip,
   });
 }
 

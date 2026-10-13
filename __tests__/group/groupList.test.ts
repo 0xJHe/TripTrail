@@ -126,3 +126,20 @@ describe('texts', () => {
     expect(leaveText(false)).not.toMatch(/delete/);
   });
 });
+
+describe('groupRows on a demo trip', () => {
+  const madeUp = [{ id: 'm9', display_name: 'Aisha (demo)' }];
+
+  it('lists the made-up member after the real ones, marked Demo, location off', () => {
+    const rows = groupRows(input({ madeUp }));
+    expect(rows.map((r) => r.name)).toEqual(['Aisha', 'Ravi', 'Mei', 'Aisha (demo)']);
+    expect(rows[3]).toMatchObject({ demo: true, isMe: false, organiser: false, battery: null, location: { kind: 'off' } });
+    expect(groupCountLabel(rows)).toBe('3 members · 1 demo');
+  });
+
+  it('shows them once in Demo mode, where the replay already walks them', () => {
+    const placed = [at('m2', { isMe: true }), at('demo-aisha', { name: 'Aisha (demo)', battery: 70 })];
+    const rows = groupRows(input({ madeUp, placed, demo: true }));
+    expect(rows.filter((r) => r.name === 'Aisha (demo)')).toEqual([expect.objectContaining({ id: 'demo-aisha', battery: 70 })]);
+  });
+});

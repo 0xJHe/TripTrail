@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import { useMembers, useMyMember, useTrip } from '@/features/trip/hooks/useTrip';
+import { useMadeUpMembers, useMembers, useMyMember, useTrip } from '@/features/trip/hooks/useTrip';
 import { useTripRealtime } from '@/features/trip/hooks/useTripRealtime';
 import { organiserId } from '@/features/trip/members';
 import { groupRows } from '../groupList';
@@ -15,6 +15,7 @@ export function useGroupList(tripId: string | undefined) {
   const trip = useTrip(tripId);
   const members = useMembers(tripId);
   const me = useMyMember(tripId);
+  const madeUp = useMadeUpMembers(tripId);
   const map = useMapMembers(tripId);
   // trips: someone left (members_changed_at) or the organiser changed.
   useTripRealtime(tripId, ['members', 'trips']);
@@ -32,8 +33,9 @@ export function useGroupList(tripId: string | undefined) {
         closed: map.closures.closed,
         demo: map.demo,
         time,
+        madeUp: madeUp.data,
       }),
-    [memberList, me, organiser, map.members, map.closures.closed, map.demo, time],
+    [memberList, me, organiser, map.members, map.closures.closed, map.demo, time, madeUp.data],
   );
 
   return {

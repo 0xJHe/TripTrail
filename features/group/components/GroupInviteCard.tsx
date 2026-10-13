@@ -14,10 +14,12 @@ interface GroupInviteCardProps {
   joinCode: string;
   /** The plan is built: new members join it as it is. */
   decided: boolean;
+  /** A private demo copy ("Try a demo trip"): nobody can join it, so no code to share. */
+  privateDemo?: boolean;
 }
 
 /** Group tab: the join code with Copy and Share, and a note once the trip is decided. */
-export function GroupInviteCard({ tripName, joinCode, decided }: GroupInviteCardProps) {
+export function GroupInviteCard({ tripName, joinCode, decided, privateDemo }: GroupInviteCardProps) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -31,6 +33,20 @@ export function GroupInviteCard({ tripName, joinCode, decided }: GroupInviteCard
     setCopied(true);
   };
   const share = () => Share.share({ message: inviteMessage(tripName, joinCode) }).catch(() => {});
+
+  if (privateDemo) {
+    return (
+      <Card style={styles.card}>
+        <Txt variant="sec">Invite people</Txt>
+        <View style={styles.note}>
+          <Ionicons name="lock-closed-outline" size={16} color={colors.tealDark} />
+          <Txt variant="b12" style={{ flex: 1 }} testID="group-private-demo">
+            This is your own demo trip, so nobody else can join it. Anything you do here only changes your copy.
+          </Txt>
+        </View>
+      </Card>
+    );
+  }
 
   return (
     <Card style={styles.card}>

@@ -89,3 +89,20 @@ export async function fetchDemoBatteries(tripId: string): Promise<Record<string,
   if (error) throw error;
   return Object.fromEntries((data ?? []).map((r: { member_id: string; battery: number }) => [r.member_id, r.battery]));
 }
+
+/** What "Try a demo trip" did: made a fresh private copy, or found the person's unfinished one. */
+export interface DemoTripReply {
+  tripId: string;
+  created: boolean;
+}
+
+/**
+ * Try a demo trip (Settings): a fresh private copy of the hidden Penang template for this person
+ * only, with its full Day plan and its made-up member, or their unfinished copy if they have one.
+ */
+export async function startDemoTrip(displayName: string): Promise<DemoTripReply> {
+  const { data, error } = await supabase.rpc('start_demo_trip', { p_name: displayName });
+  if (error) throw error;
+  const reply = data as { trip_id: string; created: boolean };
+  return { tripId: reply.trip_id, created: reply.created };
+}

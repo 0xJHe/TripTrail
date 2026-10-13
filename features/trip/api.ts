@@ -75,7 +75,7 @@ export async function fetchTrip(id: string): Promise<Trip> {
   return data as Trip;
 }
 
-export async function fetchMembers(tripId: string): Promise<Member[]> {
+async function fetchAllMembers(tripId: string): Promise<Member[]> {
   const { data, error } = await supabase
     .from('members')
     .select('*')
@@ -83,6 +83,19 @@ export async function fetchMembers(tripId: string): Promise<Member[]> {
     .order('joined_at', { ascending: true });
   if (error) throw error;
   return (data ?? []) as Member[];
+}
+
+/**
+ * The trip's real members, in join order. A demo trip's made-up members (is_demo) are left
+ * out, so every count (Done for today, spend checks, the map, the organiser) is real people only.
+ */
+export async function fetchMembers(tripId: string): Promise<Member[]> {
+  return (await fetchAllMembers(tripId)).filter((m) => !m.is_demo);
+}
+
+/** A demo trip's made-up members ("Aisha (demo)"), in join order. */
+export async function fetchMadeUpMembers(tripId: string): Promise<Member[]> {
+  return (await fetchAllMembers(tripId)).filter((m) => m.is_demo);
 }
 
 /** Trips I'm a member of, newest first. */

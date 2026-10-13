@@ -120,6 +120,7 @@ lib/
   theme.ts            colours, spacing, fonts
 supabase/
   schema.sql          tables + RLS
+  seed_demo_trip.sql  the hidden Penang demo template (Settings > Try a demo trip)
 supabase/functions/   Supabase Edge Functions (Deno), one folder each with index.ts:
   generate-trip-options  generate-itinerary  eta
   nearby-suggestion (running early + rain backup)  weather  place-search  refresh-photo
@@ -229,6 +230,23 @@ Time and location rule (built; follow it in every live-trip feature):
 - Settings: the gear + "Settings" (SettingsButton) is in the header of every main
   screen: Home, Plan, Today, Map, Group. Settings also has First-timer tips (on by default,
   saved on the phone: features/today/tipsSetting.ts); off = no tip card on Today.
+- Try a demo trip (Settings, features/demo TryDemoCard / useTryDemoTrip / api.ts startDemoTrip;
+  migration 019, supabase/seed_demo_trip.sql): "A ready-made trip you can explore with Demo mode".
+  The template is a hidden 2-day Penang trip written by hand (no Gemini; places from Google Places,
+  2 lunches/dinners JAKIM-listed, sources in the seed's header), saved in `demo_templates` (RLS on,
+  no policies) with no real members, so nobody can see or join it. The start_demo_trip RPC (security
+  definer) makes a private copy for the caller only: decided, Day 1 = tomorrow (Malaysia time), the
+  full plan (times moved, every stop planned), the made-up member "Aisha (demo)" (members.is_demo,
+  no account, food needs Halal so the halal tag + JAKIM link show) with her preferences, and the
+  caller as the only real member; no votes, options, positions, spends, pins, alerts, meet points,
+  closures or demo session. An unfinished copy (end date today or later) is reopened instead.
+  trips.demo_of marks a copy: join_trip refuses copies and templates, and the Group tab shows
+  "nobody else can join" instead of the code. Made-up members are never real members:
+  fetchMembers leaves out is_demo rows (so Done for today, spend checks, the map and the organiser
+  count real people only; useMadeUpMembers lists them, the Group tab shows them with a Demo tag);
+  leave_trip deletes the trip when the last real member leaves. Clients can't set demo_of or
+  is_demo (trigger lock_demo_fields). The plan's Demo mode moments are checked in
+  __tests__/demo/demoTrip.test.ts (it reads the seed SQL): late, early, rain, far, end on both days.
 
 ## Behaviour rules for you (the agent)
 

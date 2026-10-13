@@ -19,6 +19,8 @@ export interface Trip {
   created_at: string;
   /** Set when someone leaves (the update tells everyone through Realtime). */
   members_changed_at?: string | null;
+  /** A private copy made by "Try a demo trip": the template it came from (null = a normal trip). */
+  demo_of?: string | null;
 }
 
 /** Row in `members`. */
@@ -31,6 +33,8 @@ export interface Member {
   joined_at: string;
   /** Trip this member chose on the Results screen. */
   chosen_option_id: string | null;
+  /** A made-up member of a demo trip ("Aisha (demo)"): no account, never counted as a real member. */
+  is_demo?: boolean;
 }
 
 /** What the create-trip form saves. */

@@ -58,7 +58,12 @@ export function GroupScreen() {
                 </View>
               ))}
             </Card>
-            <GroupInviteCard tripName={g.trip.name} joinCode={g.trip.join_code} decided={g.trip.stage === 'decided'} />
+            <GroupInviteCard
+              tripName={g.trip.name}
+              joinCode={g.trip.join_code}
+              decided={g.trip.stage === 'decided'}
+              privateDemo={!!g.trip.demo_of}
+            />
             {g.me ? (
               <View style={styles.leave}>
                 <LeaveTripCard lastMember={g.lastMember} leaving={exit.leaving} error={exit.error} onLeave={exit.leave} />

@@ -36,14 +36,17 @@ export interface GroupRowsInput {
   demo: boolean;
   /** now() in ms. */
   time: number;
+  /** A demo trip's made-up members ("Aisha (demo)", members.is_demo). */
+  madeUp?: Pick<Member, 'id' | 'display_name'>[];
 }
 
 /**
  * Members list for the Group tab, in join order; in Demo mode the replay's made-up members
- * follow, with their fake position, battery and Done for today.
+ * follow, with their fake position, battery and Done for today. A demo trip's own made-up
+ * members follow too, marked Demo (location off), unless the replay already shows one by name.
  */
 export function groupRows(input: GroupRowsInput): GroupRow[] {
-  const { members, meId, organiserId, placed, closed, demo, time } = input;
+  const { members, meId, organiserId, placed, closed, demo, time, madeUp = [] } = input;
   const ids = new Set(members.map((m) => m.id));
   const posOf = (id: string, isMe: boolean) => placed.find((p) => p.id === id) ?? (isMe ? placed.find((p) => p.isMe) : undefined);
   const rows: GroupRow[] = members.map((m, i) => {
@@ -60,14 +63,24 @@ export function groupRows(input: GroupRowsInput): GroupRow[] {
       battery: pos?.battery ?? null,
     };
   });
-  if (!demo) return rows;
-  const fake = placed.filter((p) => !p.isMe && !ids.has(p.id));
+  const fake = demo ? placed.filter((p) => !p.isMe && !ids.has(p.id)) : [];
+  const own = madeUp.filter((m) => !fake.some((p) => p.name === m.display_name));
   return [
     ...rows,
+    ...own.map((m, i) => ({
+      id: m.id,
+      name: m.display_name,
+      color: avatarColors[(members.length + i) % avatarColors.length],
+      isMe: false,
+      organiser: false,
+      demo: true,
+      location: { kind: 'off' } as LocationState,
+      battery: null,
+    })),
     ...fake.map((p, i) => ({
       id: p.id,
       name: p.name,
-      color: avatarColors[(members.length + i) % avatarColors.length],
+      color: avatarColors[(members.length + own.length + i) % avatarColors.length],
       isMe: false,
       organiser: false,
       demo: true,

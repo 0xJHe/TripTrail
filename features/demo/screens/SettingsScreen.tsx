@@ -11,6 +11,7 @@ import { useCurrentTrip } from '@/features/trip/store';
 import { useDemo } from '@/lib/demo';
 import { useStops } from '@/features/planning/hooks/usePlanning';
 import { CLOCK_ONLY } from '../components/DemoBar';
+import { TryDemoCard } from '../components/TryDemoCard';
 import { useDemoActions } from '../hooks/useDemoActions';
 import { demoReadiness } from '../route';
 
@@ -110,6 +111,8 @@ export function SettingsScreen() {
             </View>
           ) : null}
         </Card>
+
+        <TryDemoCard />
 
         <Card style={styles.card}>
           <Txt variant="lbl">THE REPLAYED DAY INCLUDES</Txt>

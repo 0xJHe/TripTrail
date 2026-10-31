@@ -283,6 +283,20 @@ end $$;
 create trigger trips_lock_demo before insert or update on trips for each row execute function lock_demo_fields();
 create trigger members_lock_demo before insert or update on members for each row execute function lock_demo_fields();
 
+-- A stop that becomes a different place (new name or Google place, e.g. Edit stop, which never
+-- sends `tip`) loses the AI's first-timer tip, written for the old place. An update that sets the
+-- tip itself keeps it (undo_rain_alerts puts the original place and tip back together).
+create or replace function clear_tip_on_place_change() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if (new.name is distinct from old.name or new.place_id is distinct from old.place_id)
+     and new.tip is not distinct from old.tip then
+    new.tip := null;
+  end if;
+  return new;
+end $$;
+create trigger stops_clear_tip before update on stops for each row execute function clear_tip_on_place_change();
+
 -- Join a trip by code (bypasses RLS safely). Codes are typed by hand, so match case-insensitively.
 -- Demo templates and demo copies can't be joined (a copy belongs to one person).
 create or replace function join_trip(code text, name text, color text)

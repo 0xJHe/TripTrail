@@ -36,6 +36,7 @@ create table members (
   is_demo boolean not null default false,
   unique (trip_id, user_id)
 );
+create index members_user_idx on members (user_id);
 
 create table preferences (
   member_id uuid primary key references members(id) on delete cascade,
@@ -62,6 +63,7 @@ create table trip_options (
   position int not null default 0, -- order the options were generated in
   created_at timestamptz default now()
 );
+create index trip_options_trip_idx on trip_options (trip_id);
 
 create table votes (
   member_id uuid references members(id) on delete cascade,
@@ -101,6 +103,7 @@ create table stops (
   halal_available boolean,
   place_id text -- Google place ID (from generate-itinerary or the Add a stop search)
 );
+create index stops_trip_day_idx on stops (trip_id, day_number);
 
 create table locations (
   id bigserial primary key,
@@ -112,6 +115,7 @@ create table locations (
   recorded_at timestamptz default now()
 );
 create index on locations (trip_id, recorded_at desc);
+create index locations_trip_member_idx on locations (trip_id, member_id, recorded_at desc);
 
 -- Spend check: one answer per person per stop per day to "About RM 16 spent?" (booked
 -- stops: "Spent anything extra?", the amount on top of the booking). ✓ = confirmed with the
@@ -146,6 +150,7 @@ create table pins (
   -- Set just before the row is deleted, so Realtime (filtered by trip_id) tells everyone.
   deleted_at timestamptz
 );
+create index pins_trip_idx on pins (trip_id);
 
 -- Meet point and Split & rejoin: one row each; the newest of each kind set today is the
 -- current one. kind 'meet' = a meet point; 'split' = group_b heads to the rejoin stop
